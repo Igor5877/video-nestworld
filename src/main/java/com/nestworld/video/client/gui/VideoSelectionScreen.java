@@ -35,7 +35,7 @@ public class VideoSelectionScreen extends Screen {
             Component buttonText = Component.literal(category.getName());
             addRenderableWidget(Button.builder(buttonText, button -> {
                         // ВИПРАВЛЕНО: Тепер ми відкриваємо новий екран
-                        Minecraft.getInstance().setScreen(new VideoListScreen(category));
+                        Minecraft.getInstance().setScreen(new VideoListScreen(category, this));
                     })
                     .bounds(this.width / 2 - 100, buttonY, 200, 20)
                     .build());
