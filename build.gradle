@@ -116,17 +116,18 @@ repositories {
     maven {
         url "https://www.cursemaven.com"
     }
+    // maven {
     maven {
-        name = "WaterMedia"
-        url = "https://repo.watermedia.dev/releases"
+        url "https://www.cursemaven.com"
+        content { includeGroup "curse.maven" }
     }
 
     // ... (решта блоку)
 }
 
 dependencies {
-    implementation fg.deobf("dev.watermedia:watermedia-forge:1.1.3")
-    implementation fg.deobf("curse.maven:watermedia-869524:${watermediaversion}")
+     implementation fg.deobf("curse.maven:watermedia-869524:${watermediaversion}")
+    //plementation fg.deobf("dev.watermedia:watermedia-forge:1.1.3")
     // Specify the version of Minecraft to use.
     // Any artifact can be supplied so long as it has a "userdev" classifier artifact and is a compatible patcher artifact.
     // The "userdev" classifier will be requested and setup by ForgeGradle.
