@@ -1,0 +1,62 @@
+package com.nestworld.video.network;
+
+import com.nestworld.video.block.VideoScreenBlockEntity;
+import com.nestworld.video.client.ClientVideoManager;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraftforge.network.NetworkEvent;
+
+import java.util.function.Supplier;
+
+public class PacketUpdateVideoScreen {
+
+    private final BlockPos pos;
+    private final String url;
+    private final boolean isPlaying;
+
+    public PacketUpdateVideoScreen(BlockPos pos, String url, boolean isPlaying) {
+        this.pos = pos;
+        this.url = url;
+        this.isPlaying = isPlaying;
+    }
+
+    public static void encode(PacketUpdateVideoScreen packet, FriendlyByteBuf buf) {
+        buf.writeBlockPos(packet.pos);
+        buf.writeUtf(packet.url);
+        buf.writeBoolean(packet.isPlaying);
+    }
+
+    public static PacketUpdateVideoScreen decode(FriendlyByteBuf buf) {
+        return new PacketUpdateVideoScreen(buf.readBlockPos(), buf.readUtf(), buf.readBoolean());
+    }
+
+    public static void handle(PacketUpdateVideoScreen packet, Supplier<NetworkEvent.Context> contextSupplier) {
+        NetworkEvent.Context context = contextSupplier.get();
+        context.enqueueWork(() -> {
+            // This code is executed on the client
+            Level world = net.minecraft.client.Minecraft.getInstance().level;
+            if (world == null || !world.isLoaded(packet.pos)) {
+                return;
+            }
+
+            BlockEntity blockEntity = world.getBlockEntity(packet.pos);
+            if (blockEntity instanceof VideoScreenBlockEntity) {
+                VideoScreenBlockEntity screen = (VideoScreenBlockEntity) blockEntity;
+                
+                // Update the state on the client-side block entity
+                screen.setVideoUrl(packet.url);
+                screen.setPlaying(packet.isPlaying);
+
+                // Control the video playback
+                if (packet.isPlaying) {
+                    ClientVideoManager.getInstance().startPlaying(packet.pos, packet.url);
+                } else {
+                    ClientVideoManager.getInstance().stopPlaying(packet.pos);
+                }
+            }
+        });
+        context.setPacketHandled(true);
+    }
+}

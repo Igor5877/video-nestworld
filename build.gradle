@@ -115,17 +115,17 @@ repositories {
     // ForgeGradle automatically adds the Forge maven and Maven Central for you
     maven {
         url "https://www.cursemaven.com"
-        content { includeGroup "curse.maven" }
+    }
+    maven {
+        name = "WaterMedia"
+        url = "https://repo.watermedia.dev/releases"
     }
 
-    // If you have mod jar dependencies in ./libs, you can declare them as a repository like so.
-    // See https://docs.gradle.org/current/userguide/declaring_repositories.html#sub:flat_dir_resolver
-    // flatDir {
-    //     dir 'libs'
-    // }
+    // ... (решта блоку)
 }
 
 dependencies {
+    implementation fg.deobf("dev.watermedia:watermedia-forge:1.1.3")
     implementation fg.deobf("curse.maven:watermedia-869524:${watermediaversion}")
     // Specify the version of Minecraft to use.
     // Any artifact can be supplied so long as it has a "userdev" classifier artifact and is a compatible patcher artifact.
@@ -199,11 +199,11 @@ publishing {
             artifact jar
         }
     }
-    repositories {
-        maven {
-            url "file://${project.projectDir}/mcmodsrepo"
-        }
-    }
+   repositories {
+       maven {
+           url "file://${project.projectDir}/mcmodsrepo"
+       }
+   }
 }
 
 tasks.withType(JavaCompile).configureEach {

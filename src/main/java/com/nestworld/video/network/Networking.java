@@ -29,5 +29,12 @@ public class Networking {
                 PacketControlVideo::decode,
                 PacketControlVideo::handle
         );
+        
+        INSTANCE.registerMessage(2,
+                PacketUpdateVideoScreen.class,
+                PacketUpdateVideoScreen::encode,
+                PacketUpdateVideoScreen::decode,
+                PacketUpdateVideoScreen::handle
+        );
     }
 }
