@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "nestworldvideo:block/video_screen"
+    },
+    "facing=south": {
+      "model": "nestworldvideo:block/video_screen",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "nestworldvideo:block/video_screen",
+      "y": 270
+    },
+    "facing=east": {
+      "model": "nestworldvideo:block/video_screen",
+      "y": 90
+    }
+  }
+}

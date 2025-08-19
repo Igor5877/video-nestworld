@@ -2,13 +2,18 @@ package com.nestworld.video;
 
 import com.google.gson.Gson;
 import com.mojang.logging.LogUtils;
+import com.nestworld.video.block.ModBlocks;
+import com.nestworld.video.command.ReloadVideosCommand;
 import com.nestworld.video.network.Networking;
 import com.nestworld.video.network.PacketSyncVideos;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.server.ServerStartingEvent;
+import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraftforge.network.PacketDistributor;
 import org.slf4j.Logger;
 
@@ -24,6 +29,12 @@ public class CinemaMod {
 
     public CinemaMod() {
         LOGGER.info("Nestworld Video Mod has been initialized.");
+        
+        IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
+        
+        // Реєструємо блоки, предмети тощо
+        ModBlocks.register(modEventBus);
+        
         // Ініціалізуємо нашу мережу
         Networking.registerMessages();
     }
@@ -43,6 +54,12 @@ public class CinemaMod {
         } catch (Exception e) {
             LOGGER.error("NESTWORLD_VIDEO: Failed to read or parse videos.json.", e);
         }
+    }
+    
+    @SubscribeEvent
+    public static void onRegisterCommands(RegisterCommandsEvent event) {
+        ReloadVideosCommand.register(event.getDispatcher());
+        LOGGER.info("NESTWORLD_VIDEO: Registered reload command");
     }
 
     // НОВИЙ МЕТОД: викликається, коли гравець заходить на сервер

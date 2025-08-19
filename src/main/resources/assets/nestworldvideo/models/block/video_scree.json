@@ -1,0 +1,6 @@
+{
+    "parent": "minecraft:block/cube_all",
+    "textures":{
+        "all":"nestworldvideo:block/video_screen"
+    }
+}

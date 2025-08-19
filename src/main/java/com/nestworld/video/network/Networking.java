@@ -9,7 +9,7 @@ public class Networking {
 
     private static final String PROTOCOL_VERSION = "1";
     public static final SimpleChannel INSTANCE = NetworkRegistry.newSimpleChannel(
-            new ResourceLocation(CinemaMod.MOD_ID, "main"),
+            ResourceLocation.fromNamespaceAndPath(CinemaMod.MOD_ID, "main"),
             () -> PROTOCOL_VERSION,
             PROTOCOL_VERSION::equals,
             PROTOCOL_VERSION::equals
@@ -21,6 +21,13 @@ public class Networking {
                 PacketSyncVideos::encode,
                 PacketSyncVideos::decode,
                 PacketSyncVideos::handle
+        );
+        
+        INSTANCE.registerMessage(1,
+                PacketControlVideo.class,
+                PacketControlVideo::encode,
+                PacketControlVideo::decode,
+                PacketControlVideo::handle
         );
     }
 }
