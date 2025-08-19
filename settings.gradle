@@ -1,13 +1,20 @@
 pluginManagement {
     repositories {
-        gradlePluginPortal()
+        gradlePluginPortal() // <-- Цей рядок найважливіший для плагінів
         maven {
             name = 'MinecraftForge'
             url = 'https://maven.minecraftforge.net/'
         }
+        maven {
+            name = 'JitPack'
+            url = 'https://jitpack.io'
+        }
     }
 }
 
+// Ця частина може вже бути у вас, вона теж важлива
 plugins {
     id 'org.gradle.toolchains.foojay-resolver-convention' version '0.7.0'
 }
+
+rootProject.name = 'nestworld-video-mod' // Назва вашого проєкту
