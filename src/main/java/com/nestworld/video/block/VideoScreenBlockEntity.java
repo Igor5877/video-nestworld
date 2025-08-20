@@ -30,7 +30,6 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         super(ModBlocks.VIDEO_SCREEN_BLOCK_ENTITY.get(), pos, state);
     }
 
-    // --- NBT & Initial Sync ---
     @Override
     protected void saveAdditional(CompoundTag tag) {
         super.saveAdditional(tag);
@@ -58,7 +57,6 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         return super.getUpdateTag();
     }
 
-    // --- Menu Provider ---
     @Override
     public Component getDisplayName() {
         return Component.literal("Video Screen");
@@ -70,12 +68,11 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         return new VideoScreenMenu(containerId, playerInventory, this);
     }
 
-    // --- Server-Side Control Methods ---
     public void setVideo(Video video) {
         if (video != null) {
             this.currentVideoUrl = video.getUrl();
             this.currentVideoTitle = video.getTitle();
-            this.isPlaying = false; // Зупиняємо відтворення при зміні відео
+            this.isPlaying = false;
             syncToClient();
         }
     }
@@ -92,16 +89,13 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
 
     public void stop() {
         this.isPlaying = false;
-        // Можливо, очистити URL, якщо потрібно
-        // this.currentVideoUrl = "";
-        // this.currentVideoTitle = "No Video Selected";
         syncToClient();
     }
 
     private void syncToClient() {
         if (level != null && !level.isClientSide) {
             setChanged();
-            PacketUpdateVideoScreen packet = new PacketUpdateVideoScreen(worldPosition, currentVideoUrl, isPlaying);
+            PacketUpdateVideoScreen packet = new PacketUpdateVideoScreen(worldPosition, currentVideoUrl, currentVideoTitle, isPlaying);
             level.players().forEach(player -> {
                 if (player instanceof ServerPlayer) {
                     Networking.INSTANCE.send(PacketDistributor.PLAYER.with(() -> (ServerPlayer) player), packet);
@@ -110,7 +104,6 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         }
     }
 
-    // --- Getters & Client-Side Setters ---
     public String getCurrentVideoUrl() {
         return currentVideoUrl;
     }
@@ -123,9 +116,12 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         return isPlaying;
     }
 
-    // Ці методи викликаються на клієнті через пакет
     public void setVideoUrl(String url) {
         this.currentVideoUrl = url;
+    }
+
+    public void setVideoTitle(String title) {
+        this.currentVideoTitle = title;
     }
 
     public void setPlaying(boolean playing) {

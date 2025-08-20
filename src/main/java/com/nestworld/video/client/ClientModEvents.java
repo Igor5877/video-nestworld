@@ -2,6 +2,8 @@ package com.nestworld.video.client;
 
 import com.nestworld.video.CinemaMod;
 import com.nestworld.video.block.ModBlocks;
+import com.nestworld.video.client.gui.VideoScreenScreen;
+import net.minecraft.client.gui.screens.MenuScreens;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.EntityRenderersEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -20,6 +22,8 @@ public class ClientModEvents {
 
         // This is a good place to enqueue client-specific tasks
         event.enqueueWork(() -> {
+            MenuScreens.register(ModBlocks.VIDEO_SCREEN_MENU.get(), VideoScreenScreen::new);
+
             // For example, shutting down the video manager when the client stops
             // We can't use a specific client stopping event in the MOD bus, so we use a JVM shutdown hook
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
