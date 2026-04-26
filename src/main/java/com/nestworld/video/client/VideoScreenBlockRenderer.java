@@ -11,7 +11,6 @@ import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
 import net.minecraft.core.Direction;
-import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
 
@@ -24,29 +23,20 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
 
     @Override
     public void render(VideoScreenBlockEntity blockEntity, float partialTick, PoseStack poseStack, MultiBufferSource buffer, int packedLight, int packedOverlay) {
-        if (!blockEntity.isPlaying() || blockEntity.getCurrentVideoUrl().isEmpty()) {
-            // Ensure video is stopped if the block is not supposed to be playing
-            ClientVideoManager.getInstance().stopPlaying(blockEntity.getBlockPos());
-            return;
-        }
-
         Display display = ClientVideoManager.getInstance().getDisplay(blockEntity.getBlockPos());
-        if (display == null) {
-            return; // Display might still be loading
-        }
+        if (display == null) return;
 
         int textureId = display.getTextureId();
-        if (textureId == -1) {
-            return; // Video is not ready to be rendered
-        }
+        if (textureId == -1) return;
 
         poseStack.pushPose();
-
-        // Basic setup from the old renderer
         setupTransformation(poseStack, blockEntity.getBlockState().getValue(VideoScreenBlock.FACING));
-        
-        // --- Advanced Rendering Logic adapted from the reference project ---
-        
+
+        // Flush batched rendering before issuing raw GL draw calls
+        if (buffer instanceof MultiBufferSource.BufferSource bs) {
+            bs.endBatch();
+        }
+
         RenderSystem.enableDepthTest();
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
@@ -63,40 +53,32 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
 
         Matrix4f matrix = poseStack.last().pose();
 
-        // Get video dimensions for aspect ratio
+        // Letterbox/pillarbox to preserve aspect ratio
         Dimension videoDim = display.getDimensions();
-        float videoAspectRatio = (videoDim.width > 0 && videoDim.height > 0) 
-            ? (float) videoDim.width / (float) videoDim.height 
+        float videoAspect = (videoDim.width > 0 && videoDim.height > 0)
+            ? (float) videoDim.width / videoDim.height
             : 16.0f / 9.0f;
 
-        float screenWidth = 1.0f;
-        float screenHeight = 1.0f;
-        float screenAspectRatio = screenWidth / screenHeight;
-
-        float renderWidth = screenWidth;
-        float renderHeight = screenHeight;
-        float xOffset = 0;
-        float yOffset = 0;
-
-        if (videoAspectRatio > screenAspectRatio) {
-            // Video is wider than the screen (letterboxing)
-            renderHeight = screenWidth / videoAspectRatio;
-            yOffset = (screenHeight - renderHeight) / 2.0f;
+        float renderWidth = 1.0f, renderHeight = 1.0f;
+        float xOffset = 0f, yOffset = 0f;
+        if (videoAspect > 1.0f) {
+            renderHeight = 1.0f / videoAspect;
+            yOffset = (1.0f - renderHeight) / 2.0f;
         } else {
-            // Video is taller than the screen (pillarboxing)
-            renderWidth = screenHeight * videoAspectRatio;
-            xOffset = (screenWidth - renderWidth) / 2.0f;
+            renderWidth = videoAspect;
+            xOffset = (1.0f - renderWidth) / 2.0f;
         }
 
-        builder.vertex(matrix, xOffset, yOffset + renderHeight, 0).uv(0, 1).endVertex();
+        builder.vertex(matrix, xOffset,               yOffset + renderHeight, 0).uv(0, 1).endVertex();
         builder.vertex(matrix, xOffset + renderWidth, yOffset + renderHeight, 0).uv(1, 1).endVertex();
-        builder.vertex(matrix, xOffset + renderWidth, yOffset, 0).uv(1, 0).endVertex();
-        builder.vertex(matrix, xOffset, yOffset, 0).uv(0, 0).endVertex();
-        
+        builder.vertex(matrix, xOffset + renderWidth, yOffset,               0).uv(1, 0).endVertex();
+        builder.vertex(matrix, xOffset,               yOffset,               0).uv(0, 0).endVertex();
+
         tesselator.end();
-        
+
         RenderSystem.disableBlend();
-        RenderSystem.disableDepthTest();
+        // Restore depth test — do NOT call disableDepthTest() here, it would break subsequent rendering
+        RenderSystem.enableDepthTest();
 
         poseStack.popPose();
     }
@@ -104,7 +86,7 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
     private void setupTransformation(PoseStack poseStack, Direction facing) {
         poseStack.translate(0.5, 0.5, 0.5);
         poseStack.mulPose(Axis.YP.rotationDegrees(-facing.toYRot()));
-        poseStack.translate(0, 0, 0.5 - 0.001); // Slightly inside the block
+        poseStack.translate(0, 0, 0.5 + 0.001); // Slightly in front of the block face to avoid depth-buffer occlusion
         // We render on a 1x1 quad and then scale it
         poseStack.scale(1.0f, -1.0f, 1.0f); // Flip Y for correct UV mapping
         poseStack.translate(-0.5, -0.5, 0);
