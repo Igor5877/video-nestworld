@@ -117,7 +117,7 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         if (level == null || level.isClientSide) return;
 
         Direction facing = getBlockState().getValue(VideoScreenBlock.FACING);
-        Direction widthDir = facing.getClockWise(); // viewer's right
+        Direction widthDir = facing.getCounterClockWise(); // viewer's right
 
         // Clear the previous layout first
         clearSlaves(facing);
@@ -164,7 +164,7 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
 
     private void clearSlaves(Direction facing) {
         if (level == null) return;
-        Direction widthDir = facing.getClockWise();
+        Direction widthDir = facing.getCounterClockWise();
         for (int row = 0; row < screenRows; row++) {
             for (int col = 0; col < screenCols; col++) {
                 if (col == 0 && row == 0) continue;
