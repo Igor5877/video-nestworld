@@ -52,8 +52,16 @@ public class PacketControlVideo {
             ServerPlayer player = context.getSender();
             if (player == null) return;
             
-            if (player.level().getBlockEntity(message.blockPos) instanceof VideoScreenBlockEntity videoScreen) {
-                LOGGER.info("Player {} executing action {} on video screen at {}", 
+            if (player.level().getBlockEntity(message.blockPos) instanceof VideoScreenBlockEntity raw) {
+                // If a slave block was clicked, redirect play/select/pause/stop to the master so that
+                // the Display is always created under the master's BlockPos and the renderer can find it.
+                VideoScreenBlockEntity videoScreen = raw;
+                if (!raw.isMaster() && raw.getMasterPos() != null
+                        && player.level().getBlockEntity(raw.getMasterPos()) instanceof VideoScreenBlockEntity master) {
+                    videoScreen = master;
+                }
+
+                LOGGER.info("Player {} executing action {} on video screen at {}",
                     player.getName().getString(), message.action, message.blockPos);
                 
                 switch (message.action) {
