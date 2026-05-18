@@ -25,7 +25,10 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final ResourceLocation TEXTURE = ResourceLocation.fromNamespaceAndPath(CinemaMod.MOD_ID, "textures/gui/video_screen.png");
     private Category selectedCategory = null;
-    private int scrollOffset = 0;
+
+    // Layout controls state (cols/rows the user wants to apply)
+    private int layoutCols = 1;
+    private int layoutRows = 1;
 
     public VideoScreenScreen(VideoScreenMenu menu, Inventory playerInventory, Component title) {
         super(menu, playerInventory, title);
@@ -37,80 +40,113 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
     protected void init() {
         super.init();
 
-        if (this.menu.getBlockEntity() == null) {
-            LOGGER.error("VideoScreenScreen opened without a valid BlockEntity! This may be a timing issue. Closing screen.");
+        VideoScreenBlockEntity be = menu.getBlockEntity();
+        if (be == null) {
+            LOGGER.error("VideoScreenScreen opened without a valid BlockEntity! Closing screen.");
             this.onClose();
             return;
         }
-        
-        // ... (решта коду залишається без змін)
-        
-        this.addRenderableWidget(Button.builder(Component.literal("Play"), button -> {
-            Networking.INSTANCE.sendToServer(new PacketControlVideo(menu.getBlockEntity().getBlockPos(), "play"));
-        }).bounds(leftPos + 10, topPos + 140, 50, 20).build());
-        
-        this.addRenderableWidget(Button.builder(Component.literal("Pause"), button -> {
-            Networking.INSTANCE.sendToServer(new PacketControlVideo(menu.getBlockEntity().getBlockPos(), "pause"));
-        }).bounds(leftPos + 65, topPos + 140, 50, 20).build());
-        
-        this.addRenderableWidget(Button.builder(Component.literal("Stop"), button -> {
-            Networking.INSTANCE.sendToServer(new PacketControlVideo(menu.getBlockEntity().getBlockPos(), "stop"));
-        }).bounds(leftPos + 120, topPos + 140, 50, 20).build());
 
-        this.addRenderableWidget(Button.builder(Component.literal("Vol -"), button -> {
-            Display display = ClientVideoManager.getInstance().getDisplay(menu.getBlockEntity().getBlockPos());
-            if (display != null) display.setVolume(display.getVolume() - 10);
+        // Initialise layout controls from the current block entity state
+        layoutCols = be.getScreenCols();
+        layoutRows = be.getScreenRows();
+
+        // --- Playback controls (left, bottom row) ---
+        addRenderableWidget(Button.builder(Component.literal("Play"), button ->
+            Networking.INSTANCE.sendToServer(new PacketControlVideo(be.getBlockPos(), "play"))
+        ).bounds(leftPos + 10, topPos + 140, 50, 20).build());
+
+        addRenderableWidget(Button.builder(Component.literal("Pause"), button ->
+            Networking.INSTANCE.sendToServer(new PacketControlVideo(be.getBlockPos(), "pause"))
+        ).bounds(leftPos + 65, topPos + 140, 50, 20).build());
+
+        addRenderableWidget(Button.builder(Component.literal("Stop"), button ->
+            Networking.INSTANCE.sendToServer(new PacketControlVideo(be.getBlockPos(), "stop"))
+        ).bounds(leftPos + 120, topPos + 140, 50, 20).build());
+
+        // --- Volume controls ---
+        addRenderableWidget(Button.builder(Component.literal("Vol -"), button -> {
+            Display d = ClientVideoManager.getInstance().getDisplay(be.getBlockPos());
+            if (d != null) d.setVolume(d.getVolume() - 10);
         }).bounds(leftPos + 10, topPos + 115, 35, 15).build());
 
-        this.addRenderableWidget(Button.builder(Component.literal("Vol +"), button -> {
-            Display display = ClientVideoManager.getInstance().getDisplay(menu.getBlockEntity().getBlockPos());
-            if (display != null) display.setVolume(display.getVolume() + 10);
+        addRenderableWidget(Button.builder(Component.literal("Vol +"), button -> {
+            Display d = ClientVideoManager.getInstance().getDisplay(be.getBlockPos());
+            if (d != null) d.setVolume(d.getVolume() + 10);
         }).bounds(leftPos + 50, topPos + 115, 35, 15).build());
-        
+
+        // --- Category list (right column) ---
         if (ClientData.getVideoConfig() != null && !ClientData.getVideoConfig().getCategories().isEmpty()) {
             int buttonY = topPos + 30;
             int buttonIndex = 0;
-            
             for (Category category : ClientData.getVideoConfig().getCategories()) {
                 if (buttonIndex >= 4) break;
-                
-                this.addRenderableWidget(Button.builder(Component.literal(category.getName()), button -> {
+                addRenderableWidget(Button.builder(Component.literal(category.getName()), button -> {
                     selectedCategory = category;
                     clearWidgets();
                     init();
-                }).bounds(leftPos + 180, buttonY, 70, 20).build());
-                
-                buttonY += 25;
+                }).bounds(leftPos + 180, buttonY + buttonIndex * 25, 70, 20).build());
                 buttonIndex++;
             }
         }
-        
+
+        // --- Video list (left/centre column, shown when category selected) ---
         if (selectedCategory != null && selectedCategory.getVideos() != null) {
             int buttonY = topPos + 30;
             int videoIndex = 0;
-            
             for (Video video : selectedCategory.getVideos()) {
                 if (videoIndex >= 4) break;
-                
-                String title = video.getTitle();
-                if (title.length() > 15) {
-                    title = title.substring(0, 12) + "...";
-                }
-                
-                this.addRenderableWidget(Button.builder(Component.literal(title), button -> {
+                String label = video.getTitle();
+                if (label.length() > 15) label = label.substring(0, 12) + "...";
+                addRenderableWidget(Button.builder(Component.literal(label), button ->
                     Networking.INSTANCE.sendToServer(new PacketControlVideo(
-                        menu.getBlockEntity().getBlockPos(), "select", video.getUrl(), video.getTitle()));
-                }).bounds(leftPos + 10, buttonY, 160, 20).build());
-                
-                buttonY += 25;
+                        be.getBlockPos(), "select", video.getUrl(), video.getTitle()))
+                ).bounds(leftPos + 10, buttonY + videoIndex * 25, 160, 20).build());
                 videoIndex++;
             }
-            
-            this.addRenderableWidget(Button.builder(Component.literal("Back"), button -> {
+
+            addRenderableWidget(Button.builder(Component.literal("Back"), button -> {
                 selectedCategory = null;
                 clearWidgets();
                 init();
             }).bounds(leftPos + 180, topPos + 140, 70, 20).build());
+        }
+
+        // --- Screen layout controls (right column, master only) ---
+        // Only show for the master block; slaves can't change the layout.
+        if (be.isMaster() && selectedCategory == null) {
+            int rx = leftPos + 180; // right-column X
+            int ry = topPos + 125; // start below categories
+
+            // Width row: [W-] [W+]
+            addRenderableWidget(Button.builder(Component.literal("W-"), button -> {
+                if (layoutCols > 1) { layoutCols--; clearWidgets(); init(); }
+            }).bounds(rx, ry, 20, 14).build());
+
+            addRenderableWidget(Button.builder(Component.literal("W+"), button -> {
+                if (layoutCols < 16) { layoutCols++; clearWidgets(); init(); }
+            }).bounds(rx + 22, ry, 20, 14).build());
+
+            // Height row: [H-] [H+]
+            addRenderableWidget(Button.builder(Component.literal("H-"), button -> {
+                if (layoutRows > 1) { layoutRows--; clearWidgets(); init(); }
+            }).bounds(rx + 46, ry, 20, 14).build());
+
+            addRenderableWidget(Button.builder(Component.literal("H+"), button -> {
+                if (layoutRows < 16) { layoutRows++; clearWidgets(); init(); }
+            }).bounds(rx + 68, ry, 20, 14).build());
+
+            // Apply layout button
+            addRenderableWidget(Button.builder(Component.literal("Set"), button ->
+                Networking.INSTANCE.sendToServer(new PacketControlVideo(
+                    be.getBlockPos(), "layout",
+                    String.valueOf(layoutCols), String.valueOf(layoutRows)))
+            ).bounds(rx, ry + 18, 42, 14).build());
+
+            // Reset to 1×1
+            addRenderableWidget(Button.builder(Component.literal("Reset"), button ->
+                Networking.INSTANCE.sendToServer(new PacketControlVideo(be.getBlockPos(), "reset_layout"))
+            ).bounds(rx + 46, ry + 18, 42, 14).build());
         }
     }
 
@@ -120,18 +156,28 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         int x = (width - imageWidth) / 2;
         int y = (height - imageHeight) / 2;
         guiGraphics.blit(TEXTURE, x, y, 0, 0, imageWidth, imageHeight);
-        
+
         VideoScreenBlockEntity be = menu.getBlockEntity();
         if (be != null) {
-            String currentVideo = be.getCurrentVideoTitle();
-            guiGraphics.drawString(this.font, "Current: " + currentVideo, leftPos + 10, topPos + 15, 0x404040, false);
-            
+            guiGraphics.drawString(this.font, "Current: " + be.getCurrentVideoTitle(), leftPos + 10, topPos + 15, 0x404040, false);
+
             String status = be.isPlaying() ? "Playing" : "Stopped";
             guiGraphics.drawString(this.font, "Status: " + status, leftPos + 10, topPos + 130, 0x404040, false);
 
+            // Volume display
             Display display = ClientVideoManager.getInstance().getDisplay(be.getBlockPos());
             if (display != null) {
                 guiGraphics.drawString(this.font, "Vol: " + display.getVolume() + "%", leftPos + 95, topPos + 118, 0x404040, false);
+            }
+
+            // Screen layout info
+            if (be.isMaster() && selectedCategory == null) {
+                int rx = leftPos + 180;
+                int ry = topPos + 125;
+                guiGraphics.drawString(this.font, "W:" + layoutCols + " H:" + layoutRows, rx, ry - 10, 0x404040, false);
+            } else if (!be.isMaster()) {
+                guiGraphics.drawString(this.font, "Slave " + (be.getTileCol() + 1) + "x" + (be.getTileRow() + 1),
+                    leftPos + 180, topPos + 130, 0x808080, false);
             }
         }
     }

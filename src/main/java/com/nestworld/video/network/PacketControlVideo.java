@@ -67,12 +67,24 @@ public class PacketControlVideo {
                         videoScreen.stop();
                         break;
                     case "select":
-                        // Створюємо тимчасовий об'єкт Video для передачі даних
-                        Video selectedVideo = new Video();
-                        // Оскільки Video має приватні поля, використаємо рефлексію або створимо метод
-                        // Поки що логуємо
                         LOGGER.info("Selected video: {} with URL: {}", message.videoTitle, message.videoUrl);
                         videoScreen.setVideo(createVideoFromData(message.videoUrl, message.videoTitle));
+                        break;
+                    case "layout":
+                        try {
+                            int cols = Integer.parseInt(message.videoUrl);
+                            int rows = Integer.parseInt(message.videoTitle);
+                            if (cols >= 1 && rows >= 1 && cols <= 16 && rows <= 16) {
+                                videoScreen.applyLayout(cols, rows);
+                                LOGGER.info("Applied {}x{} screen layout at {}", cols, rows, message.blockPos);
+                            }
+                        } catch (NumberFormatException e) {
+                            LOGGER.warn("Invalid layout dimensions: {}x{}", message.videoUrl, message.videoTitle);
+                        }
+                        break;
+                    case "reset_layout":
+                        videoScreen.resetLayout();
+                        LOGGER.info("Reset screen layout at {}", message.blockPos);
                         break;
                 }
             }

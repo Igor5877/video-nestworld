@@ -10,6 +10,7 @@ import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
@@ -23,7 +24,10 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
 
     @Override
     public void render(VideoScreenBlockEntity blockEntity, float partialTick, PoseStack poseStack, MultiBufferSource buffer, int packedLight, int packedOverlay) {
-        Display display = ClientVideoManager.getInstance().getDisplay(blockEntity.getBlockPos());
+        // Slave blocks look up the master's Display; master/standalone use their own pos.
+        BlockPos masterPos = blockEntity.getMasterPos();
+        BlockPos displayPos = (masterPos != null) ? masterPos : blockEntity.getBlockPos();
+        Display display = ClientVideoManager.getInstance().getDisplay(displayPos);
         if (display == null) return;
 
         int textureId = display.getTextureId();
@@ -32,7 +36,6 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
         poseStack.pushPose();
         setupTransformation(poseStack, blockEntity.getBlockState().getValue(VideoScreenBlock.FACING));
 
-        // Flush batched rendering before issuing raw GL draw calls
         if (buffer instanceof MultiBufferSource.BufferSource bs) {
             bs.endBatch();
         }
@@ -53,31 +56,51 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
 
         Matrix4f matrix = poseStack.last().pose();
 
-        // Letterbox/pillarbox to preserve aspect ratio
-        Dimension videoDim = display.getDimensions();
-        float videoAspect = (videoDim != null && videoDim.width > 0 && videoDim.height > 0)
-            ? (float) videoDim.width / videoDim.height
-            : 16.0f / 9.0f;
+        int screenCols = blockEntity.getScreenCols();
+        int screenRows = blockEntity.getScreenRows();
+        int tileCol    = blockEntity.getTileCol();
+        int tileRow    = blockEntity.getTileRow();
 
-        float renderWidth = 1.0f, renderHeight = 1.0f;
-        float xOffset = 0f, yOffset = 0f;
-        if (videoAspect > 1.0f) {
-            renderHeight = 1.0f / videoAspect;
-            yOffset = (1.0f - renderHeight) / 2.0f;
+        if (screenCols == 1 && screenRows == 1) {
+            // Single block: letterbox/pillarbox to preserve video aspect ratio.
+            Dimension videoDim = display.getDimensions();
+            float videoAspect = (videoDim != null && videoDim.width > 0 && videoDim.height > 0)
+                ? (float) videoDim.width / videoDim.height
+                : 16.0f / 9.0f;
+
+            float renderWidth = 1.0f, renderHeight = 1.0f;
+            float xOffset = 0f, yOffset = 0f;
+            if (videoAspect > 1.0f) {
+                renderHeight = 1.0f / videoAspect;
+                yOffset = (1.0f - renderHeight) / 2.0f;
+            } else {
+                renderWidth = videoAspect;
+                xOffset = (1.0f - renderWidth) / 2.0f;
+            }
+
+            builder.vertex(matrix, xOffset,               yOffset + renderHeight, 0).uv(0, 1).endVertex();
+            builder.vertex(matrix, xOffset + renderWidth, yOffset + renderHeight, 0).uv(1, 1).endVertex();
+            builder.vertex(matrix, xOffset + renderWidth, yOffset,               0).uv(1, 0).endVertex();
+            builder.vertex(matrix, xOffset,               yOffset,               0).uv(0, 0).endVertex();
         } else {
-            renderWidth = videoAspect;
-            xOffset = (1.0f - renderWidth) / 2.0f;
-        }
+            // Multi-block: each tile renders its UV slice (stretch to fill).
+            // tileRow=0 is the bottom row of the grid → shows the bottom portion of the video.
+            // After the Y-flip in setupTransformation, Y=0 is the visual top of the block.
+            float uMin = (float) tileCol / screenCols;
+            float uMax = (float) (tileCol + 1) / screenCols;
+            float vTop = (float) (screenRows - 1 - tileRow) / screenRows;
+            float vBot = (float) (screenRows - tileRow) / screenRows;
 
-        builder.vertex(matrix, xOffset,               yOffset + renderHeight, 0).uv(0, 1).endVertex();
-        builder.vertex(matrix, xOffset + renderWidth, yOffset + renderHeight, 0).uv(1, 1).endVertex();
-        builder.vertex(matrix, xOffset + renderWidth, yOffset,               0).uv(1, 0).endVertex();
-        builder.vertex(matrix, xOffset,               yOffset,               0).uv(0, 0).endVertex();
+            // Winding: bottom-left, bottom-right, top-right, top-left (Y=1=visual bottom, Y=0=visual top)
+            builder.vertex(matrix, 0, 1, 0).uv(uMin, vBot).endVertex();
+            builder.vertex(matrix, 1, 1, 0).uv(uMax, vBot).endVertex();
+            builder.vertex(matrix, 1, 0, 0).uv(uMax, vTop).endVertex();
+            builder.vertex(matrix, 0, 0, 0).uv(uMin, vTop).endVertex();
+        }
 
         tesselator.end();
 
         RenderSystem.disableBlend();
-        // Restore depth test — do NOT call disableDepthTest() here, it would break subsequent rendering
         RenderSystem.enableDepthTest();
 
         poseStack.popPose();
@@ -86,9 +109,8 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
     private void setupTransformation(PoseStack poseStack, Direction facing) {
         poseStack.translate(0.5, 0.5, 0.5);
         poseStack.mulPose(Axis.YP.rotationDegrees(-facing.toYRot()));
-        poseStack.translate(0, 0, 0.5 + 0.001); // Slightly in front of the block face to avoid depth-buffer occlusion
-        // We render on a 1x1 quad and then scale it
-        poseStack.scale(1.0f, -1.0f, 1.0f); // Flip Y for correct UV mapping
+        poseStack.translate(0, 0, 0.5 + 0.001);
+        poseStack.scale(1.0f, -1.0f, 1.0f);
         poseStack.translate(-0.5, -0.5, 0);
     }
 
