@@ -25,7 +25,10 @@ public class ClientModEvents {
         event.enqueueWork(() -> {
             MenuScreens.register(ModBlocks.VIDEO_SCREEN_MENU.get(), VideoScreenScreen::new);
 
-                Runtime.getRuntime().addShutdownHook(new Thread(() -> ClientVideoManager.getInstance().shutdown()));
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                ClientVideoManager.getInstance().shutdown();
+                VulkanVideoBridge.get().shutdown();
+            }));
 
             // Stop all videos when the player leaves a world/server.
             MinecraftForge.EVENT_BUS.addListener(ClientModEvents::onPlayerLogout);
@@ -45,5 +48,6 @@ public class ClientModEvents {
 
     public static void onPlayerLogout(ClientPlayerNetworkEvent.LoggingOut event) {
         ClientVideoManager.getInstance().shutdown();
+        VulkanVideoBridge.get().shutdown();
     }
 }
