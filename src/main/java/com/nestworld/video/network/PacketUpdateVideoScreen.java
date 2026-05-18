@@ -39,23 +39,22 @@ public class PacketUpdateVideoScreen {
         NetworkEvent.Context context = contextSupplier.get();
         context.enqueueWork(() -> {
             Level world = net.minecraft.client.Minecraft.getInstance().level;
-            if (world == null || !world.isLoaded(packet.pos)) {
+            if (world == null) return;
+
+            // Stop the display immediately — must work even after the block is already removed.
+            if (!packet.isPlaying) {
+                ClientVideoManager.getInstance().stopPlaying(packet.pos);
                 return;
             }
 
+            // For play: the block entity must still exist.
+            if (!world.isLoaded(packet.pos)) return;
             BlockEntity blockEntity = world.getBlockEntity(packet.pos);
-            if (blockEntity instanceof VideoScreenBlockEntity) {
-                VideoScreenBlockEntity screen = (VideoScreenBlockEntity) blockEntity;
-                
+            if (blockEntity instanceof VideoScreenBlockEntity screen) {
                 screen.setVideoUrl(packet.url);
                 screen.setVideoTitle(packet.title);
-                screen.setPlaying(packet.isPlaying);
-
-                if (packet.isPlaying) {
-                    ClientVideoManager.getInstance().startPlaying(packet.pos, packet.url);
-                } else {
-                    ClientVideoManager.getInstance().stopPlaying(packet.pos);
-                }
+                screen.setPlaying(true);
+                ClientVideoManager.getInstance().startPlaying(packet.pos, packet.url);
             }
         });
         context.setPacketHandled(true);

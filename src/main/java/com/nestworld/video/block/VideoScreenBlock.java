@@ -59,6 +59,16 @@ public class VideoScreenBlock extends BaseEntityBlock {
         return InteractionResult.SUCCESS;
     }
     
+    @Override
+    public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean isMoving) {
+        if (state.hasBlockEntity() && !state.is(newState.getBlock())) {
+            if (!level.isClientSide && level.getBlockEntity(pos) instanceof VideoScreenBlockEntity be) {
+                be.stop();
+            }
+        }
+        super.onRemove(state, level, pos, newState, isMoving);
+    }
+
     @Nullable
     @Override
     public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {

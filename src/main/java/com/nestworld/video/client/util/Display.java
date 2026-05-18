@@ -13,6 +13,13 @@ public class Display {
     private final String url;
     private boolean isPlaying = false;
 
+    // Cache preRender() result for one render frame so that all tiles in a multi-block
+    // screen share the same GL texture ID and never show different video frames.
+    private int cachedTextureId = -1;
+    private long lastPreRenderNanos = 0;
+    // 8 ms ≈ one frame at 125 fps; safe cache window for any reasonable frame rate.
+    private static final long FRAME_CACHE_NANOS = 8_000_000L;
+
     public Display(String url) {
         this.url = url;
         this.player = new VideoPlayer(Minecraft.getInstance());
@@ -26,10 +33,13 @@ public class Display {
     }
 
     public int getTextureId() {
-        if (player.isReady()) {
-            return player.preRender();
+        if (!player.isReady()) return -1;
+        long now = System.nanoTime();
+        if (cachedTextureId == -1 || now - lastPreRenderNanos > FRAME_CACHE_NANOS) {
+            cachedTextureId = player.preRender();
+            lastPreRenderNanos = now;
         }
-        return -1;
+        return cachedTextureId;
     }
 
     public void setPlaying(boolean playing) {

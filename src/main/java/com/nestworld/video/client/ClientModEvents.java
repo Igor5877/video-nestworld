@@ -10,6 +10,7 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.network.ClientPlayerNetworkEvent;
 import net.minecraftforge.common.MinecraftForge;
 
 @Mod.EventBusSubscriber(modid = CinemaMod.MOD_ID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
@@ -24,11 +25,10 @@ public class ClientModEvents {
         event.enqueueWork(() -> {
             MenuScreens.register(ModBlocks.VIDEO_SCREEN_MENU.get(), VideoScreenScreen::new);
 
-            // For example, shutting down the video manager when the client stops
-            // We can't use a specific client stopping event in the MOD bus, so we use a JVM shutdown hook
-            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                ClientVideoManager.getInstance().shutdown();
-            }));
+                Runtime.getRuntime().addShutdownHook(new Thread(() -> ClientVideoManager.getInstance().shutdown()));
+
+            // Stop all videos when the player leaves a world/server.
+            MinecraftForge.EVENT_BUS.addListener(ClientModEvents::onPlayerLogout);
         });
     }
 
@@ -41,5 +41,9 @@ public class ClientModEvents {
         if (event.phase == TickEvent.Phase.END) {
             ClientVideoManager.getInstance().tick();
         }
+    }
+
+    public static void onPlayerLogout(ClientPlayerNetworkEvent.LoggingOut event) {
+        ClientVideoManager.getInstance().shutdown();
     }
 }
