@@ -5,9 +5,11 @@ import com.mojang.logging.LogUtils;
 import com.nestworld.video.Category;
 import com.nestworld.video.CinemaMod;
 import com.nestworld.video.Video;
-import com.nestworld.video.block.VideoScreenBlockEntity; // <--- ОСЬ ЦЕЙ РЯДОК Я ЗАБУВ
+import com.nestworld.video.block.VideoScreenBlockEntity;
 import com.nestworld.video.block.VideoScreenMenu;
 import com.nestworld.video.client.ClientData;
+import com.nestworld.video.client.ClientVideoManager;
+import com.nestworld.video.client.util.Display;
 import com.nestworld.video.network.Networking;
 import com.nestworld.video.network.PacketControlVideo;
 import net.minecraft.client.gui.GuiGraphics;
@@ -54,6 +56,16 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         this.addRenderableWidget(Button.builder(Component.literal("Stop"), button -> {
             Networking.INSTANCE.sendToServer(new PacketControlVideo(menu.getBlockEntity().getBlockPos(), "stop"));
         }).bounds(leftPos + 120, topPos + 140, 50, 20).build());
+
+        this.addRenderableWidget(Button.builder(Component.literal("Vol -"), button -> {
+            Display display = ClientVideoManager.getInstance().getDisplay(menu.getBlockEntity().getBlockPos());
+            if (display != null) display.setVolume(display.getVolume() - 10);
+        }).bounds(leftPos + 10, topPos + 115, 35, 15).build());
+
+        this.addRenderableWidget(Button.builder(Component.literal("Vol +"), button -> {
+            Display display = ClientVideoManager.getInstance().getDisplay(menu.getBlockEntity().getBlockPos());
+            if (display != null) display.setVolume(display.getVolume() + 10);
+        }).bounds(leftPos + 50, topPos + 115, 35, 15).build());
         
         if (ClientData.getVideoConfig() != null && !ClientData.getVideoConfig().getCategories().isEmpty()) {
             int buttonY = topPos + 30;
@@ -116,6 +128,11 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
             
             String status = be.isPlaying() ? "Playing" : "Stopped";
             guiGraphics.drawString(this.font, "Status: " + status, leftPos + 10, topPos + 130, 0x404040, false);
+
+            Display display = ClientVideoManager.getInstance().getDisplay(be.getBlockPos());
+            if (display != null) {
+                guiGraphics.drawString(this.font, "Vol: " + display.getVolume() + "%", leftPos + 95, topPos + 118, 0x404040, false);
+            }
         }
     }
 

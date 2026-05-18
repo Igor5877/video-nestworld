@@ -50,6 +50,14 @@ public class Display {
         return new Dimension(0, 0);
     }
     
+    public void setVolume(int volume) {
+        player.setVolume(Math.max(0, Math.min(200, volume)));
+    }
+
+    public int getVolume() {
+        return player.getVolume();
+    }
+
     public void release() {
         player.stop();
         player.release();
