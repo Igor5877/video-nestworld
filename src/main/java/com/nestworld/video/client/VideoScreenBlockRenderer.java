@@ -82,20 +82,23 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
                 xOffset = (1.0f - renderWidth) / 2.0f;
             }
 
+            // Повернули оригінальні UV координати (без дзеркалення)
             builder.vertex(matrix, xOffset,               yOffset + renderHeight, 0).uv(0, 1).endVertex();
             builder.vertex(matrix, xOffset + renderWidth, yOffset + renderHeight, 0).uv(1, 1).endVertex();
             builder.vertex(matrix, xOffset + renderWidth, yOffset,               0).uv(1, 0).endVertex();
             builder.vertex(matrix, xOffset,               yOffset,               0).uv(0, 0).endVertex();
         } else {
             // Multi-block: each tile renders its UV slice (stretch to fill).
-            // tileRow=0 is the bottom row of the grid → shows the bottom portion of the video.
-            // After the Y-flip in setupTransformation, Y=0 is the visual top of the block.
-            float uMin = (float) tileCol / screenCols;
-            float uMax = (float) (tileCol + 1) / screenCols;
+            
+            // Залишаємо виправлення порядку колонок, оскільки блоки рахуються справа наліво
+            int actualTileCol = (screenCols - 1) - tileCol;
+
+            float uMin = (float) actualTileCol / screenCols;
+            float uMax = (float) (actualTileCol + 1) / screenCols;
             float vTop = (float) (screenRows - 1 - tileRow) / screenRows;
             float vBot = (float) (screenRows - tileRow) / screenRows;
 
-            // Winding: bottom-left, bottom-right, top-right, top-left (Y=1=visual bottom, Y=0=visual top)
+            // Повернули оригінальні UV координати, щоб прибрати ефект дзеркала всередині самого блоку
             builder.vertex(matrix, 0, 1, 0).uv(uMin, vBot).endVertex();
             builder.vertex(matrix, 1, 1, 0).uv(uMax, vBot).endVertex();
             builder.vertex(matrix, 1, 0, 0).uv(uMax, vTop).endVertex();
