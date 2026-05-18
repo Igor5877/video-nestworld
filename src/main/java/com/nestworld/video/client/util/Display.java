@@ -70,7 +70,7 @@ public class Display {
         return baseVolume;
     }
 
-    void applySpatialVolume(double factor) {
+    public void applySpatialVolume(double factor) {
         int effective = (int) (baseVolume * factor);
         player.setVolume(Math.max(0, Math.min(200, effective)));
     }
