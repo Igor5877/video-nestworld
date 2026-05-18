@@ -26,9 +26,11 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
     private static final ResourceLocation TEXTURE = ResourceLocation.fromNamespaceAndPath(CinemaMod.MOD_ID, "textures/gui/video_screen.png");
     private Category selectedCategory = null;
 
-    // Layout controls state (cols/rows the user wants to apply)
+    // Layout controls state (cols/rows the user wants to apply).
+    // Initialized from the block entity only on the very first open.
     private int layoutCols = 1;
     private int layoutRows = 1;
+    private boolean layoutInitialized = false;
 
     public VideoScreenScreen(VideoScreenMenu menu, Inventory playerInventory, Component title) {
         super(menu, playerInventory, title);
@@ -47,9 +49,14 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
             return;
         }
 
-        // Initialise layout controls from the current block entity state
-        layoutCols = be.getScreenCols();
-        layoutRows = be.getScreenRows();
+        // Initialise layout controls from the block entity only on first open.
+        // Subsequent calls (triggered by +/- buttons via clearWidgets+init) must
+        // preserve the values the user is editing, NOT reset them from the server state.
+        if (!layoutInitialized) {
+            layoutCols = be.getScreenCols();
+            layoutRows = be.getScreenRows();
+            layoutInitialized = true;
+        }
 
         // --- Playback controls (left, bottom row) ---
         addRenderableWidget(Button.builder(Component.literal("Play"), button ->
