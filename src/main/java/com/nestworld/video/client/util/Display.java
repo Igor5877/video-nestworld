@@ -60,12 +60,19 @@ public class Display {
         return new Dimension(0, 0);
     }
     
+    private int baseVolume = 100;
+
     public void setVolume(int volume) {
-        player.setVolume(Math.max(0, Math.min(200, volume)));
+        baseVolume = Math.max(0, Math.min(200, volume));
     }
 
     public int getVolume() {
-        return player.getVolume();
+        return baseVolume;
+    }
+
+    void applySpatialVolume(double factor) {
+        int effective = (int) (baseVolume * factor);
+        player.setVolume(Math.max(0, Math.min(200, effective)));
     }
 
     public void release() {
