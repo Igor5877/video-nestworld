@@ -164,20 +164,24 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
 
     private void clearSlaves(Direction facing) {
         if (level == null) return;
-        Direction widthDir = facing.getCounterClockWise();
-        for (int row = 0; row < screenRows; row++) {
-            for (int col = 0; col < screenCols; col++) {
-                if (col == 0 && row == 0) continue;
-                BlockPos slavePos = worldPosition.relative(widthDir, col).above(row);
-                if (level.getBlockEntity(slavePos) instanceof VideoScreenBlockEntity slave
-                        && slave.masterPosLong == worldPosition.asLong()) {
-                    slave.screenCols = 1;
-                    slave.screenRows = 1;
-                    slave.tileCol = 0;
-                    slave.tileRow = 0;
-                    slave.masterPosLong = Long.MIN_VALUE;
-                    slave.setChanged();
-                    level.sendBlockUpdated(slavePos, slave.getBlockState(), slave.getBlockState(), 3);
+        long myPos = worldPosition.asLong();
+        // Check both horizontal directions so blocks configured by older code (which used
+        // getClockWise instead of getCounterClockWise) are also found and reset properly.
+        for (Direction widthDir : new Direction[]{facing.getClockWise(), facing.getCounterClockWise()}) {
+            for (int row = 0; row < screenRows; row++) {
+                for (int col = 0; col < screenCols; col++) {
+                    if (col == 0 && row == 0) continue;
+                    BlockPos slavePos = worldPosition.relative(widthDir, col).above(row);
+                    if (level.getBlockEntity(slavePos) instanceof VideoScreenBlockEntity slave
+                            && slave.masterPosLong == myPos) {
+                        slave.screenCols = 1;
+                        slave.screenRows = 1;
+                        slave.tileCol = 0;
+                        slave.tileRow = 0;
+                        slave.masterPosLong = Long.MIN_VALUE;
+                        slave.setChanged();
+                        level.sendBlockUpdated(slavePos, slave.getBlockState(), slave.getBlockState(), 3);
+                    }
                 }
             }
         }
