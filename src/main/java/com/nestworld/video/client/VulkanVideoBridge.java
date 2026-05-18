@@ -4,7 +4,9 @@ import com.mojang.logging.LogUtils;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.VK10;
+import org.lwjgl.vulkan.VK11;
 import org.lwjgl.vulkan.VkApplicationInfo;
+import org.lwjgl.vulkan.VkInstance;
 import org.lwjgl.vulkan.VkInstanceCreateInfo;
 import org.slf4j.Logger;
 
@@ -79,7 +81,7 @@ public final class VulkanVideoBridge {
                 .sType(VK10.VK_STRUCTURE_TYPE_APPLICATION_INFO)
                 .pApplicationName(stack.UTF8("nestworld-video"))
                 .pEngineName(stack.UTF8("nestworld-video"))
-                .apiVersion(VK10.VK_API_VERSION_1_1);
+                .apiVersion(VK11.VK_API_VERSION_1_1);
 
             VkInstanceCreateInfo createInfo = VkInstanceCreateInfo.calloc(stack)
                 .sType(VK10.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO)
@@ -113,7 +115,7 @@ public final class VulkanVideoBridge {
             GL11.glDeleteTextures(bridgeTextureId);
         }
         if (vkInstance != VK10.VK_NULL_HANDLE) {
-            VK10.vkDestroyInstance(vkInstance, null);
+            VK10.vkDestroyInstance(new VkInstance(vkInstance, null), null);
         }
     }
 }
