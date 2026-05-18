@@ -55,7 +55,7 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
 
         // Letterbox/pillarbox to preserve aspect ratio
         Dimension videoDim = display.getDimensions();
-        float videoAspect = (videoDim.width > 0 && videoDim.height > 0)
+        float videoAspect = (videoDim != null && videoDim.width > 0 && videoDim.height > 0)
             ? (float) videoDim.width / videoDim.height
             : 16.0f / 9.0f;
 
