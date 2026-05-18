@@ -90,15 +90,11 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
         } else {
             // Multi-block: each tile renders its UV slice (stretch to fill).
             
-            // Залишаємо виправлення порядку колонок, оскільки блоки рахуються справа наліво
-            int actualTileCol = (screenCols - 1) - tileCol;
-
-            float uMin = (float) actualTileCol / screenCols;
-            float uMax = (float) (actualTileCol + 1) / screenCols;
+            float uMin = (float) tileCol / screenCols;
+            float uMax = (float) (tileCol + 1) / screenCols;
             float vTop = (float) (screenRows - 1 - tileRow) / screenRows;
             float vBot = (float) (screenRows - tileRow) / screenRows;
 
-            // Повернули оригінальні UV координати, щоб прибрати ефект дзеркала всередині самого блоку
             builder.vertex(matrix, 0, 1, 0).uv(uMin, vBot).endVertex();
             builder.vertex(matrix, 1, 1, 0).uv(uMax, vBot).endVertex();
             builder.vertex(matrix, 1, 0, 0).uv(uMax, vTop).endVertex();
