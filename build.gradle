@@ -90,6 +90,7 @@ minecraft {
             environment 'LD_LIBRARY_PATH', '/usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu:/usr/lib'
             // Tell VLC where its codec plugins live (apt installs them here on Ubuntu/Debian).
             environment 'VLC_PLUGIN_PATH', '/usr/lib/x86_64-linux-gnu/vlc/plugins'
+            jvmArgs '-Dnestworld.vulkan.video=true'
         }
 
         server {
