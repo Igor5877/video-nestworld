@@ -83,6 +83,12 @@ minecraft {
         client {
             // Comma-separated list of namespaces to load gametests from. Empty = all namespaces.
             property 'forge.enabledGameTestNamespaces', mod_id
+            // Help JNA (used by WaterMedia) find libvlc on Linux.
+            // WaterMedia's LinuxProvider searches /usr/lib/x86_64-linux-gnu but on Ubuntu 22+
+            // libvlc.so lives under /lib/x86_64-linux-gnu (not a symlink target of /usr/lib).
+            jvmArgs '-Djna.library.path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/usr/lib'
+            // VLC must be able to find its plugin bundle; this is where apt-installed VLC puts it.
+            environment 'VLC_PLUGIN_PATH', '/usr/lib/x86_64-linux-gnu/vlc/plugins'
         }
 
         server {
