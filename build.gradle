@@ -83,11 +83,11 @@ minecraft {
         client {
             // Comma-separated list of namespaces to load gametests from. Empty = all namespaces.
             property 'forge.enabledGameTestNamespaces', mod_id
-            // Help JNA (used by WaterMedia) find libvlc on Linux.
-            // WaterMedia's LinuxProvider searches /usr/lib/x86_64-linux-gnu but on Ubuntu 22+
-            // libvlc.so lives under /lib/x86_64-linux-gnu (not a symlink target of /usr/lib).
-            jvmArgs '-Djna.library.path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/usr/lib'
-            // VLC must be able to find its plugin bundle; this is where apt-installed VLC puts it.
+            // Help JNA/WaterMedia find libvlc on Linux.
+            // 'property' is the correct ForgeGradle way to pass -D system properties.
+            property 'jna.library.path', '/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/usr/lib'
+            // Tell VLC where its codec plugins live (apt installs them here on Ubuntu/Debian).
+            // Without this VLC loads but createInstance() returns null and WaterMedia marks VLC as "not loaded".
             environment 'VLC_PLUGIN_PATH', '/usr/lib/x86_64-linux-gnu/vlc/plugins'
         }
 
