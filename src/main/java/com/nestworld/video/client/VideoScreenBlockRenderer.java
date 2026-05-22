@@ -31,7 +31,7 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
         Display display = ClientVideoManager.getInstance().getDisplay(displayPos);
         if (display == null) return;
 
-        int textureId = display.getTextureId();
+        int textureId = VulkanVideoBridge.get().resolveTextureId(display.getTextureId());
         if (textureId == -1) return;
 
         poseStack.pushPose();

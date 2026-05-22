@@ -90,6 +90,7 @@ minecraft {
             environment 'LD_LIBRARY_PATH', '/usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu:/usr/lib'
             // Tell VLC where its codec plugins live (apt installs them here on Ubuntu/Debian).
             environment 'VLC_PLUGIN_PATH', '/usr/lib/x86_64-linux-gnu/vlc/plugins'
+            jvmArgs '-Dnestworld.vulkan.video=true'
         }
 
         server {
@@ -141,6 +142,9 @@ dependencies {
     // If the group id is "net.minecraft" and the artifact id is one of ["client", "server", "joined"],
     // then special handling is done to allow a setup of a vanilla dependency without the use of an external repository.
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+
+    // Needed for direct Vulkan API access in client-side bridge code.
+    implementation "org.lwjgl:lwjgl-vulkan:3.3.1"
 
     // Example mod dependency with JEI - using fg.deobf() ensures the dependency is remapped to your development mappings
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
