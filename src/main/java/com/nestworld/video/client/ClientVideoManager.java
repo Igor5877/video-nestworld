@@ -165,6 +165,7 @@ public class ClientVideoManager {
             reconcile(screen);
             if (!activeDisplays.containsKey(pos)) continue;
             Display current = activeDisplays.get(pos);
+            if (current != null) current.tick();
             if (current != null)
                 screen.setClientPlaybackAdvancing(current.isPlaying() && !current.isBuffering());
             if (current != null && current.needsInitialSync())

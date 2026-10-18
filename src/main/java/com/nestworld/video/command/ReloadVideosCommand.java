@@ -39,7 +39,7 @@ public class ReloadVideosCommand {
                 return 0;
             }
             
-            String jsonContent = new String(Files.readAllBytes(configFile.toPath()));
+            String jsonContent = Files.readString(configFile.toPath(), java.nio.charset.StandardCharsets.UTF_8);
             VideoConfig newConfig = new Gson().fromJson(jsonContent, VideoConfig.class);
             
             // Оновлюємо глобальну конфігурацію

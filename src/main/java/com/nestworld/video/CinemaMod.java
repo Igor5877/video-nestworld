@@ -137,7 +137,7 @@ public class CinemaMod {
             return;
         }
         try {
-            String jsonContent = new String(Files.readAllBytes(configFile.toPath()));
+            String jsonContent = Files.readString(configFile.toPath(), java.nio.charset.StandardCharsets.UTF_8);
             videoConfig = new Gson().fromJson(jsonContent, VideoConfig.class);
             LOGGER.info("NESTWORLD_VIDEO: Successfully loaded {} categories from videos.json.", videoConfig.getCategories().size());
         } catch (Exception e) {

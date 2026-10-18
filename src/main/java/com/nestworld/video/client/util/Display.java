@@ -16,8 +16,8 @@ public class Display {
 
     private static final Logger LOGGER = LogUtils.getLogger();
 
-    private final DiagnosticVideoPlayer player;
-    private final FrameStats frameStats = new FrameStats();
+    private DiagnosticVideoPlayer player;
+    private FrameStats frameStats = new FrameStats();
     private final String url;
     private boolean isPlaying = false;
     private Boolean appliedPlaying;
@@ -30,6 +30,8 @@ public class Display {
     private final long createdAtNanos = System.nanoTime();
     private volatile boolean firstTextureReady;
     private boolean startupTimeoutLogged;
+    private boolean startupRetried;
+    private long retryAfterNanos;
     private long lastPreRenderNanos = 0;
     private long lastDiagnosticNanos;
     private long lastMediaSampleNanos;
@@ -74,7 +76,9 @@ public class Display {
     public int getTextureId() {
         applyPendingSeek();
         applyPendingPause();
-        if (!player.isReady()) {
+        // isReady() means libvlc_media_player_will_play(), including OPENING.
+        // preRender() can return an allocated 1x1 texture before any video frame.
+        if (!player.isReady() || frameStats.uploaded.get() == 0) {
             diagnose(-1);
             return -1;
         }
@@ -92,6 +96,45 @@ public class Display {
         firstTextureReady = true;
         diagnose(cachedTextureId);
         return cachedTextureId;
+    }
+
+    /** Run recovery on the client tick, never from the block renderer. */
+    public void tick() {
+        boolean failedBeforeFrame = frameStats.decoded.get() == 0 && player.raw() != null
+                && (player.isEnded() || player.isBroken());
+        if (!startupRetried && isPlaying && failedBeforeFrame && !isStartupTimedOut()) {
+            long now = System.nanoTime();
+            if (retryAfterNanos == 0) retryAfterNanos = now + 1_000_000_000L;
+            if (now >= retryAfterNanos) {
+                startupRetried = true;
+                LOGGER.warn("Nestworld Video: retrying startup once after state={}, decodedFrames=0",
+                        player.getStateName());
+                player.stop();
+                player.release();
+                frameStats = new FrameStats();
+                player = new DiagnosticVideoPlayer(Minecraft.getInstance(), frameStats);
+                appliedPlaying = null;
+                initialSyncComplete = false;
+                cachedTextureId = -1;
+                lastPreRenderNanos = 0;
+                firstTextureReady = false;
+                sampledMediaTime = lastObservedMediaTime = -1;
+                lastMediaProgressNanos = 0;
+                lastLoggedDecodedFrames = lastLoggedUploadedFrames = 0;
+                player.setRepeatMode(false);
+                player.startPaused(URI.create(url), VLC_OPTIONS);
+            }
+        } else {
+            retryAfterNanos = 0;
+        }
+        applyPendingSeek();
+        applyPendingPause();
+    }
+
+    private boolean canControlPlayback() {
+        // A native frame proves startup reached the decoder. Do not seek or
+        // consume a pause request merely because VLC says it "will play".
+        return frameStats.decoded.get() > 0 && (player.isPlaying() || player.isPaused());
     }
 
     /** Periodically correlates VLC buffering/media-clock progress with render-thread cost and game FPS. */
@@ -206,17 +249,14 @@ public class Display {
     }
 
     private void applyPendingSeek() {
-        if (pendingPositionMs < 0 || !player.isReady() || !player.isSeekAble() || player.isBuffering()) return;
-        if (player.isEnded()) {
-            // A finite episode has reached its end. Do not seek the decoder back
-            // into the stream when the server sends its periodic clock correction.
-            pendingPositionMs = -1;
-            return;
-        }
+        if (pendingPositionMs < 0 || !canControlPlayback() || !player.isSeekAble() || player.isBuffering()) return;
         try {
             long current = player.getTime();
-            if (current < 0 || Math.abs(current - pendingPositionMs) > SEEK_DRIFT_THRESHOLD_MS)
+            if (current < 0 || Math.abs(current - pendingPositionMs) > SEEK_DRIFT_THRESHOLD_MS) {
+                LOGGER.debug("Nestworld Video: seek from {}ms to {}ms, state={}, decodedFrames={}",
+                        current, pendingPositionMs, player.getStateName(), frameStats.decoded.get());
                 player.seekTo(pendingPositionMs);
+            }
             pendingPositionMs = -1;
             initialSyncComplete = true;
         } catch (RuntimeException exception) {
@@ -225,14 +265,15 @@ public class Display {
     }
 
     private void applyPendingPause() {
-        // start() is asynchronous: an early pause must be applied after ready.
-        if (player.isReady() && (appliedPlaying == null || appliedPlaying != isPlaying)) {
-            if (isPlaying && player.isEnded()) {
+        if (canControlPlayback() && (appliedPlaying == null || appliedPlaying != isPlaying)) {
+            if (player.isPlaying() == isPlaying) {
                 appliedPlaying = isPlaying;
                 return;
             }
-            player.setPauseMode(!isPlaying);
-            appliedPlaying = isPlaying;
+            // WaterMedia silently ignores setPauseMode when VLC cannot pause.
+            // Keep the request pending until the native state confirms it.
+            if (player.raw().mediaPlayer().status().canPause())
+                player.setPauseMode(!isPlaying);
         }
     }
 
@@ -246,7 +287,9 @@ public class Display {
         // WaterMedia reports a null raw player as broken while it is still
         // initializing the VLC component. Treat that as loading until the
         // startup timeout expires; only inspect its error state once raw exists.
-        return (player.raw() != null && player.isBroken()) || isStartupTimedOut();
+        return (player.raw() != null && player.isBroken() && (firstTextureReady || startupRetried))
+                || (startupRetried && frameStats.decoded.get() == 0 && player.isEnded())
+                || isStartupTimedOut();
     }
     private boolean isStartupTimedOut() {
         return !firstTextureReady && System.nanoTime() - createdAtNanos >= STARTUP_TIMEOUT_NANOS;
