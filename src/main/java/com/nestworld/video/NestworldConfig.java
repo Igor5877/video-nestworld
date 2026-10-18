@@ -13,6 +13,7 @@ public final class NestworldConfig {
     public static final ForgeConfigSpec.BooleanValue SPATIAL_AUDIO;
     public static final ForgeConfigSpec.BooleanValue MIPMAPS;
     public static final ForgeConfigSpec.IntValue SHARPNESS;
+    public static final ForgeConfigSpec.ConfigValue<String> UPSCALER;
     public static final ForgeConfigSpec.ConfigValue<String> RENDER_MODE;
 
     static {
@@ -44,6 +45,11 @@ public final class NestworldConfig {
         MIPMAPS = builder
                 .comment("FFmpeg decoder only: build mipmaps with anisotropic filtering so distant screens do not shimmer.")
                 .define("mipmaps", true);
+        UPSCALER = builder
+                .comment("How a video is enlarged when its screen is bigger than the video: \"edge\" follows the direction of",
+                        "lines (like AMD FSR 1.0's upscaler) for smoother diagonals without halos, \"bicubic\" is a plain",
+                        "sharp filter. Needs video.smooth_scaling and no shader pack.")
+                .defineInList("upscaler", "edge", java.util.List.of("edge", "bicubic"));
         SHARPNESS = builder
                 .comment("Extra sharpening of the picture in the scaling shader, 0 (off) to 100.",
                         "Only applies with video.smooth_scaling and when no shader pack is active.")

@@ -3,14 +3,17 @@
 uniform sampler2D Sampler0;
 uniform vec4 ColorModulator;
 uniform float Sharpness;
+// 0 = bicubic (Catmull-Rom), 1 = edge-adaptive upscaling (EASU-style)
+uniform float Upscaler;
 
 in vec2 texCoord0;
 out vec4 fragColor;
 
-// Catmull-Rom bicubic filtering in 5 bilinear taps. Compared with plain bilinear it keeps
-// edges crisp and smooths the stair-steps that appear when a low-resolution video is
-// stretched over a large screen.
-vec4 catmullRom(sampler2D tex, vec2 uv) {
+// ---------------------------------------------------------------------------------------------------------------
+// Catmull-Rom bicubic filtering in 5 bilinear taps. Compared with plain bilinear it keeps edges crisp and
+// smooths the stair-steps that appear when a low-resolution video is stretched over a large screen.
+// ---------------------------------------------------------------------------------------------------------------
+vec3 catmullRom(sampler2D tex, vec2 uv) {
     vec2 size = vec2(textureSize(tex, 0));
     vec2 pos = uv * size;
     vec2 center = floor(pos - 0.5) + 0.5;
@@ -28,20 +31,147 @@ vec4 catmullRom(sampler2D tex, vec2 uv) {
     vec2 p3 = (center + 2.0) / size;
     vec2 p12 = (center + offset12) / size;
 
-    vec4 result = texture(tex, vec2(p12.x, p0.y)) * (w12.x * w0.y)
-                + texture(tex, vec2(p0.x, p12.y)) * (w0.x * w12.y)
-                + texture(tex, vec2(p12.x, p12.y)) * (w12.x * w12.y)
-                + texture(tex, vec2(p3.x, p12.y)) * (w3.x * w12.y)
-                + texture(tex, vec2(p12.x, p3.y)) * (w12.x * w3.y);
+    vec3 result = texture(tex, vec2(p12.x, p0.y)).rgb * (w12.x * w0.y)
+                + texture(tex, vec2(p0.x, p12.y)).rgb * (w0.x * w12.y)
+                + texture(tex, vec2(p12.x, p12.y)).rgb * (w12.x * w12.y)
+                + texture(tex, vec2(p3.x, p12.y)).rgb * (w3.x * w12.y)
+                + texture(tex, vec2(p12.x, p3.y)).rgb * (w12.x * w3.y);
     float weight = (w12.x * w0.y) + (w0.x * w12.y) + (w12.x * w12.y) + (w3.x * w12.y) + (w12.x * w3.y);
     return clamp(result / weight, 0.0, 1.0);
 }
 
+// ---------------------------------------------------------------------------------------------------------------
+// Edge-adaptive spatial upscaling in the spirit of AMD FidelityFX FSR 1.0 "EASU" (MIT licence): a 12-tap
+// Lanczos-like kernel that is rotated to follow the local edge direction and stretched along it, so diagonal
+// lines are reconstructed as lines instead of stair-steps. The result is clamped to the four nearest texels
+// to avoid ringing.
+// ---------------------------------------------------------------------------------------------------------------
+float easuLuma(vec3 c) { return c.b * 0.5 + (c.r * 0.5 + c.g); }
+
+void easuSet(inout vec2 dir, inout float len, vec2 pp, bool biS, bool biT, bool biU, bool biV,
+             float lA, float lB, float lC, float lD, float lE) {
+    float w = 0.0;
+    if (biS) w = (1.0 - pp.x) * (1.0 - pp.y);
+    if (biT) w = pp.x * (1.0 - pp.y);
+    if (biU) w = (1.0 - pp.x) * pp.y;
+    if (biV) w = pp.x * pp.y;
+    float dc = lD - lC, cb = lC - lB;
+    float lenX = 1.0 / max(max(abs(dc), abs(cb)), 1.0 / 32768.0);
+    float dirX = lD - lB;
+    dir.x += dirX * w;
+    lenX = clamp(abs(dirX) * lenX, 0.0, 1.0);
+    lenX *= lenX;
+    len += lenX * w;
+    float ec = lE - lC, ca = lC - lA;
+    float lenY = 1.0 / max(max(abs(ec), abs(ca)), 1.0 / 32768.0);
+    float dirY = lE - lA;
+    dir.y += dirY * w;
+    lenY = clamp(abs(dirY) * lenY, 0.0, 1.0);
+    lenY *= lenY;
+    len += lenY * w;
+}
+
+void easuTap(inout vec3 aC, inout float aW, vec2 off, vec2 dir, vec2 len, float lob, float clp, vec3 c) {
+    vec2 v = vec2(off.x * dir.x + off.y * dir.y, off.x * -dir.y + off.y * dir.x);
+    v *= len;
+    float d2 = min(v.x * v.x + v.y * v.y, clp);
+    // Approximation of lanczos2 without sin() or sqrt().
+    float wB = 2.0 / 5.0 * d2 - 1.0;
+    float wA = lob * d2 - 1.0;
+    wB *= wB;
+    wA *= wA;
+    wB = 25.0 / 16.0 * wB - (25.0 / 16.0 - 1.0);
+    float w = wB * wA;
+    aC += c * w;
+    aW += w;
+}
+
+vec3 easu(sampler2D tex, vec2 uv) {
+    ivec2 size = textureSize(tex, 0);
+    vec2 pos = uv * vec2(size) - 0.5;
+    vec2 fp = floor(pos);
+    vec2 pp = pos - fp;
+    ivec2 ip = ivec2(fp);
+    ivec2 hi = size - 1;
+    //    b c
+    //  e f g h
+    //  i j k l
+    //    n o
+    vec3 b = texelFetch(tex, clamp(ip + ivec2( 0, -1), ivec2(0), hi), 0).rgb;
+    vec3 c = texelFetch(tex, clamp(ip + ivec2( 1, -1), ivec2(0), hi), 0).rgb;
+    vec3 e = texelFetch(tex, clamp(ip + ivec2(-1,  0), ivec2(0), hi), 0).rgb;
+    vec3 f = texelFetch(tex, clamp(ip + ivec2( 0,  0), ivec2(0), hi), 0).rgb;
+    vec3 g = texelFetch(tex, clamp(ip + ivec2( 1,  0), ivec2(0), hi), 0).rgb;
+    vec3 h = texelFetch(tex, clamp(ip + ivec2( 2,  0), ivec2(0), hi), 0).rgb;
+    vec3 i = texelFetch(tex, clamp(ip + ivec2(-1,  1), ivec2(0), hi), 0).rgb;
+    vec3 j = texelFetch(tex, clamp(ip + ivec2( 0,  1), ivec2(0), hi), 0).rgb;
+    vec3 k = texelFetch(tex, clamp(ip + ivec2( 1,  1), ivec2(0), hi), 0).rgb;
+    vec3 l = texelFetch(tex, clamp(ip + ivec2( 2,  1), ivec2(0), hi), 0).rgb;
+    vec3 n = texelFetch(tex, clamp(ip + ivec2( 0,  2), ivec2(0), hi), 0).rgb;
+    vec3 o = texelFetch(tex, clamp(ip + ivec2( 1,  2), ivec2(0), hi), 0).rgb;
+
+    float bL = easuLuma(b), cL = easuLuma(c), eL = easuLuma(e), fL = easuLuma(f), gL = easuLuma(g), hL = easuLuma(h);
+    float iL = easuLuma(i), jL = easuLuma(j), kL = easuLuma(k), lL = easuLuma(l), nL = easuLuma(n), oL = easuLuma(o);
+
+    vec2 dir = vec2(0.0);
+    float len = 0.0;
+    easuSet(dir, len, pp, true, false, false, false, bL, eL, fL, gL, jL);
+    easuSet(dir, len, pp, false, true, false, false, cL, fL, gL, hL, kL);
+    easuSet(dir, len, pp, false, false, true, false, fL, iL, jL, kL, nL);
+    easuSet(dir, len, pp, false, false, false, true, gL, jL, kL, lL, oL);
+
+    vec2 dir2 = dir * dir;
+    float dirR = dir2.x + dir2.y;
+    bool zro = dirR < 1.0 / 32768.0;
+    dirR = inversesqrt(max(dirR, 1.0 / 32768.0));
+    dirR = zro ? 1.0 : dirR;
+    dir.x = zro ? 1.0 : dir.x;
+    dir *= vec2(dirR);
+    len = len * 0.5;
+    len *= len;
+    float stretch = (dir.x * dir.x + dir.y * dir.y) / max(max(abs(dir.x), abs(dir.y)), 1.0 / 32768.0);
+    vec2 len2 = vec2(1.0 + (stretch - 1.0) * len, 1.0 - 0.5 * len);
+    float lob = 0.5 + ((1.0 / 4.0 - 0.04) - 0.5) * len;
+    float clp = 1.0 / lob;
+
+    vec3 min4 = min(min(f, g), min(j, k));
+    vec3 max4 = max(max(f, g), max(j, k));
+    vec3 aC = vec3(0.0);
+    float aW = 0.0;
+    easuTap(aC, aW, vec2( 0.0, -1.0) - pp, dir, len2, lob, clp, b);
+    easuTap(aC, aW, vec2( 1.0, -1.0) - pp, dir, len2, lob, clp, c);
+    easuTap(aC, aW, vec2(-1.0,  1.0) - pp, dir, len2, lob, clp, i);
+    easuTap(aC, aW, vec2( 0.0,  1.0) - pp, dir, len2, lob, clp, j);
+    easuTap(aC, aW, vec2( 0.0,  0.0) - pp, dir, len2, lob, clp, f);
+    easuTap(aC, aW, vec2(-1.0,  0.0) - pp, dir, len2, lob, clp, e);
+    easuTap(aC, aW, vec2( 1.0,  1.0) - pp, dir, len2, lob, clp, k);
+    easuTap(aC, aW, vec2( 2.0,  1.0) - pp, dir, len2, lob, clp, l);
+    easuTap(aC, aW, vec2( 2.0,  0.0) - pp, dir, len2, lob, clp, h);
+    easuTap(aC, aW, vec2( 1.0,  0.0) - pp, dir, len2, lob, clp, g);
+    easuTap(aC, aW, vec2( 1.0,  2.0) - pp, dir, len2, lob, clp, o);
+    easuTap(aC, aW, vec2( 0.0,  2.0) - pp, dir, len2, lob, clp, n);
+    return min(max4, max(min4, aC / aW));
+}
+
 void main() {
-    vec3 color = catmullRom(Sampler0, texCoord0).rgb;
-    if (Sharpness > 0.0) {
+    vec2 size = vec2(textureSize(Sampler0, 0));
+    vec2 dx = dFdx(texCoord0), dy = dFdy(texCoord0);
+    // How many video texels one screen pixel covers: below 1 the picture is being enlarged.
+    vec2 texelsPerPixel = max(abs(dx), abs(dy)) * size;
+    float magnification = max(texelsPerPixel.x, texelsPerPixel.y);
+
+    vec3 color;
+    if (magnification >= 1.0) {
+        // Shrinking: let the hardware pick the mip level and filter anisotropically.
+        color = textureGrad(Sampler0, texCoord0, dx, dy).rgb;
+    } else if (Upscaler > 0.5) {
+        color = easu(Sampler0, texCoord0);
+    } else {
+        color = catmullRom(Sampler0, texCoord0);
+    }
+    if (Sharpness > 0.0 && magnification < 1.0) {
         // Unsharp mask against the four neighbouring texels.
-        vec2 px = 1.0 / vec2(textureSize(Sampler0, 0));
+        vec2 px = 1.0 / size;
         vec3 blur = (texture(Sampler0, texCoord0 + vec2(px.x, 0.0)).rgb + texture(Sampler0, texCoord0 - vec2(px.x, 0.0)).rgb
                    + texture(Sampler0, texCoord0 + vec2(0.0, px.y)).rgb + texture(Sampler0, texCoord0 - vec2(0.0, px.y)).rgb) * 0.25;
         color = clamp(color + (color - blur) * Sharpness * 1.5, 0.0, 1.0);

@@ -81,6 +81,7 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
         var smooth = NestworldConfig.SMOOTH_SCALING.get() ? ClientModEvents.videoScreenShader() : null;
         if (smooth != null) {
             smooth.safeGetUniform("Sharpness").set(NestworldConfig.SHARPNESS.get() / 100f);
+            smooth.safeGetUniform("Upscaler").set("edge".equals(NestworldConfig.UPSCALER.get()) ? 1f : 0f);
             RenderSystem.setShader(() -> smooth);
         }
         else RenderSystem.setShader(GameRenderer::getPositionTexShader);
