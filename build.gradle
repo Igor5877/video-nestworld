@@ -59,8 +59,9 @@ minecraft {
     runs {
         // applies to all the run configs below
         configureEach {
-            workingDirectory project.file(project.hasProperty('selftest') ? 'build/selftest-run' : 'run')
+            workingDirectory project.file(project.hasProperty('selftest') || project.hasProperty('ffmpegtest') ? 'build/selftest-run' : 'run')
             if (project.hasProperty('selftest')) property 'nestworldvideo.selftest', 'true'
+            if (project.hasProperty('ffmpegtest')) property 'nestworldvideo.ffmpegtest', 'true'
 
             // Recommended logging data for a userdev environment
             // The markers can be added/remove as needed separated by commas.
@@ -225,4 +226,4 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 // Test scene is opt-in and must never be included in the release JAR.
-if (project.hasProperty('selftest')) sourceSets.main.java.srcDir('src/selftest/java')
+if (project.hasProperty('selftest') || project.hasProperty('ffmpegtest')) sourceSets.main.java.srcDir('src/selftest/java')
