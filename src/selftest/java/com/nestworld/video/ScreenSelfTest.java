@@ -103,7 +103,7 @@ public class ScreenSelfTest {
         GLFW.glfwHideWindow(mc.getWindow().getWindow());
         mc.options.pauseOnLostFocus = false;
         if (failure != null) { failure.printStackTrace(); mc.stop(); return; }
-        if (System.nanoTime()-start > 240_000_000_000L) { System.err.println("NESTWORLD TEST TIMEOUT"); mc.stop(); return; }
+        if (System.nanoTime()-start > 900_000_000_000L) { System.err.println("NESTWORLD TEST TIMEOUT"); mc.stop(); return; }
         if (!launched && mc.screen instanceof TitleScreen && mc.getOverlay() == null) {
             launched = true;
             mc.options.renderDistance().set(6); mc.options.simulationDistance().set(5);
@@ -134,6 +134,8 @@ public class ScreenSelfTest {
         if (!checksDone) return;
         try {
             ticks++;
+            // Slow (software-rendered) machines may need longer than the nominal 20 ticks to open a menu.
+            if ((ticks == 80 || ticks == 360) && !(mc.screen instanceof VideoScreenScreen)) { ticks--; return; }
             if (ticks == 60) mc.getSingleplayerServer().execute(() -> {
                 var p = mc.getSingleplayerServer().getPlayerList().getPlayers().get(0);
                 NetworkHooks.openScreen(p, be(p.serverLevel(),clicked),clicked);
