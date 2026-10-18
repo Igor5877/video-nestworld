@@ -59,7 +59,7 @@ public class Display {
                 ? new String[]{"--network-caching=3000", "--adaptive-logic=highest", "--adaptive-maxheight=" + maxHeight}
                 : new String[]{"--network-caching=3000", "--adaptive-logic=highest"};
     }
-    private boolean resolutionLogged;
+    private boolean resolutionLogged, probeStarted;
     // Seeking an HLS stream can trigger another segment fetch and visible stall.
     // Correct only larger drift and wait until the decoder has left buffering.
     private static final long SEEK_DRIFT_THRESHOLD_MS = 2_000;
@@ -119,6 +119,10 @@ public class Display {
         }
         boolean failedBeforeFrame = frameStats.decoded.get() == 0 && player.raw() != null
                 && (player.isEnded() || player.isBroken());
+        if (failedBeforeFrame && !probeStarted) {
+            probeStarted = true;
+            StreamProbe.probeAsync(url);
+        }
         if (!startupRetried && isPlaying && failedBeforeFrame && !isStartupTimedOut()) {
             long now = System.nanoTime();
             if (retryAfterNanos == 0) retryAfterNanos = now + 1_000_000_000L;
