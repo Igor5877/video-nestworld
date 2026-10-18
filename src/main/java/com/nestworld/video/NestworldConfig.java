@@ -8,7 +8,7 @@ public final class NestworldConfig {
     public static final ForgeConfigSpec.IntValue MAX_ACTIVE_STREAMS;
     public static final ForgeConfigSpec.IntValue MAX_STREAM_DISTANCE;
     public static final ForgeConfigSpec.BooleanValue SMOOTH_SCALING;
-    public static final ForgeConfigSpec.BooleanValue PREFER_HIGHEST_QUALITY;
+    public static final ForgeConfigSpec.IntValue MAX_VIDEO_HEIGHT;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -24,10 +24,10 @@ public final class NestworldConfig {
                 .comment("Scale video with a bicubic (Catmull-Rom) shader instead of plain bilinear filtering.",
                         "Smooths stair-steps on large screens; disable if your GPU struggles.")
                 .define("smooth_scaling", true);
-        PREFER_HIGHEST_QUALITY = builder
-                .comment("For HLS streams with several qualities always pick the highest one.",
-                        "Disable on a slow connection to let VLC adapt automatically.")
-                .define("prefer_highest_quality", true);
+        MAX_VIDEO_HEIGHT = builder
+                .comment("Maximum video height for HLS streams with several qualities (0 = automatic, best available).",
+                        "Changed from the quality button in the screen menu; no effect on single-quality files.")
+                .defineInRange("max_video_height", 0, 0, 4320);
         builder.pop();
         CLIENT_SPEC = builder.build();
     }

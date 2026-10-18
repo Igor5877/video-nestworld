@@ -58,6 +58,11 @@ public class ClientVideoManager {
         }
     }
 
+    /** Reopen every active stream (e.g. after a quality change); the tick restarts playing screens in sync. */
+    public void restartAll() {
+        for (BlockPos pos : activeDisplays.keySet()) stopPlaying(pos);
+    }
+
     public Display getDisplay(BlockPos pos) {
         return activeDisplays.get(pos);
     }

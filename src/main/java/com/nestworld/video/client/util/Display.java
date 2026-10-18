@@ -52,10 +52,12 @@ public class Display {
     // not Minecraft's server-side traffic.
     private static String[] vlcOptions() {
         // For HLS streams with several renditions VLC's default adaptive logic may stay on a low one;
-        // "highest" always picks the best variant. It has no effect on plain mp4 files.
-        return NestworldConfig.PREFER_HIGHEST_QUALITY.get()
-                ? new String[]{"--network-caching=3000", "--adaptive-logic=highest"}
-                : new String[]{"--network-caching=3000"};
+        // "highest" picks the best variant, optionally capped at the chosen height.
+        // Neither has any effect on plain mp4 files.
+        int maxHeight = NestworldConfig.MAX_VIDEO_HEIGHT.get();
+        return maxHeight > 0
+                ? new String[]{"--network-caching=3000", "--adaptive-logic=highest", "--adaptive-maxheight=" + maxHeight}
+                : new String[]{"--network-caching=3000", "--adaptive-logic=highest"};
     }
     private boolean resolutionLogged;
     // Seeking an HLS stream can trigger another segment fetch and visible stall.

@@ -34,7 +34,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
     private final AnimePoster poster=new AnimePoster();
     private EditBox search;
     private ScreenLayout preview;
-    private Button assemble,play,pause,stop,quieter,louder,skipBack,skipForward,previousPage,nextPage,searchButton;
+    private Button assemble,play,pause,stop,quieter,louder,skipBack,skipForward,previousPage,nextPage,searchButton,qualityButton;
     /** Browser position survives closing the menu, so the episode list can be reopened in one click. */
     private record Saved(View view, View origin, Category selected, String voice, String episode, List<Title> results,
                          String query, String libraryQuery, int page, int searchPage) {}
@@ -83,7 +83,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         imageWidth=Math.min(500,width-12); imageHeight=Math.min(346,height-12);
         super.init();
         if(menu.getBlockEntity()==null) { onClose(); return; }
-        entries.clear(); search=null; searchButton=null;
+        entries.clear(); search=null; searchButton=null; qualityButton=null;
         int tab=(imageWidth-32)/3;
         button("Пошук AniUA",12,30,tab,b->switchView(View.SEARCH)).active=construction || view!=View.SEARCH;
         button("Бібліотека",16+tab,30,tab,b->switchView(View.LIBRARY)).active=construction || view!=View.LIBRARY;
@@ -140,6 +140,8 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
             }));
         }
         previousPage=button("‹",12,imageHeight-86,28,b->{page--;refreshEntries();});
+        qualityButton=button(qualityLabel(),48,imageHeight-86,130,b->cycleQuality());
+        qualityButton.setTooltip(Tooltip.create(Component.literal("Максимальна якість відео (HLS). Потік перезапуститься.")));
         nextPage=button("›",imageWidth-40,imageHeight-86,28,b->{page++;refreshEntries();});
         int y=imageHeight-36, bw=(imageWidth-32)/3;
         play=button(tr("play"),12,y,bw,b->send("play"));
@@ -283,6 +285,19 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         }
         if(previousPage!=null) previousPage.active=page>0;
         if(nextPage!=null) nextPage.active=page+1<pages;
+    }
+    private static final int[] QUALITIES={0,1080,720,480,360};
+    private static String qualityLabel() {
+        int h=NestworldConfig.MAX_VIDEO_HEIGHT.get();
+        return "Якість: "+(h==0?"Авто":h+"p");
+    }
+    private void cycleQuality() {
+        int current=NestworldConfig.MAX_VIDEO_HEIGHT.get(), next=QUALITIES[0];
+        for(int i=0;i<QUALITIES.length;i++) if(QUALITIES[i]==current) next=QUALITIES[(i+1)%QUALITIES.length];
+        NestworldConfig.MAX_VIDEO_HEIGHT.set(next);
+        NestworldConfig.MAX_VIDEO_HEIGHT.save();
+        if(qualityButton!=null) qualityButton.setMessage(Component.literal(qualityLabel()));
+        ClientVideoManager.getInstance().restartAll();
     }
     private void volume(int delta) {
         var root=screen();var display=root==null?null:ClientVideoManager.getInstance().getDisplay(root.getBlockPos());
