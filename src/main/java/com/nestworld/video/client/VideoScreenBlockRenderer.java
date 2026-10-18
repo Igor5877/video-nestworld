@@ -14,6 +14,7 @@ import net.minecraft.core.Direction;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL12;
 
 import java.awt.Dimension;
 
@@ -48,14 +49,17 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
         // --- Advanced Rendering Logic adapted from the reference project ---
         
         RenderSystem.enableDepthTest();
-        RenderSystem.enableBlend();
-        RenderSystem.defaultBlendFunc();
+        RenderSystem.disableBlend();
+        RenderSystem.disableCull();
         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
         RenderSystem.setShader(GameRenderer::getPositionTexShader);
         RenderSystem.bindTexture(textureId);
 
+        // Лінійна фільтрація без mipmap + CLAMP_TO_EDGE, щоб не було смуг/«кровотечі» на краях кадру
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
+        GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, GL12.GL_CLAMP_TO_EDGE);
+        GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, GL12.GL_CLAMP_TO_EDGE);
 
         Tesselator tesselator = Tesselator.getInstance();
         BufferBuilder builder = tesselator.getBuilder();
@@ -95,8 +99,8 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
         
         tesselator.end();
         
-        RenderSystem.disableBlend();
-        RenderSystem.disableDepthTest();
+        RenderSystem.enableCull();
+        // depth test лишаємо увімкненим — це стан за замовчуванням у ванільному рендері
 
         poseStack.popPose();
     }
