@@ -3,7 +3,11 @@ package com.nestworld.video.client;
 import com.nestworld.video.CinemaMod;
 import com.nestworld.video.block.ModBlocks;
 import com.nestworld.video.client.gui.VideoScreenScreen;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import net.minecraft.client.gui.screens.MenuScreens;
+import net.minecraft.client.renderer.ShaderInstance;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraftforge.client.event.RegisterShadersEvent;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.EntityRenderersEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -31,6 +35,17 @@ public class ClientModEvents {
             MinecraftForge.EVENT_BUS.addListener(ClientModEvents::onPlayerLogout);
         });
     }
+
+    @SubscribeEvent
+    public static void registerShaders(final RegisterShadersEvent event) throws java.io.IOException {
+        event.registerShader(new ShaderInstance(event.getResourceProvider(),
+                ResourceLocation.fromNamespaceAndPath(CinemaMod.MOD_ID, "video_screen"), DefaultVertexFormat.POSITION_TEX),
+                shader -> videoScreenShader = shader);
+    }
+
+    /** Bicubic video sampler; null until the client has loaded shaders, then the renderer falls back to vanilla. */
+    private static ShaderInstance videoScreenShader;
+    public static ShaderInstance videoScreenShader() { return videoScreenShader; }
 
     @SubscribeEvent
     public static void registerRenderers(final EntityRenderersEvent.RegisterRenderers event) {

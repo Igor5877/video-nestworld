@@ -3,6 +3,7 @@ package com.nestworld.video.client;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.*;
 import com.mojang.math.Axis;
+import com.nestworld.video.NestworldConfig;
 import com.nestworld.video.block.VideoScreenBlock;
 import com.nestworld.video.block.VideoScreenBlockEntity;
 import com.nestworld.video.client.util.Display;
@@ -70,8 +71,11 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
 
         RenderSystem.polygonOffset(-1.0F, -4.0F);
         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
-        RenderSystem.setShader(GameRenderer::getPositionTexShader);
+        var smooth = NestworldConfig.SMOOTH_SCALING.get() ? ClientModEvents.videoScreenShader() : null;
+        if (smooth != null) RenderSystem.setShader(() -> smooth);
+        else RenderSystem.setShader(GameRenderer::getPositionTexShader);
         RenderSystem.setShaderTexture(0, textureId);
+        RenderSystem.bindTexture(textureId);
 
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
