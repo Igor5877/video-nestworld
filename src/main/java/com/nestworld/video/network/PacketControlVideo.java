@@ -66,6 +66,9 @@ public class PacketControlVideo {
                     case "stop":
                         videoScreen.stop();
                         break;
+                    case "ended":
+                        videoScreen.playNext(message.videoUrl);
+                        break;
                     case "select":
                         // Створюємо тимчасовий об'єкт Video для передачі даних
                         Video selectedVideo = new Video();

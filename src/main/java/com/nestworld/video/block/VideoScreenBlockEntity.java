@@ -1,6 +1,9 @@
 package com.nestworld.video.block;
 
+import com.nestworld.video.Category;
+import com.nestworld.video.CinemaMod;
 import com.nestworld.video.Video;
+import com.nestworld.video.VideoConfig;
 import com.nestworld.video.network.Networking;
 import com.nestworld.video.network.PacketUpdateVideoScreen;
 import net.minecraft.core.BlockPos;
@@ -19,6 +22,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraftforge.network.PacketDistributor;
 
 import javax.annotation.Nullable;
+import java.util.List;
 
 public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider {
 
@@ -78,6 +82,40 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
     }
 
     public void play() {
+        this.isPlaying = true;
+        syncToClient();
+    }
+
+    /**
+     * Called when a client reports that {@code endedUrl} finished. Starts the next video of the same
+     * category, or stops after the last one. Ignored if the screen already moved on (several clients
+     * report the same ending).
+     */
+    public void playNext(String endedUrl) {
+        if (!isPlaying || !currentVideoUrl.equals(endedUrl)) return;
+
+        Video next = null;
+        VideoConfig config = CinemaMod.videoConfig;
+        if (config != null && config.getCategories() != null) {
+            outer:
+            for (Category category : config.getCategories()) {
+                List<Video> videos = category.getVideos();
+                if (videos == null) continue;
+                for (int i = 0; i < videos.size(); i++) {
+                    if (endedUrl.equals(videos.get(i).getUrl())) {
+                        if (i + 1 < videos.size()) next = videos.get(i + 1);
+                        break outer;
+                    }
+                }
+            }
+        }
+
+        if (next == null) {
+            stop();
+            return;
+        }
+        this.currentVideoUrl = next.getUrl();
+        this.currentVideoTitle = next.getTitle();
         this.isPlaying = true;
         syncToClient();
     }

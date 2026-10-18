@@ -1,6 +1,8 @@
 package com.nestworld.video.client;
 
 import com.nestworld.video.client.util.Display;
+import com.nestworld.video.network.Networking;
+import com.nestworld.video.network.PacketControlVideo;
 import net.minecraft.core.BlockPos;
 
 import java.util.Map;
@@ -48,7 +50,14 @@ public class ClientVideoManager {
     }
 
     public void tick() {
-        // This can be used later to update players, e.g. for time sync
+        for (Map.Entry<BlockPos, Display> entry : activeDisplays.entrySet()) {
+            Display display = entry.getValue();
+            if (display.pollEnded()) {
+                // Сервер сам вирішує, яка серія наступна
+                Networking.INSTANCE.sendToServer(
+                        new PacketControlVideo(entry.getKey(), "ended", display.getUrl(), ""));
+            }
+        }
     }
 
     public void shutdown() {
