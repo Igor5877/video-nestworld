@@ -7,7 +7,7 @@ import net.minecraftforge.network.simple.SimpleChannel;
 
 public class Networking {
 
-    private static final String PROTOCOL_VERSION = "1";
+    private static final String PROTOCOL_VERSION = "6";
     public static final SimpleChannel INSTANCE = NetworkRegistry.newSimpleChannel(
             ResourceLocation.fromNamespaceAndPath(CinemaMod.MOD_ID, "main"),
             () -> PROTOCOL_VERSION,
@@ -16,6 +16,10 @@ public class Networking {
     );
 
     public static void registerMessages() {
+        INSTANCE.registerMessage(3, PacketBrowseRequest.class, PacketBrowseRequest::encode, PacketBrowseRequest::decode,
+                PacketBrowseRequest::handle, java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_SERVER));
+        INSTANCE.registerMessage(4, PacketBrowseResult.class, PacketBrowseResult::encode, PacketBrowseResult::decode,
+                PacketBrowseResult::handle, java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_CLIENT));
         INSTANCE.registerMessage(0,
                 PacketSyncVideos.class,
                 PacketSyncVideos::encode,
@@ -35,6 +39,20 @@ public class Networking {
                 PacketUpdateVideoScreen::encode,
                 PacketUpdateVideoScreen::decode,
                 PacketUpdateVideoScreen::handle
+        );
+        INSTANCE.registerMessage(5,
+                PacketScreenWatch.class,
+                PacketScreenWatch::encode,
+                PacketScreenWatch::decode,
+                PacketScreenWatch::handle,
+                java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_SERVER)
+        );
+        INSTANCE.registerMessage(6,
+                PacketScreenViewers.class,
+                PacketScreenViewers::encode,
+                PacketScreenViewers::decode,
+                PacketScreenViewers::handle,
+                java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_CLIENT)
         );
     }
 }

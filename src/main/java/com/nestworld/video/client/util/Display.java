@@ -1,56 +1,267 @@
 package com.nestworld.video.client.util;
 
 import net.minecraft.client.Minecraft;
+import com.mojang.logging.LogUtils;
 import org.watermedia.api.player.videolan.VideoPlayer;
+import org.slf4j.Logger;
 
 import java.awt.Dimension;
 import java.net.URI;
-import java.net.URISyntaxException;
+import java.nio.ByteBuffer;
+import java.util.concurrent.atomic.AtomicLong;
+import org.watermedia.videolan4j.player.base.MediaPlayer;
+import org.watermedia.videolan4j.player.embedded.videosurface.callback.BufferFormat;
 
 public class Display {
 
-    private final VideoPlayer player;
+    private static final Logger LOGGER = LogUtils.getLogger();
+
+    private final DiagnosticVideoPlayer player;
+    private final FrameStats frameStats = new FrameStats();
     private final String url;
     private boolean isPlaying = false;
+    private Boolean appliedPlaying;
+    private long pendingPositionMs = -1;
+    private boolean initialSyncComplete;
 
     // Cache preRender() result for one render frame so that all tiles in a multi-block
     // screen share the same GL texture ID and never show different video frames.
     private int cachedTextureId = -1;
+    private final long createdAtNanos = System.nanoTime();
+    private volatile boolean firstTextureReady;
+    private boolean startupTimeoutLogged;
     private long lastPreRenderNanos = 0;
+    private long lastDiagnosticNanos;
+    private long lastMediaSampleNanos;
+    private long lastObservedMediaTime = -1;
+    private long lastMediaProgressNanos;
+    private long lastPreRenderMillis;
+    private long sampledMediaTime = -1;
+    private long lastLoggedDecodedFrames;
+    private long lastLoggedUploadedFrames;
     // 8 ms ≈ one frame at 125 fps; safe cache window for any reasonable frame rate.
     private static final long FRAME_CACHE_NANOS = 8_000_000L;
+    // Remote streams can take 30-60 seconds to produce their first frame. Allow
+    // extra startup time, but don't show a loading spinner forever on failures.
+    private static final long STARTUP_TIMEOUT_NANOS = 90_000_000_000L;
+    // A little extra headroom makes HLS playback tolerate short network jitter.
+    // VLC's default in this setup is only 1000 ms; this affects startup latency,
+    // not Minecraft's server-side traffic.
+    private static final String[] VLC_OPTIONS = {"--network-caching=3000"};
+    // Seeking an HLS stream can trigger another segment fetch and visible stall.
+    // Correct only larger drift and wait until the decoder has left buffering.
+    private static final long SEEK_DRIFT_THRESHOLD_MS = 2_000;
 
     public Display(String url) {
         this.url = url;
-        this.player = new VideoPlayer(Minecraft.getInstance());
+        this.player = new DiagnosticVideoPlayer(Minecraft.getInstance(), frameStats);
 
         try {
-            this.player.start(new URI(url));
+            // Decode the first frame while paused. The seek from the server clock
+            // can then be applied before playback begins, avoiding a visible start
+            // from 0 ms followed by a jump to the synchronized position.
+            this.player.setRepeatMode(false);
+            this.player.startPaused(new URI(url), VLC_OPTIONS);
             this.setPlaying(true);
-        } catch (URISyntaxException e) {
-            e.printStackTrace();
+        } catch (Exception e) {
+            this.player.release();
+            throw new IllegalArgumentException("Cannot start video playback: " + url, e);
         }
     }
 
+    public String getUrl() { return url; }
+
     public int getTextureId() {
-        if (!player.isReady()) return -1;
+        applyPendingSeek();
+        applyPendingPause();
+        if (!player.isReady()) {
+            diagnose(-1);
+            return -1;
+        }
         long now = System.nanoTime();
         if (cachedTextureId == -1 || now - lastPreRenderNanos > FRAME_CACHE_NANOS) {
+            long renderStart = System.nanoTime();
             cachedTextureId = player.preRender();
+            lastPreRenderMillis = (System.nanoTime() - renderStart) / 1_000_000L;
             lastPreRenderNanos = now;
         }
+        if (cachedTextureId <= 0) {
+            diagnose(cachedTextureId);
+            return -1;
+        }
+        firstTextureReady = true;
+        diagnose(cachedTextureId);
         return cachedTextureId;
+    }
+
+    /** Periodically correlates VLC buffering/media-clock progress with render-thread cost and game FPS. */
+    private void diagnose(int textureId) {
+        long now = System.nanoTime();
+        if (now - lastMediaSampleNanos >= 250_000_000L) {
+            lastMediaSampleNanos = now;
+            if (player.isReady()) {
+                try { sampledMediaTime = player.getTime(); }
+                catch (RuntimeException ignored) { /* Keep diagnostics from affecting playback. */ }
+            }
+            if (sampledMediaTime >= 0 && sampledMediaTime > lastObservedMediaTime) {
+                lastObservedMediaTime = sampledMediaTime;
+                lastMediaProgressNanos = now;
+            }
+        }
+        if (now - lastDiagnosticNanos < 5_000_000_000L) return;
+        lastDiagnosticNanos = now;
+        // WaterMedia 2.1.30 can report isReady() == false while its native
+        // CallbackMediaPlayerComponent is still null. Methods such as
+        // getStateName() dereference that component, so do not query any of the
+        // detailed player state until initialization has completed.
+        if (!player.isReady()) {
+            String host;
+            try { host = new URI(url).getHost(); }
+            catch (Exception ignored) { host = "unknown"; }
+            if (player.raw() == null) {
+                LOGGER.info("Nestworld Video diagnostic: host={}, state=API_INITIALIZING, texture={}", host, textureId);
+            } else {
+                String state = player.getStateName();
+                boolean failed = player.isBroken();
+                if (failed) {
+                    LOGGER.warn("Nestworld Video diagnostic: host={}, state={}, broken=true, valid={}, loading={}, buffering={}, texture={}",
+                            host, state, player.isValid(), player.isLoading(), player.isBuffering(), textureId);
+                } else {
+                    LOGGER.info("Nestworld Video diagnostic: host={}, state={}, broken=false, valid={}, loading={}, buffering={}, texture={}",
+                            host, state, player.isValid(), player.isLoading(), player.isBuffering(), textureId);
+                }
+            }
+            if (isStartupTimedOut() && !startupTimeoutLogged) {
+                startupTimeoutLogged = true;
+                LOGGER.warn("Nestworld Video startup timed out after 90 seconds: host={}, texture={}", host, textureId);
+            }
+            return;
+        }
+        boolean stalled = isPlaying && player.isReady() && !player.isBuffering()
+                && lastMediaProgressNanos != 0 && now - lastMediaProgressNanos > 3_000_000_000L;
+        long decodedFrames = frameStats.decoded.get();
+        long uploadedFrames = frameStats.uploaded.get();
+        long decodedDelta = decodedFrames - lastLoggedDecodedFrames;
+        long uploadedDelta = uploadedFrames - lastLoggedUploadedFrames;
+        lastLoggedDecodedFrames = decodedFrames;
+        lastLoggedUploadedFrames = uploadedFrames;
+        long lastUploadAgeMs = frameStats.lastUploadNanos == 0 ? -1 : (now - frameStats.lastUploadNanos) / 1_000_000L;
+        String host;
+        try { host = new URI(url).getHost(); }
+        catch (Exception ignored) { host = "unknown"; }
+        LOGGER.info("Nestworld Video diagnostic: host={}, state={}, requestedPlaying={}, actualPlaying={}, " +
+                        "loading={}, buffering={}, broken={}, stalled={}, media={}ms/{}ms, size={}x{}, " +
+                        "texture={}, preRender={}ms, gameFps={}, decodedFrames={} (+{}), uploadedFrames={} (+{}), " +
+                        "lastUploadAge={}ms, queuedUploads={}",
+                host, player.getStateName(), isPlaying, player.isPlaying(), player.isLoading(), player.isBuffering(),
+                isBroken(), stalled, sampledMediaTime, player.isReady() ? player.getDuration() : -1,
+                player.width(), player.height(), textureId, lastPreRenderMillis, Minecraft.getInstance().getFps(),
+                decodedFrames, decodedDelta, uploadedFrames, uploadedDelta, lastUploadAgeMs,
+                Math.max(0, frameStats.submitted.get() - uploadedFrames));
+    }
+
+    /** Counts native video-frame callbacks separately from their render-thread texture uploads. */
+    private static final class DiagnosticVideoPlayer extends VideoPlayer {
+        private final FrameStats stats;
+
+        DiagnosticVideoPlayer(Minecraft minecraft, FrameStats stats) {
+            super(task -> {
+                // Match Minecraft's render-thread executor while tracking queue and completion separately.
+                stats.submitted.incrementAndGet();
+                minecraft.execute(() -> {
+                    task.run();
+                    stats.uploaded.incrementAndGet();
+                    stats.lastUploadNanos = System.nanoTime();
+                });
+            });
+            this.stats = stats;
+        }
+
+        @Override public void display(MediaPlayer mediaPlayer, ByteBuffer[] buffers, BufferFormat format) {
+            stats.decoded.incrementAndGet();
+            super.display(mediaPlayer, buffers, format);
+        }
+    }
+
+    private static final class FrameStats {
+        private final AtomicLong decoded = new AtomicLong();
+        private final AtomicLong submitted = new AtomicLong();
+        private final AtomicLong uploaded = new AtomicLong();
+        private volatile long lastUploadNanos;
     }
 
     public void setPlaying(boolean playing) {
         this.isPlaying = playing;
-        if (player.isReady()) {
-            player.setPauseMode(!playing);
+        applyPendingPause();
+    }
+
+    /** Correct local decoder drift without seeking for tiny network/timer differences. */
+    public void syncPosition(long positionMs) {
+        pendingPositionMs = Math.max(0, positionMs);
+        applyPendingSeek();
+    }
+
+    public boolean needsInitialSync() {
+        return !initialSyncComplete;
+    }
+
+    private void applyPendingSeek() {
+        if (pendingPositionMs < 0 || !player.isReady() || !player.isSeekAble() || player.isBuffering()) return;
+        if (player.isEnded()) {
+            // A finite episode has reached its end. Do not seek the decoder back
+            // into the stream when the server sends its periodic clock correction.
+            pendingPositionMs = -1;
+            return;
+        }
+        try {
+            long current = player.getTime();
+            if (current < 0 || Math.abs(current - pendingPositionMs) > SEEK_DRIFT_THRESHOLD_MS)
+                player.seekTo(pendingPositionMs);
+            pendingPositionMs = -1;
+            initialSyncComplete = true;
+        } catch (RuntimeException exception) {
+            LOGGER.debug("Nestworld Video: delayed seek failed for {}", url, exception);
+        }
+    }
+
+    private void applyPendingPause() {
+        // start() is asynchronous: an early pause must be applied after ready.
+        if (player.isReady() && (appliedPlaying == null || appliedPlaying != isPlaying)) {
+            if (isPlaying && player.isEnded()) {
+                appliedPlaying = isPlaying;
+                return;
+            }
+            player.setPauseMode(!isPlaying);
+            appliedPlaying = isPlaying;
         }
     }
 
     public boolean isPlaying() {
         return isPlaying && player.isPlaying();
+    }
+
+    public boolean isLoading() { return player.isLoading(); }
+    public boolean isBuffering() { return player.isBuffering(); }
+    public boolean isBroken() {
+        // WaterMedia reports a null raw player as broken while it is still
+        // initializing the VLC component. Treat that as loading until the
+        // startup timeout expires; only inspect its error state once raw exists.
+        return (player.raw() != null && player.isBroken()) || isStartupTimedOut();
+    }
+    private boolean isStartupTimedOut() {
+        return !firstTextureReady && System.nanoTime() - createdAtNanos >= STARTUP_TIMEOUT_NANOS;
+    }
+    public boolean isEnded() { return player.isEnded(); }
+    public long getDuration() { return player.isReady() ? player.getDuration() : -1; }
+    /** Current media clock from VLC, which naturally holds during buffering and pause. */
+    public long getPlaybackTime() {
+        if (!player.isReady()) return -1;
+        try {
+            long time = player.getTime();
+            return time >= 0 ? time : -1;
+        } catch (RuntimeException exception) {
+            return -1;
+        }
     }
 
     public Dimension getDimensions() {
@@ -76,6 +287,7 @@ public class Display {
     }
 
     public void release() {
+        pendingPositionMs = -1;
         player.stop();
         player.release();
     }

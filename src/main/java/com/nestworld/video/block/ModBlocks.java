@@ -3,7 +3,6 @@ package com.nestworld.video.block;
 import com.nestworld.video.CinemaMod;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.BlockItem;
-import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntityType;
@@ -34,6 +33,8 @@ public class ModBlocks {
     // Реєстрація предмета блоку
     public static final RegistryObject<Item> VIDEO_SCREEN_ITEM = ITEMS.register("video_screen",
             () -> new BlockItem(VIDEO_SCREEN_BLOCK.get(), new Item.Properties()));
+
+    public static final RegistryObject<Item> SCREEN_REMOTE = ITEMS.register("screen_remote", ScreenRemoteItem::new);
     
     // Реєстрація BlockEntity
     public static final RegistryObject<BlockEntityType<VideoScreenBlockEntity>> VIDEO_SCREEN_BLOCK_ENTITY = 

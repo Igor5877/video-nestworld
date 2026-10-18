@@ -29,7 +29,14 @@ public class ClientEvents {
         public static void onKeyInput(InputEvent.Key event) {
             if (Keybindings.OPEN_MENU_KEY.consumeClick()) {
                 if (Minecraft.getInstance().screen == null) {
-                    Minecraft.getInstance().setScreen(new VideoSelectionScreen());
+                    var mc = Minecraft.getInstance();
+                    if (mc.hitResult instanceof net.minecraft.world.phys.BlockHitResult hit
+                            && mc.level != null && mc.level.getBlockEntity(hit.getBlockPos()) instanceof com.nestworld.video.block.VideoScreenBlockEntity) {
+                        com.nestworld.video.network.Networking.INSTANCE.sendToServer(
+                            new com.nestworld.video.network.PacketControlVideo(hit.getBlockPos(), "open"));
+                    } else if (mc.player != null) {
+                        mc.player.displayClientMessage(Component.translatable("gui.nestworldvideo.aim"), true);
+                    }
                 }
             }
         }

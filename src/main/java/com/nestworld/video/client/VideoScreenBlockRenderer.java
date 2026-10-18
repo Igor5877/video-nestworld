@@ -25,15 +25,9 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
 
     @Override
     public void render(VideoScreenBlockEntity blockEntity, float partialTick, PoseStack poseStack, MultiBufferSource buffer, int packedLight, int packedOverlay) {
-        // Slave blocks look up the master's Display; master/standalone use their own pos.
-        BlockPos masterPos = blockEntity.getMasterPos();
-        BlockPos displayPos = (masterPos != null) ? masterPos : blockEntity.getBlockPos();
-        Display display = ClientVideoManager.getInstance().getDisplay(displayPos);
-        if (display == null) return;
-
-        int textureId = display.getTextureId();
-        if (textureId == -1) return;
-
+        if (!blockEntity.isMaster()) return;
+        ClientVideoManager.getInstance().observe(blockEntity);
+        Display display = ClientVideoManager.getInstance().getDisplay(blockEntity.getBlockPos());
         poseStack.pushPose();
         setupTransformation(poseStack, blockEntity.getBlockState().getValue(VideoScreenBlock.FACING));
 
@@ -41,9 +35,40 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
             bs.endBatch();
         }
 
+        // Keep the screen visibly alive while WaterMedia opens the stream. This
+        // also covers the short interval before ClientVideoManager has created a
+        // Display object on the render thread.
+        if (display == null) {
+            if (blockEntity.isPlaying() && !blockEntity.getCurrentVideoUrl().isBlank())
+                drawLoading(poseStack, blockEntity.getScreenCols(), blockEntity.getScreenRows(), false);
+            else
+                drawBackground(poseStack, blockEntity.getScreenCols(), blockEntity.getScreenRows());
+            poseStack.popPose();
+            return;
+        }
+        int textureId = display.getTextureId();
+        if (textureId <= 0) {
+            drawLoading(poseStack, blockEntity.getScreenCols(), blockEntity.getScreenRows(), display.isBroken());
+            poseStack.popPose();
+            return;
+        }
+
         RenderSystem.enableDepthTest();
-        RenderSystem.enableBlend();
-        RenderSystem.defaultBlendFunc();
+        // Video frames are opaque. Alpha blending can let the previous world
+        // framebuffer bleed through when a decoder texture has a non-opaque alpha
+        // channel, which looks like a faint trail behind moving objects.
+        RenderSystem.disableBlend();
+        RenderSystem.enablePolygonOffset();
+        RenderSystem.polygonOffset(0.0F, 0.0F);
+
+        // Cover the block's static texture first. This keeps aspect-ratio letterbox
+        // bars stable at distance instead of letting the block face z-fight through.
+        RenderSystem.setShader(GameRenderer::getPositionColorShader);
+        Matrix4f matrix = poseStack.last().pose();
+        drawColorQuad(matrix, 0, 1 - blockEntity.getScreenRows(),
+                blockEntity.getScreenCols(), 1, 0.008f, 0.008f, 0.008f, 1f);
+
+        RenderSystem.polygonOffset(-1.0F, -4.0F);
         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
         RenderSystem.setShader(GameRenderer::getPositionTexShader);
         RenderSystem.setShaderTexture(0, textureId);
@@ -58,67 +83,128 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
         BufferBuilder builder = tesselator.getBuilder();
         builder.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
 
-        Matrix4f matrix = poseStack.last().pose();
-
-        int screenCols = blockEntity.getScreenCols();
-        int screenRows = blockEntity.getScreenRows();
-        int tileCol    = blockEntity.getTileCol();
-        int tileRow    = blockEntity.getTileRow();
-
-        if (screenCols == 1 && screenRows == 1) {
-            // Single block: letterbox/pillarbox to preserve video aspect ratio.
-            Dimension videoDim = display.getDimensions();
-            float videoAspect = (videoDim != null && videoDim.width > 0 && videoDim.height > 0)
-                ? (float) videoDim.width / videoDim.height
-                : 16.0f / 9.0f;
-
-            float renderWidth = 1.0f, renderHeight = 1.0f;
-            float xOffset = 0f, yOffset = 0f;
-            if (videoAspect > 1.0f) {
-                renderHeight = 1.0f / videoAspect;
-                yOffset = (1.0f - renderHeight) / 2.0f;
-            } else {
-                renderWidth = videoAspect;
-                xOffset = (1.0f - renderWidth) / 2.0f;
-            }
-
-            // Повернули оригінальні UV координати (без дзеркалення)
-            builder.vertex(matrix, xOffset,               yOffset + renderHeight, 0).uv(0, 1).endVertex();
-            builder.vertex(matrix, xOffset + renderWidth, yOffset + renderHeight, 0).uv(1, 1).endVertex();
-            builder.vertex(matrix, xOffset + renderWidth, yOffset,               0).uv(1, 0).endVertex();
-            builder.vertex(matrix, xOffset,               yOffset,               0).uv(0, 0).endVertex();
-        } else {
-            // Multi-block: each tile renders its UV slice (stretch to fill).
-            
-            float uMin = (float) tileCol / screenCols;
-            float uMax = (float) (tileCol + 1) / screenCols;
-            float vTop = (float) (screenRows - 1 - tileRow) / screenRows;
-            float vBot = (float) (screenRows - tileRow) / screenRows;
-
-            builder.vertex(matrix, 0, 1, 0).uv(uMin, vBot).endVertex();
-            builder.vertex(matrix, 1, 1, 0).uv(uMax, vBot).endVertex();
-            builder.vertex(matrix, 1, 0, 0).uv(uMax, vTop).endVertex();
-            builder.vertex(matrix, 0, 0, 0).uv(uMin, vTop).endVertex();
-        }
+        float cols = blockEntity.getScreenCols(), rows = blockEntity.getScreenRows();
+        Dimension videoDim = display.getDimensions();
+        float aspect = videoDim != null && videoDim.width > 0 && videoDim.height > 0
+                ? (float) videoDim.width / videoDim.height : 16f / 9f;
+        float w = cols, h = rows;
+        if (cols / rows > aspect) w = rows * aspect;
+        else h = cols / aspect;
+        float x = (cols - w) / 2f, y = 1 - rows + (rows - h) / 2f;
+        builder.vertex(matrix, x, y + h, 0).uv(0, 1).endVertex();
+        builder.vertex(matrix, x + w, y + h, 0).uv(1, 1).endVertex();
+        builder.vertex(matrix, x + w, y, 0).uv(1, 0).endVertex();
+        builder.vertex(matrix, x, y, 0).uv(0, 0).endVertex();
 
         tesselator.end();
 
+        RenderSystem.polygonOffset(0.0F, 0.0F);
+        RenderSystem.disablePolygonOffset();
         RenderSystem.disableBlend();
         RenderSystem.enableDepthTest();
 
         poseStack.popPose();
     }
 
+    private void drawBackground(PoseStack poseStack, int cols, int rows) {
+        RenderSystem.enableDepthTest();
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.enablePolygonOffset();
+        RenderSystem.polygonOffset(-1.0F, -4.0F);
+        RenderSystem.setShader(GameRenderer::getPositionColorShader);
+        drawColorQuad(poseStack.last().pose(), 0, 1 - rows, cols, 1,
+                0.008f, 0.008f, 0.008f, 1f);
+        RenderSystem.polygonOffset(0.0F, 0.0F);
+        RenderSystem.disablePolygonOffset();
+        RenderSystem.disableBlend();
+    }
+
+    private void drawLoading(PoseStack poseStack, int cols, int rows, boolean broken) {
+        RenderSystem.enableDepthTest();
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.enablePolygonOffset();
+        RenderSystem.polygonOffset(-1.0F, -4.0F);
+        RenderSystem.setShader(GameRenderer::getPositionColorShader);
+        Matrix4f matrix = poseStack.last().pose();
+        float left = 0, right = cols, top = 1 - rows, bottom = 1;
+        drawColorQuad(matrix, left, top, right, bottom, broken ? 0.055f : 0.025f,
+                broken ? 0.018f : 0.035f, broken ? 0.018f : 0.055f, 1f);
+
+        // Twelve dots chase one another around the centre. The radius scales
+        // with the wall, but is capped so a 100x100 screen stays readable.
+        float scale = Math.min(cols, rows);
+        float radius = Math.max(0.16f, Math.min(3.5f, scale * 0.22f));
+        float dot = Math.max(0.035f, Math.min(0.34f, scale * 0.035f));
+        float phase = (System.nanoTime() / 1_000_000_000f) * 4.2f;
+        float cx = cols * 0.5f, cy = 1f - rows * 0.5f;
+        if (broken) {
+            // A static red cross means startup failed or exceeded its timeout;
+            // keep it visually distinct from the animated loading dots.
+            float halfLength = Math.max(0.13f, Math.min(0.8f, scale * 0.22f));
+            float halfThickness = Math.max(0.035f, Math.min(0.18f, scale * 0.065f));
+            drawRotatedMark(matrix, cx, cy, halfLength, halfThickness, (float)Math.PI / 4f);
+            drawRotatedMark(matrix, cx, cy, halfLength, halfThickness, -(float)Math.PI / 4f);
+        } else {
+            int count = 12;
+            for (int i = 0; i < count; i++) {
+                double angle = phase + i * Math.PI * 2.0 / count;
+                float x = cx + (float)Math.cos(angle) * radius;
+                float y = cy + (float)Math.sin(angle) * radius;
+                float brightness = 0.28f + 0.72f * ((i + count) % count) / (float)count;
+                drawColorQuad(matrix, x - dot, y - dot, x + dot, y + dot,
+                        brightness * 0.92f, brightness * 0.68f, brightness * 0.16f, 1f);
+            }
+        }
+        RenderSystem.polygonOffset(0.0F, 0.0F);
+        RenderSystem.disablePolygonOffset();
+        RenderSystem.disableBlend();
+    }
+
+    private void drawColorQuad(Matrix4f matrix, float left, float top, float right, float bottom,
+                                float red, float green, float blue, float alpha) {
+        Tesselator tesselator = Tesselator.getInstance();
+        BufferBuilder builder = tesselator.getBuilder();
+        builder.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
+        builder.vertex(matrix, left, bottom, 0).color(red, green, blue, alpha).endVertex();
+        builder.vertex(matrix, right, bottom, 0).color(red, green, blue, alpha).endVertex();
+        builder.vertex(matrix, right, top, 0).color(red, green, blue, alpha).endVertex();
+        builder.vertex(matrix, left, top, 0).color(red, green, blue, alpha).endVertex();
+        tesselator.end();
+    }
+
+    private void drawRotatedMark(Matrix4f matrix, float cx, float cy, float halfLength,
+                                 float halfThickness, float angle) {
+        float cos = (float)Math.cos(angle), sin = (float)Math.sin(angle);
+        float[][] corners = {{-halfLength, -halfThickness}, {halfLength, -halfThickness},
+                {halfLength, halfThickness}, {-halfLength, halfThickness}};
+        Tesselator tesselator = Tesselator.getInstance();
+        BufferBuilder builder = tesselator.getBuilder();
+        builder.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
+        for (int i = 0; i < 4; i++) {
+            float x = corners[i][0], y = corners[i][1];
+            float rx = cx + x * cos - y * sin;
+            float ry = cy + x * sin + y * cos;
+            builder.vertex(matrix, rx, ry, 0).color(0.95f, 0.08f, 0.07f, 1f).endVertex();
+        }
+        tesselator.end();
+    }
+
     private void setupTransformation(PoseStack poseStack, Direction facing) {
         poseStack.translate(0.5, 0.5, 0.5);
         poseStack.mulPose(Axis.YP.rotationDegrees(-facing.toYRot()));
-        poseStack.translate(0, 0, 0.5 + 0.001);
+        // Keep the video surface clearly in front of the block model. The old
+        // 0.001 offset was enough up close but z-fought at long distances.
+        poseStack.translate(0, 0, 0.5 + 0.01);
         poseStack.scale(1.0f, -1.0f, 1.0f);
         poseStack.translate(-0.5, -0.5, 0);
     }
 
+    @Override public int getViewDistance() { return 256; }
+
     @Override
     public boolean shouldRenderOffScreen(VideoScreenBlockEntity blockEntity) {
-        return true;
+        return blockEntity.isMaster();
     }
 }

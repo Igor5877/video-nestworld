@@ -15,12 +15,19 @@ public class PacketUpdateVideoScreen {
     final String url;
     final String title;
     final boolean isPlaying;
+    final boolean stopped;
+    final long positionMs;
+    final long serverGameTime;
 
-    public PacketUpdateVideoScreen(BlockPos pos, String url, String title, boolean isPlaying) {
+    public PacketUpdateVideoScreen(BlockPos pos, String url, String title, boolean isPlaying, boolean stopped,
+                                   long positionMs, long serverGameTime) {
         this.pos = pos;
         this.url = url;
         this.title = title;
         this.isPlaying = isPlaying;
+        this.stopped = stopped;
+        this.positionMs = Math.max(0, positionMs);
+        this.serverGameTime = serverGameTime;
     }
 
     public static void encode(PacketUpdateVideoScreen packet, FriendlyByteBuf buf) {
@@ -28,10 +35,14 @@ public class PacketUpdateVideoScreen {
         buf.writeUtf(packet.url);
         buf.writeUtf(packet.title);
         buf.writeBoolean(packet.isPlaying);
+        buf.writeBoolean(packet.stopped);
+        buf.writeLong(packet.positionMs);
+        buf.writeLong(packet.serverGameTime);
     }
 
     public static PacketUpdateVideoScreen decode(FriendlyByteBuf buf) {
-        return new PacketUpdateVideoScreen(buf.readBlockPos(), buf.readUtf(), buf.readUtf(), buf.readBoolean());
+        return new PacketUpdateVideoScreen(buf.readBlockPos(), buf.readUtf(), buf.readUtf(), buf.readBoolean(),
+                buf.readBoolean(), buf.readLong(), buf.readLong());
     }
 
     public static void handle(PacketUpdateVideoScreen packet, Supplier<NetworkEvent.Context> contextSupplier) {
@@ -42,7 +53,8 @@ public class PacketUpdateVideoScreen {
         boolean isPlaying = packet.isPlaying;
         context.enqueueWork(() ->
             DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
-                () -> () -> ClientPacketHandler.handleUpdateVideoScreen(pos, url, title, isPlaying)));
+                () -> () -> ClientPacketHandler.handleUpdateVideoScreen(pos, url, title, isPlaying, packet.stopped,
+                        packet.positionMs, packet.serverGameTime)));
         context.setPacketHandled(true);
     }
 }

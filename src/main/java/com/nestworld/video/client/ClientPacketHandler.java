@@ -11,29 +11,31 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import org.slf4j.Logger;
+import java.util.List;
 
 @OnlyIn(Dist.CLIENT)
 public class ClientPacketHandler {
 
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final Gson GSON = new Gson();
+    public static void handleBrowse(com.nestworld.video.network.PacketBrowseResult result) {
+        if (Minecraft.getInstance().screen instanceof com.nestworld.video.client.gui.VideoScreenScreen screen)
+            screen.acceptBrowse(result);
+    }
 
-    public static void handleUpdateVideoScreen(BlockPos pos, String url, String title, boolean isPlaying) {
+    public static void handleUpdateVideoScreen(BlockPos pos, String url, String title, boolean playing, boolean stopped,
+                                                long positionMs, long serverGameTime) {
         Level world = Minecraft.getInstance().level;
-        if (world == null) return;
-
-        if (!isPlaying) {
-            ClientVideoManager.getInstance().stopPlaying(pos);
-            return;
-        }
-
-        if (!world.isLoaded(pos)) return;
-        BlockEntity blockEntity = world.getBlockEntity(pos);
-        if (blockEntity instanceof VideoScreenBlockEntity screen) {
-            screen.setVideoUrl(url);
-            screen.setVideoTitle(title);
-            screen.setPlaying(true);
-            ClientVideoManager.getInstance().startPlaying(pos, url);
+        if (world == null || !world.isLoaded(pos)) return;
+        if (world.getBlockEntity(pos) instanceof VideoScreenBlockEntity screen) {
+            long tickOffset = world.getGameTime() - serverGameTime;
+            // Client and server clocks normally track each other, but avoid turning
+            // a stale chunk packet into a huge seek when a world was reconnected.
+            if (Math.abs(tickOffset) > 200) tickOffset = 0;
+            long adjustedPosition = Math.max(0, positionMs + tickOffset * 50L);
+            screen.updatePlayback(url, title, playing, stopped, adjustedPosition);
+            ClientVideoManager.getInstance().reconcile(screen);
+            ClientVideoManager.getInstance().syncPosition(pos, adjustedPosition);
         }
     }
 
@@ -47,5 +49,10 @@ public class ClientPacketHandler {
         } catch (Exception e) {
             LOGGER.error("CLIENT: Failed to parse video config from server.", e);
         }
+    }
+
+    public static void handleScreenViewers(BlockPos pos, int count, List<String> names) {
+        if (Minecraft.getInstance().screen instanceof com.nestworld.video.client.gui.VideoScreenScreen screen)
+            screen.acceptViewerInfo(pos, count, names);
     }
 }

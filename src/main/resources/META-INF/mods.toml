@@ -5,16 +5,28 @@ license="All Rights Reserved"
 [[mods]]
 # ID тепер правильний і відповідає тому, що вказано в Java файлі
 modId="nestworldvideo" 
-version="1.0.0"
-displayName="Video Nestworld"
+version="${mod_version}"
+displayName="${mod_name}"
 authors="Igor" # Можете вказати своє ім'я
-description='''
-A mod that allows watching videos from a private host in-game.
-'''
+description="${mod_description}"
 
 [[dependencies.nestworldvideo]]
     modId="minecraft"
     mandatory=true
-    versionRange="[1.20.1,1.21)"
+    versionRange="[1.20.1,1.20.2)"
     ordering="NONE"
     side="BOTH"
+
+[[dependencies.nestworldvideo]]
+    modId="forge"
+    mandatory=true
+    versionRange="[47.4.6,)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.nestworldvideo]]
+    modId="watermedia"
+    mandatory=true
+    versionRange="[2.1.30,3)"
+    ordering="AFTER"
+    side="CLIENT"

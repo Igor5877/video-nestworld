@@ -9,6 +9,7 @@ import net.minecraftforge.network.NetworkEvent;
 import java.util.function.Supplier;
 
 public class PacketSyncVideos {
+    public static final int MAX_LENGTH = 1_000_000;
 
     private final String jsonConfig;
 
@@ -18,12 +19,12 @@ public class PacketSyncVideos {
 
     // "Запаковуємо" наш рядок в байти для відправки
     public void encode(FriendlyByteBuf buffer) {
-        buffer.writeUtf(this.jsonConfig);
+        buffer.writeUtf(this.jsonConfig, MAX_LENGTH);
     }
 
     // "Розпаковуємо" байти назад в об'єкт пакету
     public static PacketSyncVideos decode(FriendlyByteBuf buffer) {
-        return new PacketSyncVideos(buffer.readUtf());
+        return new PacketSyncVideos(buffer.readUtf(MAX_LENGTH));
     }
 
     public static void handle(PacketSyncVideos message, Supplier<NetworkEvent.Context> contextSupplier) {

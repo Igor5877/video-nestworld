@@ -8,6 +8,8 @@ import com.nestworld.video.CinemaMod;
 import com.nestworld.video.VideoConfig;
 import com.nestworld.video.network.Networking;
 import com.nestworld.video.network.PacketSyncVideos;
+import com.nestworld.video.integration.AniuaApiClient;
+import com.nestworld.video.integration.HikkaCatalogClient;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
@@ -42,6 +44,8 @@ public class ReloadVideosCommand {
             
             // Оновлюємо глобальну конфігурацію
             CinemaMod.videoConfig = newConfig;
+            AniuaApiClient.clearCache();
+            HikkaCatalogClient.clearCache();
             
             // Відправляємо оновлену конфігурацію всім гравцям
             String json = new Gson().toJson(newConfig);

@@ -45,5 +45,6 @@ public class ClientModEvents {
 
     public static void onPlayerLogout(ClientPlayerNetworkEvent.LoggingOut event) {
         ClientVideoManager.getInstance().shutdown();
+        ClientData.setVideoConfig(null);
     }
 }

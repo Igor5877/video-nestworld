@@ -3,28 +3,44 @@ package com.nestworld.video;
 import com.google.gson.Gson;
 import com.mojang.logging.LogUtils;
 import com.nestworld.video.block.ModBlocks;
+import com.nestworld.video.block.VideoScreenBlockEntity;
 import com.nestworld.video.command.ReloadVideosCommand;
+import com.nestworld.video.command.AniuaCommand;
 import com.nestworld.video.network.Networking;
 import com.nestworld.video.network.PacketSyncVideos;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.core.BlockPos;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.server.ServerStartingEvent;
+import net.minecraftforge.event.server.ServerStoppingEvent;
+import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
+import net.minecraftforge.fml.ModLoadingContext;
+import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.network.PacketDistributor;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
+import java.util.UUID;
+import java.util.List;
+import java.util.Map;
 import org.slf4j.Logger;
 
 import java.io.File;
 import java.nio.file.Files;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Mod(CinemaMod.MOD_ID)
 @Mod.EventBusSubscriber(modid = CinemaMod.MOD_ID)
 public class CinemaMod {
     public static final String MOD_ID = "nestworldvideo";
     private static final Logger LOGGER = LogUtils.getLogger();
+    private static final Map<ScreenKey, Map<UUID, Viewer>> SCREEN_VIEWERS = new ConcurrentHashMap<>();
+    private static final long VIEWER_TIMEOUT_MS = 12_000L;
     public static VideoConfig videoConfig;
 
     public CinemaMod() {
@@ -34,9 +50,82 @@ public class CinemaMod {
         
         // Реєструємо блоки, предмети тощо
         ModBlocks.register(modEventBus);
+        ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, NestworldConfig.CLIENT_SPEC);
         
         // Ініціалізуємо нашу мережу
         Networking.registerMessages();
+    }
+
+    private record Viewer(String name, long lastSeenMs) {}
+    private record ScreenKey(ResourceKey<Level> dimension, BlockPos pos) {}
+    public record ViewerSnapshot(int count, List<String> names) {}
+
+    /** Accept a client heartbeat only for a nearby master screen in the same dimension. */
+    public static void updateViewer(ServerPlayer player, BlockPos pos) {
+        if (!player.level().hasChunkAt(pos)
+                || !(player.level().getBlockEntity(pos) instanceof VideoScreenBlockEntity screen)
+                || !screen.isMaster()
+                || player.distanceToSqr(pos.getX() + .5, pos.getY() + .5, pos.getZ() + .5) > 256 * 256) {
+            removeViewer(player, pos);
+            return;
+        }
+        ScreenKey key = new ScreenKey(player.level().dimension(), pos.immutable());
+        SCREEN_VIEWERS.computeIfAbsent(key, ignored -> new ConcurrentHashMap<>())
+                .put(player.getUUID(), new Viewer(player.getName().getString(), System.currentTimeMillis()));
+    }
+
+    public static void removeViewer(ServerPlayer player, BlockPos pos) {
+        ScreenKey key = new ScreenKey(player.level().dimension(), pos.immutable());
+        Map<UUID, Viewer> viewers = SCREEN_VIEWERS.get(key);
+        if (viewers == null) return;
+        viewers.remove(player.getUUID());
+        if (viewers.isEmpty()) SCREEN_VIEWERS.remove(key, viewers);
+    }
+
+    public static void removeViewerEverywhere(ServerPlayer player) {
+        SCREEN_VIEWERS.values().forEach(viewers -> viewers.remove(player.getUUID()));
+        SCREEN_VIEWERS.entrySet().removeIf(entry -> entry.getValue().isEmpty());
+    }
+
+    public static boolean isWatching(ServerPlayer player, BlockPos pos) {
+        Map<UUID, Viewer> viewers = SCREEN_VIEWERS.get(new ScreenKey(player.level().dimension(), pos.immutable()));
+        if (viewers == null) return false;
+        Viewer viewer = viewers.get(player.getUUID());
+        return viewer != null && System.currentTimeMillis() - viewer.lastSeenMs() <= VIEWER_TIMEOUT_MS;
+    }
+
+    public static ViewerSnapshot viewerSnapshot(ServerLevel level, BlockPos pos) {
+        ScreenKey key = new ScreenKey(level.dimension(), pos.immutable());
+        Map<UUID, Viewer> viewers = SCREEN_VIEWERS.get(key);
+        if (viewers == null) return new ViewerSnapshot(0, List.of());
+        long now = System.currentTimeMillis();
+        viewers.entrySet().removeIf(entry -> now - entry.getValue().lastSeenMs() > VIEWER_TIMEOUT_MS);
+        if (viewers.isEmpty()) {
+            SCREEN_VIEWERS.remove(key, viewers);
+            return new ViewerSnapshot(0, List.of());
+        }
+        List<String> names = viewers.values().stream().map(Viewer::name).sorted(String.CASE_INSENSITIVE_ORDER).toList();
+        return new ViewerSnapshot(viewers.size(), names);
+    }
+
+    @SubscribeEvent
+    public static void onServerTick(TickEvent.ServerTickEvent event) {
+        if (event.phase != TickEvent.Phase.END || event.getServer().getTickCount() % 100 != 0) return;
+        long now = System.currentTimeMillis();
+        SCREEN_VIEWERS.entrySet().removeIf(entry -> {
+            entry.getValue().entrySet().removeIf(viewer -> now - viewer.getValue().lastSeenMs() > VIEWER_TIMEOUT_MS);
+            return entry.getValue().isEmpty();
+        });
+    }
+
+    @SubscribeEvent
+    public static void onServerStopping(ServerStoppingEvent event) {
+        SCREEN_VIEWERS.clear();
+    }
+
+    @SubscribeEvent
+    public static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) removeViewerEverywhere(player);
     }
 
     @SubscribeEvent
@@ -59,6 +148,7 @@ public class CinemaMod {
     @SubscribeEvent
     public static void onRegisterCommands(RegisterCommandsEvent event) {
         ReloadVideosCommand.register(event.getDispatcher());
+        AniuaCommand.register(event.getDispatcher());
         LOGGER.info("NESTWORLD_VIDEO: Registered reload command");
     }
 

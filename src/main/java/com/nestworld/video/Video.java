@@ -6,6 +6,34 @@ public class Video {
     private String url;
     private String streamer_friendly_url;
     private String thumbnail_url;
+    private String episode;
+    private String dub;
+    private String seriesTitle;
+    private String provider;
+
+    public void setEpisodeInfo(String episode, String dub, String seriesTitle, String provider) {
+        this.episode = episode; this.dub = dub; this.seriesTitle = seriesTitle; this.provider = provider;
+    }
+    public String getEpisode() {
+        if (episode != null && !episode.isBlank()) return episode;
+        var matcher = java.util.regex.Pattern.compile("(?iu)(?:епізод|серія)\\s+([0-9]+(?:[.,][0-9]+)?)")
+                .matcher(description == null ? "" : description);
+        return matcher.find() ? matcher.group(1) : "";
+    }
+    public String getDub() {
+        if (dub != null && !dub.isBlank()) return dub;
+        if (!getEpisode().isBlank() && title != null && title.contains(" — "))
+            return title.substring(title.lastIndexOf(" — ") + 3);
+        return "Без позначення озвучки";
+    }
+    public String getSeriesTitle() {
+        if (seriesTitle != null && !seriesTitle.isBlank()) return seriesTitle;
+        if (title == null) return "";
+        String result = title.replaceFirst("(?iu)^Епізод [^ ]+ — ", "");
+        if (!getEpisode().isBlank() && result.contains(" — ")) result = result.substring(0, result.lastIndexOf(" — "));
+        return result;
+    }
+    public String getProvider() { return provider == null ? "" : provider; }
     
     // Конструктор за замовчуванням для Gson
     public Video() {}
