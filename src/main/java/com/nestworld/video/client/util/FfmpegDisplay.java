@@ -16,6 +16,8 @@ import net.minecraftforge.fml.loading.FMLPaths;
 import org.lwjgl.opengl.EXTTextureFilterAnisotropic;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL15;
+import org.lwjgl.opengl.GL21;
 import org.lwjgl.opengl.GL30;
 import org.slf4j.Logger;
 
@@ -264,7 +266,12 @@ public final class FfmpegDisplay extends Display {
         } else {
             GlStateManager._bindTexture(textureId);
         }
+        // Vanilla uploads (e.g. new font glyphs when a menu opens) leave their sub-rectangle settings behind; start
+        // from a clean unpack state or the frame is read with an offset and runs past the end of the buffer.
+        GL15.glBindBuffer(GL21.GL_PIXEL_UNPACK_BUFFER, 0);
         GlStateManager._pixelStore(GL11.GL_UNPACK_ROW_LENGTH, 0);
+        GlStateManager._pixelStore(GL11.GL_UNPACK_SKIP_ROWS, 0);
+        GlStateManager._pixelStore(GL11.GL_UNPACK_SKIP_PIXELS, 0);
         GlStateManager._pixelStore(GL11.GL_UNPACK_ALIGNMENT, 1);
         if (frame.width != textureWidth || frame.height != textureHeight) {
             GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA8, frame.width, frame.height, 0,
