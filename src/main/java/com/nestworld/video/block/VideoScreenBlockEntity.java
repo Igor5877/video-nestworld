@@ -1,6 +1,9 @@
 package com.nestworld.video.block;
 
+import com.nestworld.video.Category;
+import com.nestworld.video.CinemaMod;
 import com.nestworld.video.Video;
+import com.nestworld.video.client.gui.CatalogueOrder;
 import com.nestworld.video.network.Networking;
 import com.nestworld.video.network.PacketUpdateVideoScreen;
 import net.minecraft.core.BlockPos;
@@ -179,6 +182,32 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
             playbackStartedTick = now - playbackPositionMs / 50;
             isPlaying = true; stopped = false; syncToClient();
         }
+    }
+    /**
+     * A client reports that {@code endedUrl} finished: continue with the next playable episode of the same
+     * release and dub, or stop after the last one. Stale/duplicate reports (several clients, or the screen
+     * already moved on) are ignored.
+     */
+    public void playNext(String endedUrl) {
+        if (!isMaster() || !isPlaying || !currentVideoUrl.equals(endedUrl) || CinemaMod.videoConfig == null
+                || CinemaMod.videoConfig.getCategories() == null) return;
+        Video next = null;
+        outer:
+        for (Category category : CinemaMod.videoConfig.getCategories()) {
+            if (category == null || category.getVideos() == null) continue;
+            var episodes = category.getVideos().stream().filter(v -> v != null && v.getUrl() != null).toList();
+            Video ended = episodes.stream().filter(v -> endedUrl.equals(v.getUrl())).findFirst().orElse(null);
+            if (ended == null) continue;
+            var sameDub = episodes.stream().filter(v -> !v.getUrl().isBlank() && v.getDub().equals(ended.getDub()))
+                    .sorted(CatalogueOrder.EPISODES).toList();
+            int index = sameDub.indexOf(ended);
+            if (index >= 0 && index + 1 < sameDub.size()) next = sameDub.get(index + 1);
+            break outer;
+        }
+        if (next == null) { stop(); return; }
+        currentVideoUrl = next.getUrl(); currentVideoTitle = next.getTitle();
+        playbackPositionMs = 0; playbackStartedTick = level == null ? Long.MIN_VALUE : level.getGameTime();
+        isPlaying = true; stopped = false; syncToClient();
     }
     public void pause() {
         refreshPlaybackPosition();

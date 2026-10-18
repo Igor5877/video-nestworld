@@ -295,6 +295,14 @@ public class Display {
         return !firstTextureReady && System.nanoTime() - createdAtNanos >= STARTUP_TIMEOUT_NANOS;
     }
     public boolean isEnded() { return player.isEnded(); }
+    private boolean endReported;
+    /** True exactly once, after a video that actually rendered frames has played to its end. */
+    public boolean pollEnded() {
+        if (endReported || !isPlaying || !firstTextureReady || frameStats.decoded.get() == 0 || !player.isEnded())
+            return false;
+        endReported = true;
+        return true;
+    }
     public long getDuration() { return player.isReady() ? player.getDuration() : -1; }
     /** Current media clock from VLC, which naturally holds during buffering and pause. */
     public long getPlaybackTime() {

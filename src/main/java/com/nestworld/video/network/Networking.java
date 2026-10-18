@@ -47,6 +47,13 @@ public class Networking {
                 PacketScreenWatch::handle,
                 java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_SERVER)
         );
+        INSTANCE.registerMessage(7,
+                PacketVideoEnded.class,
+                PacketVideoEnded::encode,
+                PacketVideoEnded::decode,
+                PacketVideoEnded::handle,
+                java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_SERVER)
+        );
         INSTANCE.registerMessage(6,
                 PacketScreenViewers.class,
                 PacketScreenViewers::encode,

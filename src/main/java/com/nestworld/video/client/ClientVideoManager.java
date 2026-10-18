@@ -5,6 +5,7 @@ import com.nestworld.video.NestworldConfig;
 import com.nestworld.video.block.VideoScreenBlockEntity;
 import com.nestworld.video.network.Networking;
 import com.nestworld.video.network.PacketScreenWatch;
+import com.nestworld.video.network.PacketVideoEnded;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 
@@ -166,6 +167,8 @@ public class ClientVideoManager {
             if (!activeDisplays.containsKey(pos)) continue;
             Display current = activeDisplays.get(pos);
             if (current != null) current.tick();
+            if (current != null && screen.isPlaying() && current.pollEnded())
+                Networking.INSTANCE.sendToServer(new PacketVideoEnded(pos, current.getUrl()));
             if (current != null)
                 screen.setClientPlaybackAdvancing(current.isPlaying() && !current.isBuffering());
             if (current != null && current.needsInitialSync())

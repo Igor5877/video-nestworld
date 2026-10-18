@@ -35,7 +35,30 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
     private EditBox search;
     private ScreenLayout preview;
     private Button assemble,play,pause,stop,quieter,louder,skipBack,skipForward,previousPage,nextPage,searchButton;
-    public VideoScreenScreen(VideoScreenMenu menu, Inventory inventory, Component title) { super(menu,inventory,title); }
+    /** Browser position survives closing the menu, so the episode list can be reopened in one click. */
+    private record Saved(View view, View origin, Category selected, String voice, String episode, List<Title> results,
+                         String query, String libraryQuery, int page, int searchPage) {}
+    private static Saved saved;
+    public VideoScreenScreen(VideoScreenMenu menu, Inventory inventory, Component title) {
+        super(menu,inventory,title);
+        if(saved!=null) {
+            view=saved.view; origin=saved.origin; selected=saved.selected; voice=saved.voice; episode=saved.episode;
+            results=saved.results; query=saved.query; libraryQuery=saved.libraryQuery; page=saved.page; searchPage=saved.searchPage;
+            if(detail() && selected==null) view=origin=View.SEARCH;
+            status=detail() ? "" : results.isEmpty() ? status : "Вибери аніме та сезон зі списку.";
+        } else restoreFromPlaying();
+    }
+    /** First open: jump to the episode list of whatever the screen is currently playing, if it is in the library. */
+    private void restoreFromPlaying() {
+        var root=menu.getBlockEntity()==null ? null : menu.getBlockEntity().controller();
+        if(root==null || root.getCurrentVideoUrl().isBlank()) return;
+        for(Category c:categories()) {
+            if(c.getVideos()==null) continue;
+            for(Video v:c.getVideos()) if(v!=null && root.getCurrentVideoUrl().equals(v.getUrl())) {
+                selected=c; origin=View.LIBRARY; voice=v.getDub(); view=View.EPISODES; status=""; return;
+            }
+        }
+    }
     private Component tr(String key,Object... args) { return Component.translatable("gui.nestworldvideo."+key,args); }
     private void send(String action) {
         var root=screen();
@@ -395,7 +418,10 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         }
         return super.mouseScrolled(x,y,delta);
     }
-    @Override public void removed() {poster.close();super.removed();}
+    @Override public void removed() {
+        saved=new Saved(view,origin,selected,voice,episode,results,query,libraryQuery,page,searchPage);
+        poster.close();super.removed();
+    }
     @Override public void render(GuiGraphics g,int mx,int my,float partialTick) {
         renderBackground(g);super.render(g,mx,my,partialTick);renderTooltip(g,mx,my);
         if(!construction && !detail() && my>=topPos+80 && my<=topPos+96 && mx>=leftPos+12 && mx<leftPos+imageWidth-12)
