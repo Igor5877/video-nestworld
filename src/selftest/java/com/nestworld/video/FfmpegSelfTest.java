@@ -30,6 +30,7 @@ public class FfmpegSelfTest {
     static int ticks, capture;
     static long start = System.nanoTime(), playStart;
     static volatile Throwable failure;
+    static boolean sawFrame;
     static final String URL = System.getProperty("nestworldvideo.testurl", "http://localhost:8765/index.m3u8");
 
     @SubscribeEvent public static void tick(TickEvent.ClientTickEvent event) {
@@ -77,6 +78,7 @@ public class FfmpegSelfTest {
         if (!serverReady) return;
         ticks++;
         Display d = ClientVideoManager.getInstance().getDisplay(ORIGIN);
+        if (d != null && d.getTextureId() != -1) sawFrame = true;
         if (ticks % 40 == 0) {
             System.out.printf("NESTWORLD FFMPEG TEST t=%ds display=%s texture=%s dims=%s time=%dms/%dms playing=%b buffering=%b broken=%b%n",
                 ticks / 20, d == null ? "none" : d.getClass().getSimpleName(), d == null ? "-" : d.getTextureId(),
@@ -85,7 +87,8 @@ public class FfmpegSelfTest {
         }
         if (ticks == 20 * 14 || ticks == 20 * 22) capture = ticks / 20;
         if (ticks == 20 * 26) {
-            boolean ok = d != null && d.getTextureId() != -1;
+            // The clip is short: by now it has finished and the screen has stopped, so remember earlier frames.
+            boolean ok = sawFrame;
             System.out.println(ok ? "NESTWORLD FFMPEG TEST PASS: frames are being displayed" : "NESTWORLD FFMPEG TEST FAIL: no frame displayed");
             mc.stop();
         }
