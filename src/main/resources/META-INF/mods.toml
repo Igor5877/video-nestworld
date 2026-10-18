@@ -26,7 +26,7 @@ description="${mod_description}"
 
 [[dependencies.nestworldvideo]]
     modId="watermedia"
-    mandatory=true
+    mandatory=false
     versionRange="[2.1.30,3)"
     ordering="AFTER"
     side="CLIENT"

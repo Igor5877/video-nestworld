@@ -35,7 +35,7 @@ public class ClientVideoManager {
         }
 
         try {
-            Display display = new Display(url);
+            Display display = Display.create(url);
             display.syncPosition(screenPosition(pos));
             activeDisplays.put(pos, display);
         } catch (RuntimeException exception) {

@@ -134,6 +134,11 @@ repositories {
 }
 
 dependencies {
+    // FFmpeg decoder API. compileOnly on purpose: at runtime these jars are downloaded once into the game
+    // directory and loaded by an isolated class loader (see com.nestworld.video.ffmpeg.FfmpegLibs).
+    compileOnly('org.bytedeco:javacv:1.5.10') { transitive = false }
+    compileOnly 'org.bytedeco:javacpp:1.5.10'
+    compileOnly('org.bytedeco:ffmpeg:6.1.1-1.5.10') { transitive = false }
      implementation fg.deobf("curse.maven:watermedia-869524:${watermediaversion}")
     //plementation fg.deobf("dev.watermedia:watermedia-forge:1.1.3")
     // Specify the version of Minecraft to use.

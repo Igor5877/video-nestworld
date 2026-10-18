@@ -9,6 +9,7 @@ public final class NestworldConfig {
     public static final ForgeConfigSpec.IntValue MAX_STREAM_DISTANCE;
     public static final ForgeConfigSpec.BooleanValue SMOOTH_SCALING;
     public static final ForgeConfigSpec.IntValue MAX_VIDEO_HEIGHT;
+    public static final ForgeConfigSpec.ConfigValue<String> DECODER;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -28,6 +29,10 @@ public final class NestworldConfig {
                 .comment("Maximum video height for HLS streams with several qualities (0 = automatic, best available).",
                         "Changed from the quality button in the screen menu; no effect on single-quality files.")
                 .defineInRange("max_video_height", 0, 0, 4320);
+        DECODER = builder
+                .comment("Video decoder: \"auto\" (WaterMedia/VLC, switching to FFmpeg if VLC cannot open the stream),",
+                        "\"ffmpeg\" (always FFmpeg; its libraries are downloaded once into the game directory) or \"watermedia\".")
+                .defineInList("decoder", "auto", java.util.List.of("auto", "ffmpeg", "watermedia"));
         builder.pop();
         CLIENT_SPEC = builder.build();
     }
