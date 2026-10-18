@@ -14,6 +14,10 @@ import java.util.List;
 /**
  * Streams decoded PCM through Minecraft's own OpenAL context and exposes the playback position as the
  * master clock for video. Runs its own thread; all OpenAL calls happen there.
+ *
+ * <p>In spatial mode the sound comes from the screen itself: stereo is split into a left and a right
+ * source at the screen's edges, mono plays from its centre. Distance falloff stays under our control
+ * (rolloff 0 plus a gain factor), so only the direction is handled by OpenAL.
  */
 final class AlAudio implements Runnable {
     private static final Logger LOGGER = LogUtils.getLogger();
@@ -25,6 +29,8 @@ final class AlAudio implements Runnable {
     private record Chunk(ByteBuffer pcm, long ptsUs, int generation) {}
 
     private final int sampleRate, channels, alFormat, bytesPerFrame;
+    private final boolean spatial;
+    private final int sourceCount;
     private final Object lock = new Object();
     private final ArrayDeque<Chunk> queue = new ArrayDeque<>();
     private long queuedUs;
@@ -33,6 +39,8 @@ final class AlAudio implements Runnable {
     private volatile float gain = 1f;
     private volatile boolean flushRequested;
     private volatile long dropBeforeUs = Long.MIN_VALUE;
+    /** Speaker positions in world space: {leftX, leftY, leftZ, rightX, rightY, rightZ} (right = left for mono). */
+    private volatile float[] speakers = {0, 0, 0, 0, 0, 0};
 
     // Published by the audio thread.
     private volatile long clockUs = -1;
@@ -40,10 +48,13 @@ final class AlAudio implements Runnable {
     private volatile boolean alPlaying;
     private volatile int alQueuedBuffers;
 
-    AlAudio(int sampleRate, int channels) {
+    AlAudio(int sampleRate, int channels, boolean spatial) {
         this.sampleRate = sampleRate;
         this.channels = Math.max(1, Math.min(2, channels));
-        this.alFormat = this.channels == 1 ? AL10.AL_FORMAT_MONO16 : AL10.AL_FORMAT_STEREO16;
+        this.spatial = spatial;
+        this.sourceCount = spatial && this.channels == 2 ? 2 : 1;
+        // Spatial sources are mono; otherwise the stereo stream plays as is, relative to the listener.
+        this.alFormat = this.channels == 1 || spatial ? AL10.AL_FORMAT_MONO16 : AL10.AL_FORMAT_STEREO16;
         this.bytesPerFrame = 2 * this.channels;
         if (ALC10.alcGetCurrentContext() == 0L) {
             failed = true;
@@ -63,6 +74,14 @@ final class AlAudio implements Runnable {
     long queuedUs() { synchronized (lock) { return queuedUs; } }
     void setGain(float value) { gain = Math.max(0f, Math.min(1f, value)); }
     void setPlaying(boolean value) { playing = value; }
+
+    boolean isSpatial() { return spatial; }
+
+    /** Places the sound: the centre of the screen and the vector from the centre to its right-hand speaker. */
+    void setPlacement(double cx, double cy, double cz, double rx, double ry, double rz) {
+        speakers = new float[]{(float) (cx - rx), (float) (cy - ry), (float) (cz - rz),
+                (float) (cx + rx), (float) (cy + ry), (float) (cz + rz)};
+    }
 
     /** Begins playback at the given media time; earlier audio is discarded. */
     void start(long startPtsUs) {
@@ -116,39 +135,52 @@ final class AlAudio implements Runnable {
 
     @Override public void run() {
         long context = ALC10.alcGetCurrentContext();
-        int source = 0;
-        int[] buffers = new int[BUFFER_COUNT];
+        int[] sources = new int[sourceCount];
+        int[][] buffers = new int[sourceCount][BUFFER_COUNT];
         long[] bufferFrames = new long[BUFFER_COUNT];
         List<Integer> free = new ArrayList<>();
         try {
-            source = AL10.alGenSources();
-            for (int i = 0; i < BUFFER_COUNT; i++) { buffers[i] = AL10.alGenBuffers(); free.add(i); }
-            AL10.alSourcei(source, AL10.AL_SOURCE_RELATIVE, AL10.AL_TRUE);
-            AL10.alSource3f(source, AL10.AL_POSITION, 0f, 0f, 0f);
+            for (int s = 0; s < sourceCount; s++) {
+                sources[s] = AL10.alGenSources();
+                for (int i = 0; i < BUFFER_COUNT; i++) buffers[s][i] = AL10.alGenBuffers();
+                if (spatial) {
+                    AL10.alSourcei(sources[s], AL10.AL_SOURCE_RELATIVE, AL10.AL_FALSE);
+                    AL10.alSourcef(sources[s], AL10.AL_ROLLOFF_FACTOR, 0f);   // falloff is applied through the gain
+                } else {
+                    AL10.alSourcei(sources[s], AL10.AL_SOURCE_RELATIVE, AL10.AL_TRUE);
+                    AL10.alSource3f(sources[s], AL10.AL_POSITION, 0f, 0f, 0f);
+                }
+            }
+            for (int i = 0; i < BUFFER_COUNT; i++) free.add(i);
             check("init");
             long unqueuedFrames = 0, baseUs = -1;
             int queued = 0;
             float appliedGain = -1f;
+            float[] appliedSpeakers = null;
             while (!closed) {
                 if (ALC10.alcGetCurrentContext() != context) throw new IllegalStateException("OpenAL context changed");
                 if (flushRequested) {
                     flushRequested = false;
-                    AL10.alSourceStop(source);
-                    int processed = AL10.alGetSourcei(source, AL10.AL_BUFFERS_PROCESSED);
-                    for (int i = 0; i < Math.max(processed, queued); i++) {
-                        try { AL10.alSourceUnqueueBuffers(source); } catch (Throwable ignored) { break; }
+                    for (int source : sources) AL10.alSourceStop(source);
+                    for (int s = 0; s < sourceCount; s++) {
+                        int pending = Math.max(AL10.alGetSourcei(sources[s], AL10.AL_BUFFERS_PROCESSED), queued);
+                        for (int i = 0; i < pending; i++) {
+                            try { AL10.alSourceUnqueueBuffers(sources[s]); } catch (Throwable ignored) { break; }
+                        }
+                        AL10.alSourcei(sources[s], AL10.AL_BUFFER, 0);
                     }
-                    AL10.alSourcei(source, AL10.AL_BUFFER, 0);
                     free.clear();
                     for (int i = 0; i < BUFFER_COUNT; i++) free.add(i);
                     unqueuedFrames = 0; baseUs = -1; queued = 0; alQueuedBuffers = 0;
                     alPlaying = false;
                 }
-                // Return finished buffers.
-                int processed = AL10.alGetSourcei(source, AL10.AL_BUFFERS_PROCESSED);
+                // Return finished buffers (the sources are started together; follow the slowest).
+                int processed = Integer.MAX_VALUE;
+                for (int source : sources) processed = Math.min(processed, AL10.alGetSourcei(source, AL10.AL_BUFFERS_PROCESSED));
                 for (int i = 0; i < processed; i++) {
-                    int id = AL10.alSourceUnqueueBuffers(source);
-                    for (int b = 0; b < BUFFER_COUNT; b++) if (buffers[b] == id) { unqueuedFrames += bufferFrames[b]; free.add(b); }
+                    int id = AL10.alSourceUnqueueBuffers(sources[0]);
+                    for (int s = 1; s < sourceCount; s++) AL10.alSourceUnqueueBuffers(sources[s]);
+                    for (int b = 0; b < BUFFER_COUNT; b++) if (buffers[0][b] == id) { unqueuedFrames += bufferFrames[b]; free.add(b); }
                     queued--;
                 }
                 // Fill free buffers with ~100 ms chunks once playback has been started.
@@ -157,20 +189,31 @@ final class AlAudio implements Runnable {
                     if (chunk == null) break;
                     if (baseUs < 0) baseUs = chunkStartUs;
                     int slot = free.remove(free.size() - 1);
+                    ByteBuffer[] channelData = split(chunk);
                     bufferFrames[slot] = chunk.remaining() / bytesPerFrame;
-                    AL10.alBufferData(buffers[slot], alFormat, chunk, sampleRate);
-                    AL10.alSourceQueueBuffers(source, buffers[slot]);
+                    for (int s = 0; s < sourceCount; s++) {
+                        AL10.alBufferData(buffers[s][slot], alFormat, channelData[s], sampleRate);
+                        AL10.alSourceQueueBuffers(sources[s], buffers[s][slot]);
+                    }
                     queued++;
                 }
                 alQueuedBuffers = queued;
-                int state = AL10.alGetSourcei(source, AL10.AL_SOURCE_STATE);
-                if (playing && queued > 0 && state != AL10.AL_PLAYING) AL10.alSourcePlay(source);
-                else if (!playing && state == AL10.AL_PLAYING) AL10.alSourcePause(source);
-                if (gain != appliedGain) { appliedGain = gain; AL10.alSourcef(source, AL10.AL_GAIN, appliedGain); }
-                state = AL10.alGetSourcei(source, AL10.AL_SOURCE_STATE);
+                int state = AL10.alGetSourcei(sources[0], AL10.AL_SOURCE_STATE);
+                if (playing && queued > 0 && state != AL10.AL_PLAYING) AL10.alSourcePlayv(sources);
+                else if (!playing && state == AL10.AL_PLAYING) AL10.alSourcePausev(sources);
+                if (gain != appliedGain) {
+                    appliedGain = gain;
+                    for (int source : sources) AL10.alSourcef(source, AL10.AL_GAIN, appliedGain);
+                }
+                if (spatial && speakers != appliedSpeakers) {
+                    appliedSpeakers = speakers;
+                    for (int s = 0; s < sourceCount; s++)
+                        AL10.alSource3f(sources[s], AL10.AL_POSITION, appliedSpeakers[3 * s], appliedSpeakers[3 * s + 1], appliedSpeakers[3 * s + 2]);
+                }
+                state = AL10.alGetSourcei(sources[0], AL10.AL_SOURCE_STATE);
                 alPlaying = state == AL10.AL_PLAYING;
                 if (baseUs >= 0) {
-                    long played = unqueuedFrames + AL10.alGetSourcei(source, AL11.AL_SAMPLE_OFFSET);
+                    long played = unqueuedFrames + AL10.alGetSourcei(sources[0], AL11.AL_SAMPLE_OFFSET);
                     clockStampNanos = System.nanoTime();
                     clockUs = baseUs + played * 1_000_000L / sampleRate;
                 }
@@ -183,14 +226,30 @@ final class AlAudio implements Runnable {
         } finally {
             alPlaying = false;
             try {
-                if (source != 0 && ALC10.alcGetCurrentContext() == context) {
-                    AL10.alSourceStop(source);
-                    AL10.alSourcei(source, AL10.AL_BUFFER, 0);
-                    AL10.alDeleteSources(source);
-                    for (int b : buffers) if (b != 0) AL10.alDeleteBuffers(b);
+                if (ALC10.alcGetCurrentContext() == context) {
+                    for (int s = 0; s < sourceCount; s++) {
+                        if (sources[s] == 0) continue;
+                        AL10.alSourceStop(sources[s]);
+                        AL10.alSourcei(sources[s], AL10.AL_BUFFER, 0);
+                        AL10.alDeleteSources(sources[s]);
+                        for (int b : buffers[s]) if (b != 0) AL10.alDeleteBuffers(b);
+                    }
                 }
             } catch (Throwable ignored) { /* the sound engine may already be gone */ }
         }
+    }
+
+    /** Turns interleaved PCM into what the sources expect: one buffer per source (left/right, or the input as is). */
+    private ByteBuffer[] split(ByteBuffer interleaved) {
+        if (!spatial) return new ByteBuffer[]{interleaved};
+        if (channels == 1) return new ByteBuffer[]{interleaved};
+        int frames = interleaved.remaining() / 4;
+        ByteBuffer left = ByteBuffer.allocateDirect(frames * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        ByteBuffer right = ByteBuffer.allocateDirect(frames * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        ByteBuffer in = interleaved.duplicate().order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        for (int f = 0; f < frames; f++) { left.putShort(in.getShort()); right.putShort(in.getShort()); }
+        left.flip(); right.flip();
+        return new ByteBuffer[]{left, right};
     }
 
     private long chunkStartUs;

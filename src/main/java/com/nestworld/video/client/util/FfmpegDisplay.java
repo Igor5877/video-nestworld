@@ -13,7 +13,10 @@ import com.nestworld.video.ffmpeg.VideoDecoder;
 import net.minecraft.client.Minecraft;
 import net.minecraft.sounds.SoundSource;
 import net.minecraftforge.fml.loading.FMLPaths;
+import org.lwjgl.opengl.EXTTextureFilterAnisotropic;
+import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL30;
 import org.slf4j.Logger;
 
 import java.awt.Dimension;
@@ -57,6 +60,7 @@ public final class FfmpegDisplay extends Display {
     private int textureId, textureWidth, textureHeight;
     private boolean frameShown, started, playing = true, audioClock, endReported, firstFrameLogged;
     private boolean initialSyncDone;
+    private boolean mipmapped;
     private VFrame previewed;
     private long previewedPtsUs = -1;
     private long pendingSyncUs = -1, seekTargetUs = -1;
@@ -114,7 +118,8 @@ public final class FfmpegDisplay extends Display {
         @Override public void onInfo(StreamInfo streamInfo) {
             int bytes = Math.max(1, streamInfo.width * streamInfo.height * 4);
             maxFrames = (int) Math.max(4, Math.min(30, FRAME_BUDGET_BYTES / bytes));
-            if (streamInfo.hasAudio) audio = new AlAudio(streamInfo.sampleRate, streamInfo.channels);
+            if (streamInfo.hasAudio)
+                audio = new AlAudio(streamInfo.sampleRate, streamInfo.channels, NestworldConfig.SPATIAL_AUDIO.get());
             info = streamInfo;
         }
 
@@ -246,8 +251,14 @@ public final class FfmpegDisplay extends Display {
         if (textureId == 0) {
             textureId = TextureUtil.generateTextureId();
             GlStateManager._bindTexture(textureId);
-            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
+            mipmapped = NestworldConfig.MIPMAPS.get();
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER,
+                    mipmapped ? GL11.GL_LINEAR_MIPMAP_LINEAR : GL11.GL_LINEAR);
             GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
+            if (mipmapped && GL.getCapabilities().GL_EXT_texture_filter_anisotropic) {
+                float max = GL11.glGetFloat(EXTTextureFilterAnisotropic.GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT);
+                GL11.glTexParameterf(GL11.GL_TEXTURE_2D, EXTTextureFilterAnisotropic.GL_TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8f, max));
+            }
             GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, org.lwjgl.opengl.GL12.GL_CLAMP_TO_EDGE);
             GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, org.lwjgl.opengl.GL12.GL_CLAMP_TO_EDGE);
         } else {
@@ -263,6 +274,7 @@ public final class FfmpegDisplay extends Display {
         frame.data.position(0);
         GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, frame.width, frame.height,
                 GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, frame.data);
+        if (mipmapped) GL30.glGenerateMipmap(GL11.GL_TEXTURE_2D);
         GlStateManager._bindTexture(previous);
         frameShown = true;
         if (!firstFrameLogged) {
@@ -368,6 +380,9 @@ public final class FfmpegDisplay extends Display {
         return new Dimension((int) Math.round(streamInfo.height * aspect), streamInfo.height);
     }
 
+    @Override public boolean managesTextureFilter() { return true; }
+    @Override public boolean hasMipmaps() { return mipmapped && frameShown; }
+
     @Override public void setVolume(int volume) { baseVolume = Math.max(0, Math.min(200, volume)); }
     @Override public int getVolume() { return baseVolume; }
 
@@ -378,6 +393,11 @@ public final class FfmpegDisplay extends Display {
         var options = Minecraft.getInstance().options;
         float game = options.getSoundSourceVolume(SoundSource.MASTER) * options.getSoundSourceVolume(SoundSource.RECORDS);
         output.setGain((float) (baseVolume / 100.0 * spatial) * game);
+    }
+
+    @Override public void setSoundPlacement(double cx, double cy, double cz, double rx, double ry, double rz) {
+        AlAudio output = audio;
+        if (output != null && output.isSpatial()) output.setPlacement(cx, cy, cz, rx, ry, rz);
     }
 
     @Override public void release() {

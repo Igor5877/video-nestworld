@@ -42,5 +42,14 @@ public abstract class Display {
     public abstract void setVolume(int volume);
     public abstract int getVolume();
     public abstract void applySpatialVolume(double factor);
+    /**
+     * Tells the decoder where the screen is so it can play the sound from there: its centre and the vector from the
+     * centre to the right-hand speaker. Decoders that cannot position sound ignore it.
+     */
+    /** True when the decoder sets the texture filter itself (mipmaps), so the renderer must not override it. */
+    public boolean managesTextureFilter() { return false; }
+    /** True when the current texture has a full mipmap chain. */
+    public boolean hasMipmaps() { return false; }
+    public void setSoundPlacement(double cx, double cy, double cz, double rx, double ry, double rz) {}
     public abstract void release();
 }

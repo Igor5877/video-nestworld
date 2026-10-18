@@ -191,7 +191,14 @@ public class ClientVideoManager {
             double dz = Math.max(bounds.minZ - pz, Math.max(0, pz - bounds.maxZ));
             double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
             current = activeDisplays.get(pos);
-            if (current != null) current.applySpatialVolume(spatialFactor(dist));
+            if (current != null) {
+                current.applySpatialVolume(spatialFactor(dist));
+                // Speakers sit at the screen's left/right edges; stay within a few blocks of the centre for wide walls.
+                var right = screen.getBlockState().getValue(com.nestworld.video.block.VideoScreenBlock.FACING).getCounterClockWise();
+                double half = Math.min(screen.getScreenCols() / 2.0, 6.0) * 0.85;
+                current.setSoundPlacement((bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2,
+                        (bounds.minZ + bounds.maxZ) / 2, right.getStepX() * half, 0, right.getStepZ() * half);
+            }
         }
     }
 

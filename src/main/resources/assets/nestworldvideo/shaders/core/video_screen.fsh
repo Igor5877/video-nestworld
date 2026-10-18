@@ -2,6 +2,7 @@
 
 uniform sampler2D Sampler0;
 uniform vec4 ColorModulator;
+uniform float Sharpness;
 
 in vec2 texCoord0;
 out vec4 fragColor;
@@ -37,5 +38,13 @@ vec4 catmullRom(sampler2D tex, vec2 uv) {
 }
 
 void main() {
-    fragColor = vec4(catmullRom(Sampler0, texCoord0).rgb, 1.0) * ColorModulator;
+    vec3 color = catmullRom(Sampler0, texCoord0).rgb;
+    if (Sharpness > 0.0) {
+        // Unsharp mask against the four neighbouring texels.
+        vec2 px = 1.0 / vec2(textureSize(Sampler0, 0));
+        vec3 blur = (texture(Sampler0, texCoord0 + vec2(px.x, 0.0)).rgb + texture(Sampler0, texCoord0 - vec2(px.x, 0.0)).rgb
+                   + texture(Sampler0, texCoord0 + vec2(0.0, px.y)).rgb + texture(Sampler0, texCoord0 - vec2(0.0, px.y)).rgb) * 0.25;
+        color = clamp(color + (color - blur) * Sharpness * 1.5, 0.0, 1.0);
+    }
+    fragColor = vec4(color, 1.0) * ColorModulator;
 }

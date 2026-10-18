@@ -10,6 +10,10 @@ public final class NestworldConfig {
     public static final ForgeConfigSpec.BooleanValue SMOOTH_SCALING;
     public static final ForgeConfigSpec.IntValue MAX_VIDEO_HEIGHT;
     public static final ForgeConfigSpec.ConfigValue<String> DECODER;
+    public static final ForgeConfigSpec.BooleanValue SPATIAL_AUDIO;
+    public static final ForgeConfigSpec.BooleanValue MIPMAPS;
+    public static final ForgeConfigSpec.IntValue SHARPNESS;
+    public static final ForgeConfigSpec.ConfigValue<String> RENDER_MODE;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -33,6 +37,21 @@ public final class NestworldConfig {
                 .comment("Video decoder: \"auto\" (WaterMedia/VLC, switching to FFmpeg if VLC cannot open the stream),",
                         "\"ffmpeg\" (always FFmpeg; its libraries are downloaded once into the game directory) or \"watermedia\".")
                 .defineInList("decoder", "auto", java.util.List.of("auto", "ffmpeg", "watermedia"));
+        SPATIAL_AUDIO = builder
+                .comment("FFmpeg decoder only: play the sound from the screen in 3D (stereo is split into a left and a right",
+                        "speaker at the screen's edges). Takes effect for streams started after the change.")
+                .define("spatial_audio", true);
+        MIPMAPS = builder
+                .comment("FFmpeg decoder only: build mipmaps with anisotropic filtering so distant screens do not shimmer.")
+                .define("mipmaps", true);
+        SHARPNESS = builder
+                .comment("Extra sharpening of the picture in the scaling shader, 0 (off) to 100.",
+                        "Only applies with video.smooth_scaling and when no shader pack is active.")
+                .defineInRange("sharpness", 0, 0, 100);
+        RENDER_MODE = builder
+                .comment("How the picture is drawn: \"auto\" switches to Minecraft's own render pipeline when a shader pack",
+                        "(Iris/Oculus) is active, \"vanilla_pipeline\" always uses it, \"direct\" never does.")
+                .defineInList("render_mode", "auto", java.util.List.of("auto", "vanilla_pipeline", "direct"));
         builder.pop();
         CLIENT_SPEC = builder.build();
     }

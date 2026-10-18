@@ -8,6 +8,7 @@ import com.nestworld.video.block.VideoScreenBlock;
 import com.nestworld.video.block.VideoScreenBlockEntity;
 import com.nestworld.video.client.util.Display;
 import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
@@ -54,6 +55,12 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
             return;
         }
 
+        if (useVanillaPipeline()) {
+            drawThroughVanillaPipeline(poseStack, buffer, display, textureId, blockEntity.getScreenCols(), blockEntity.getScreenRows());
+            poseStack.popPose();
+            return;
+        }
+
         RenderSystem.enableDepthTest();
         // Video frames are opaque. Alpha blending can let the previous world
         // framebuffer bleed through when a decoder texture has a non-opaque alpha
@@ -72,13 +79,18 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
         RenderSystem.polygonOffset(-1.0F, -4.0F);
         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
         var smooth = NestworldConfig.SMOOTH_SCALING.get() ? ClientModEvents.videoScreenShader() : null;
-        if (smooth != null) RenderSystem.setShader(() -> smooth);
+        if (smooth != null) {
+            smooth.safeGetUniform("Sharpness").set(NestworldConfig.SHARPNESS.get() / 100f);
+            RenderSystem.setShader(() -> smooth);
+        }
         else RenderSystem.setShader(GameRenderer::getPositionTexShader);
         RenderSystem.setShaderTexture(0, textureId);
         RenderSystem.bindTexture(textureId);
 
-        GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
-        GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
+        if (!display.managesTextureFilter()) {
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
+        }
         // Clamp to edge so adjacent tiles don't bleed into each other at UV boundaries.
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, GL12.GL_CLAMP_TO_EDGE);
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, GL12.GL_CLAMP_TO_EDGE);
@@ -108,6 +120,33 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
         RenderSystem.enableDepthTest();
 
         poseStack.popPose();
+    }
+
+    private static boolean useVanillaPipeline() {
+        return switch (NestworldConfig.RENDER_MODE.get()) {
+            case "vanilla_pipeline" -> true;
+            case "direct" -> false;
+            default -> VideoRenderTypes.shaderPackActive();
+        };
+    }
+
+    /** Same picture as the direct path, but submitted as a regular render type so shader packs can process it. */
+    private void drawThroughVanillaPipeline(PoseStack poseStack, MultiBufferSource buffer, Display display, int textureId,
+                                            float cols, float rows) {
+        Dimension videoDim = display.getDimensions();
+        float aspect = videoDim != null && videoDim.width > 0 && videoDim.height > 0
+                ? (float) videoDim.width / videoDim.height : 16f / 9f;
+        float w = cols, h = rows;
+        if (cols / rows > aspect) w = rows * aspect;
+        else h = cols / aspect;
+        float x = (cols - w) / 2f, y = 1 - rows + (rows - h) / 2f;
+        VertexConsumer consumer = buffer.getBuffer(VideoRenderTypes.forTexture(textureId, display.hasMipmaps()));
+        Matrix4f matrix = poseStack.last().pose();
+        int light = LightTexture.FULL_BRIGHT;
+        consumer.vertex(matrix, x, y + h, 0).color(255, 255, 255, 255).uv(0, 1).uv2(light).endVertex();
+        consumer.vertex(matrix, x + w, y + h, 0).color(255, 255, 255, 255).uv(1, 1).uv2(light).endVertex();
+        consumer.vertex(matrix, x + w, y, 0).color(255, 255, 255, 255).uv(1, 0).uv2(light).endVertex();
+        consumer.vertex(matrix, x, y, 0).color(255, 255, 255, 255).uv(0, 0).uv2(light).endVertex();
     }
 
     private void drawBackground(PoseStack poseStack, int cols, int rows) {

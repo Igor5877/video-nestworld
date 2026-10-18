@@ -66,5 +66,10 @@ final class AutoDisplay extends Display {
     @Override public void setVolume(int value) { volume = value; delegate.setVolume(value); }
     @Override public int getVolume() { return delegate.getVolume(); }
     @Override public void applySpatialVolume(double factor) { spatial = factor; delegate.applySpatialVolume(factor); }
+    @Override public void setSoundPlacement(double cx, double cy, double cz, double rx, double ry, double rz) {
+        delegate.setSoundPlacement(cx, cy, cz, rx, ry, rz);
+    }
+    @Override public boolean managesTextureFilter() { return delegate.managesTextureFilter(); }
+    @Override public boolean hasMipmaps() { return delegate.hasMipmaps(); }
     @Override public void release() { delegate.release(); }
 }
