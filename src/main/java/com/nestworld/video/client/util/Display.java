@@ -1,5 +1,6 @@
 package com.nestworld.video.client.util;
 
+import com.nestworld.video.NestworldConfig;
 import net.minecraft.client.Minecraft;
 import com.mojang.logging.LogUtils;
 import org.watermedia.api.player.videolan.VideoPlayer;
@@ -49,7 +50,14 @@ public class Display {
     // A little extra headroom makes HLS playback tolerate short network jitter.
     // VLC's default in this setup is only 1000 ms; this affects startup latency,
     // not Minecraft's server-side traffic.
-    private static final String[] VLC_OPTIONS = {"--network-caching=3000"};
+    private static String[] vlcOptions() {
+        // For HLS streams with several renditions VLC's default adaptive logic may stay on a low one;
+        // "highest" always picks the best variant. It has no effect on plain mp4 files.
+        return NestworldConfig.PREFER_HIGHEST_QUALITY.get()
+                ? new String[]{"--network-caching=3000", "--adaptive-logic=highest"}
+                : new String[]{"--network-caching=3000"};
+    }
+    private boolean resolutionLogged;
     // Seeking an HLS stream can trigger another segment fetch and visible stall.
     // Correct only larger drift and wait until the decoder has left buffering.
     private static final long SEEK_DRIFT_THRESHOLD_MS = 2_000;
@@ -63,7 +71,7 @@ public class Display {
             // can then be applied before playback begins, avoiding a visible start
             // from 0 ms followed by a jump to the synchronized position.
             this.player.setRepeatMode(false);
-            this.player.startPaused(new URI(url), VLC_OPTIONS);
+            this.player.startPaused(new URI(url), vlcOptions());
             this.setPlaying(true);
         } catch (Exception e) {
             this.player.release();
@@ -100,6 +108,13 @@ public class Display {
 
     /** Run recovery on the client tick, never from the block renderer. */
     public void tick() {
+        if (!resolutionLogged && firstTextureReady) {
+            Dimension size = getDimensions();
+            if (size != null && size.width > 0 && size.height > 0) {
+                resolutionLogged = true;
+                LOGGER.info("Nestworld Video: stream {} decodes at {}x{}", url, size.width, size.height);
+            }
+        }
         boolean failedBeforeFrame = frameStats.decoded.get() == 0 && player.raw() != null
                 && (player.isEnded() || player.isBroken());
         if (!startupRetried && isPlaying && failedBeforeFrame && !isStartupTimedOut()) {
@@ -122,7 +137,7 @@ public class Display {
                 lastMediaProgressNanos = 0;
                 lastLoggedDecodedFrames = lastLoggedUploadedFrames = 0;
                 player.setRepeatMode(false);
-                player.startPaused(URI.create(url), VLC_OPTIONS);
+                player.startPaused(URI.create(url), vlcOptions());
             }
         } else {
             retryAfterNanos = 0;
