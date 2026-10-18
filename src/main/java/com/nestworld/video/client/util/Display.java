@@ -46,6 +46,11 @@ public abstract class Display {
      * Tells the decoder where the screen is so it can play the sound from there: its centre and the vector from the
      * centre to the right-hand speaker. Decoders that cannot position sound ignore it.
      */
+    /**
+     * Fraction of the texture (width, height) that holds the visible picture. Decoders may allocate larger frame buffers
+     * whose extra rows/columns contain garbage; the renderer must not map them onto the screen.
+     */
+    public float[] uvScale() { return new float[]{1f, 1f}; }
     /** True when the decoder sets the texture filter itself (mipmaps), so the renderer must not override it. */
     public boolean managesTextureFilter() { return false; }
     /** True when the current texture has a full mipmap chain. */

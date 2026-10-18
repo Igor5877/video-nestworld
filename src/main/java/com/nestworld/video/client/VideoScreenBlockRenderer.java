@@ -81,6 +81,8 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
         var smooth = NestworldConfig.SMOOTH_SCALING.get() ? ClientModEvents.videoScreenShader() : null;
         if (smooth != null) {
             smooth.safeGetUniform("Sharpness").set(NestworldConfig.SHARPNESS.get() / 100f);
+            float[] visible = display.uvScale();
+            smooth.safeGetUniform("UvMax").set(visible[0], visible[1]);
             smooth.safeGetUniform("Upscaler").set("edge".equals(NestworldConfig.UPSCALER.get()) ? 1f : 0f);
             RenderSystem.setShader(() -> smooth);
         }
@@ -108,9 +110,10 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
         if (cols / rows > aspect) w = rows * aspect;
         else h = cols / aspect;
         float x = (cols - w) / 2f, y = 1 - rows + (rows - h) / 2f;
-        builder.vertex(matrix, x, y + h, 0).uv(0, 1).endVertex();
-        builder.vertex(matrix, x + w, y + h, 0).uv(1, 1).endVertex();
-        builder.vertex(matrix, x + w, y, 0).uv(1, 0).endVertex();
+        float[] scale = display.uvScale();
+        builder.vertex(matrix, x, y + h, 0).uv(0, scale[1]).endVertex();
+        builder.vertex(matrix, x + w, y + h, 0).uv(scale[0], scale[1]).endVertex();
+        builder.vertex(matrix, x + w, y, 0).uv(scale[0], 0).endVertex();
         builder.vertex(matrix, x, y, 0).uv(0, 0).endVertex();
 
         tesselator.end();
@@ -144,9 +147,10 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
         VertexConsumer consumer = buffer.getBuffer(VideoRenderTypes.forTexture(textureId, display.hasMipmaps()));
         Matrix4f matrix = poseStack.last().pose();
         int light = LightTexture.FULL_BRIGHT;
-        consumer.vertex(matrix, x, y + h, 0).color(255, 255, 255, 255).uv(0, 1).uv2(light).endVertex();
-        consumer.vertex(matrix, x + w, y + h, 0).color(255, 255, 255, 255).uv(1, 1).uv2(light).endVertex();
-        consumer.vertex(matrix, x + w, y, 0).color(255, 255, 255, 255).uv(1, 0).uv2(light).endVertex();
+        float[] scale = display.uvScale();
+        consumer.vertex(matrix, x, y + h, 0).color(255, 255, 255, 255).uv(0, scale[1]).uv2(light).endVertex();
+        consumer.vertex(matrix, x + w, y + h, 0).color(255, 255, 255, 255).uv(scale[0], scale[1]).uv2(light).endVertex();
+        consumer.vertex(matrix, x + w, y, 0).color(255, 255, 255, 255).uv(scale[0], 0).uv2(light).endVertex();
         consumer.vertex(matrix, x, y, 0).color(255, 255, 255, 255).uv(0, 0).uv2(light).endVertex();
     }
 

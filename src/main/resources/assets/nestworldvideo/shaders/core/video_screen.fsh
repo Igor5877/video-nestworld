@@ -5,6 +5,8 @@ uniform vec4 ColorModulator;
 uniform float Sharpness;
 // 0 = bicubic (Catmull-Rom), 1 = edge-adaptive upscaling (EASU-style)
 uniform float Upscaler;
+// Fraction of the texture that holds the picture (decoders may allocate larger frame buffers).
+uniform vec2 UvMax;
 
 in vec2 texCoord0;
 out vec4 fragColor;
@@ -27,9 +29,11 @@ vec3 catmullRom(sampler2D tex, vec2 uv) {
     vec2 w12 = w1 + w2;
     vec2 offset12 = w2 / w12;
 
-    vec2 p0 = (center - 1.0) / size;
-    vec2 p3 = (center + 2.0) / size;
-    vec2 p12 = (center + offset12) / size;
+    // Never sample beyond the visible picture: the rows/columns after it can hold garbage.
+    vec2 lo = vec2(0.5) / size, hi = (UvMax * size - 0.5) / size;
+    vec2 p0 = clamp((center - 1.0) / size, lo, hi);
+    vec2 p3 = clamp((center + 2.0) / size, lo, hi);
+    vec2 p12 = clamp((center + offset12) / size, lo, hi);
 
     vec3 result = texture(tex, vec2(p12.x, p0.y)).rgb * (w12.x * w0.y)
                 + texture(tex, vec2(p0.x, p12.y)).rgb * (w0.x * w12.y)
@@ -92,7 +96,7 @@ vec3 easu(sampler2D tex, vec2 uv) {
     vec2 fp = floor(pos);
     vec2 pp = pos - fp;
     ivec2 ip = ivec2(fp);
-    ivec2 hi = size - 1;
+    ivec2 hi = max(ivec2(UvMax * vec2(size)) - 1, ivec2(0));
     //    b c
     //  e f g h
     //  i j k l
@@ -163,7 +167,8 @@ void main() {
     vec3 color;
     if (magnification >= 1.0) {
         // Shrinking: let the hardware pick the mip level and filter anisotropically.
-        color = textureGrad(Sampler0, texCoord0, dx, dy).rgb;
+        vec2 safeUv = clamp(texCoord0, vec2(0.5) / size, (UvMax * size - 0.5) / size);
+        color = textureGrad(Sampler0, safeUv, dx, dy).rgb;
     } else if (Upscaler > 0.5) {
         color = easu(Sampler0, texCoord0);
     } else {

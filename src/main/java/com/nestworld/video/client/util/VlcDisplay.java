@@ -352,6 +352,21 @@ public class VlcDisplay extends Display {
     }
 
     @Override
+    public float[] uvScale() {
+        // The GL texture has the size VLC asked for in getBufferFormat(); the visible picture can be smaller.
+        if (!player.isReady()) return new float[]{1f, 1f};
+        try {
+            Dimension visible = player.dimension();
+            int textureWidth = player.width(), textureHeight = player.height();
+            if (visible == null || visible.width <= 0 || visible.height <= 0 || textureWidth <= 0 || textureHeight <= 0)
+                return new float[]{1f, 1f};
+            return new float[]{Math.min(1f, (float) visible.width / textureWidth), Math.min(1f, (float) visible.height / textureHeight)};
+        } catch (RuntimeException e) {
+            return new float[]{1f, 1f};
+        }
+    }
+
+    @Override
     public Dimension getDimensions() {
         if (player.isReady()) {
             return player.dimension();
