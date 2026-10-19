@@ -48,8 +48,6 @@ public class GuiSelfTest {
                     ex.sendResponseHeaders(200, b.length); ex.getResponseBody().write(b); ex.close();
                 });
                 origin.start();
-                com.nestworld.video.relay.RelayConfig.ENABLED.set(true);
-                com.nestworld.video.relay.RelayConfig.MIN_VIEWERS.set(1);
             } catch (Exception e) { throw new RuntimeException(e); }
         }
     }
@@ -135,6 +133,10 @@ public class GuiSelfTest {
         if (System.nanoTime() - start > 900_000_000_000L) { System.out.println("NESTWORLD GUI TEST TIMEOUT"); mc.stop(); return; }
         if (!launched && mc.screen instanceof TitleScreen && mc.getOverlay() == null) {
             launched = true;
+            if (RELAY) {   // config values only exist once the mod's config is loaded, i.e. now
+                com.nestworld.video.relay.RelayConfig.ENABLED.set(true);
+                com.nestworld.video.relay.RelayConfig.MIN_VIEWERS.set(1);
+            }
             mc.options.renderDistance().set(4); mc.options.simulationDistance().set(5);
             mc.options.guiScale().set(2);
             boolean small = Integer.getInteger("nestworldvideo.guiscale", 2) > 2;
