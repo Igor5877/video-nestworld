@@ -130,7 +130,19 @@ public final class FfmpegDisplay extends Display {
                 throws InterruptedException {
             VFrame frame;
             synchronized (lock) {
-                while (!closed && frames.size() >= maxFrames && generation >= expectedGeneration) lock.wait(50);
+                int waited = 0;
+                while (!closed && frames.size() >= maxFrames && generation >= expectedGeneration) {
+                    lock.wait(50);
+                    // The demuxer can deliver video well ahead of the audio. If we block here the sound runs dry, its
+                    // clock stops, nothing consumes the queued frames and the whole stream freezes until a seek.
+                    // So when the sound is starving, sacrifice the oldest queued frame to let the decoder move on.
+                    AlAudio output = audio;
+                    if (output != null && output.isAvailable() && started && output.queuedUs() < 120_000L && (waited += 50) >= 250) {
+                        VFrame oldest = frames.poll();
+                        if (oldest != null) pool.add(oldest);
+                        waited = 0;
+                    }
+                }
                 if (closed || generation < expectedGeneration) return;
                 frame = pool.isEmpty() ? null : pool.remove(pool.size() - 1);
             }
@@ -309,6 +321,7 @@ public final class FfmpegDisplay extends Display {
         // client tick, and keep consuming frames while the renderer is not drawing this screen.
         maybeStart();
         if (started && System.nanoTime() - lastRenderNanos > 150_000_000L) discardDueFrames();
+        watchdog();
         diagnose();
     }
 
@@ -320,6 +333,29 @@ public final class FfmpegDisplay extends Display {
         synchronized (lock) { head = frames.peek(); }
         long current = started ? mediaTimeUs() : head != null ? head.ptsUs : 0;
         if (Math.abs(current - target) <= SEEK_DRIFT_US) return;
+        seekTo(target);
+    }
+
+    private long watchMediaUs = -1, watchSinceNanos;
+    /**
+     * Self-heal for a frozen picture and sound: the clock stands still although decoded frames are waiting (a seek
+     * used to be the only way out). Waiting for the network (no queued frames) is not a freeze and is left alone.
+     */
+    private void watchdog() {
+        if (!started || !playing || eos || decoder == null || pendingSyncUs >= 0) { watchSinceNanos = 0; return; }
+        long now = System.nanoTime(), media = mediaTimeUs();
+        if (media != watchMediaUs || watchSinceNanos == 0) { watchMediaUs = media; watchSinceNanos = now; return; }
+        int queued; synchronized (lock) { queued = frames.size(); }
+        if (now - watchSinceNanos < 4_000_000_000L || queued == 0) return;
+        AlAudio output = audio;
+        LOGGER.warn("Nestworld Video: playback froze at {}ms with {} frames queued (audio {}, queued {}ms); re-seeking",
+                media / 1000, queued, output == null ? "none" : output.isPlaying() ? "playing" : "stopped",
+                output == null ? 0 : output.queuedUs() / 1000);
+        watchSinceNanos = 0;
+        seekTo(media);
+    }
+
+    private void seekTo(long target) {
         seekTargetUs = target;
         int generation = decoder.seek(target);
         expectedGeneration = generation;
