@@ -19,7 +19,9 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
     private static final int TEXT=0xE8EDF2, MUTED=0xAAB8C7, GOLD=0xE7BE70;
     private static final AtomicInteger REQUESTS = new AtomicInteger();
     private enum View { SEARCH, LIBRARY, VOICES, EPISODES, SOURCES }
-    private record Row(String label, String hint, boolean enabled, Runnable action) {}
+    private record Row(String label, String hint, boolean enabled, Runnable action, String url) {
+        Row(String label, String hint, boolean enabled, Runnable action) { this(label, hint, enabled, action, ""); }
+    }
     private View view=View.SEARCH, origin=View.SEARCH;
     private boolean construction, loading;
     private String query="", libraryQuery="", status="Введи частину назви українською або англійською.";
@@ -80,14 +82,15 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
     private VideoScreenBlockEntity screen() { return menu.getBlockEntity()==null ? null : menu.getBlockEntity().controller(); }
     private boolean detail() { return view==View.VOICES || view==View.EPISODES || view==View.SOURCES; }
     @Override protected void init() {
-        imageWidth=Math.min(500,width-12); imageHeight=Math.min(346,height-12);
+        imageWidth=Math.min(500,width-12); imageHeight=Math.min(372,height-12);
         super.init();
         if(menu.getBlockEntity()==null) { onClose(); return; }
         entries.clear(); search=null; searchButton=null; qualityButton=null;
         int tab=(imageWidth-32)/3;
-        button("Пошук AniUA",12,30,tab,b->switchView(View.SEARCH)).active=construction || view!=View.SEARCH;
-        button("Бібліотека",16+tab,30,tab,b->switchView(View.LIBRARY)).active=construction || view!=View.LIBRARY;
-        button(tr("screen"),20+tab*2,30,tab,b->{construction=true; rebuildWidgets();}).active=!construction;
+        View tabView=detail() ? origin : view;
+        ((CinemaButton)button("Пошук AniUA",12,30,tab,b->switchView(View.SEARCH))).selected=!construction && tabView==View.SEARCH;
+        ((CinemaButton)button("Бібліотека",16+tab,30,tab,b->switchView(View.LIBRARY))).selected=!construction && tabView==View.LIBRARY;
+        ((CinemaButton)button(tr("screen"),20+tab*2,30,tab,b->{construction=true; rebuildWidgets();})).selected=construction;
         button("×",imageWidth-30,7,18,b->onClose()).setTooltip(Tooltip.create(tr("close")));
         if(construction) initConstruction(); else initBrowser();
         updateControls();
@@ -108,7 +111,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
     private void initBrowser() {
         if (!detail()) {
             boolean remote=view==View.SEARCH;
-            search=new EditBox(font,leftPos+13,topPos+59,imageWidth-(remote?108:26),18,Component.literal("Пошук"));
+            search=new CinemaEditBox(font,leftPos+13,topPos+58,imageWidth-(remote?108:26),20,Component.literal("Пошук"));
             search.setMaxLength(120); search.setHint(Component.literal(remote ? "Назва або частина назви…" : "Пошук у бібліотеці…"));
             search.setValue(remote ? query : libraryQuery);
             search.setResponder(value->{ if(remote) query=value; else {libraryQuery=value;page=0;refreshEntries();} });
@@ -130,7 +133,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         int columns=view==View.EPISODES ? 2 : 1;
         int start=100;
         int left=detail()?76:12;
-        visibleRows=Math.max(1,(imageHeight-94-start)/24)*columns;
+        visibleRows=Math.max(1,(imageHeight-114-start)/24)*columns;
         int rowWidth=(imageWidth-left-12-(columns-1)*6)/columns;
         for(int i=0;i<visibleRows;i++) {
             final int index=i;
@@ -139,18 +142,25 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
                 if(n<rows.size() && rows.get(n).enabled()) rows.get(n).action().run();
             }));
         }
-        previousPage=button("‹",12,imageHeight-86,28,b->{page--;refreshEntries();});
-        qualityButton=button(qualityLabel(),48,imageHeight-86,130,b->cycleQuality());
+        int W=imageWidth, H=imageHeight;
+        previousPage=button("‹",12,H-110,28,b->{page--;refreshEntries();});
+        nextPage=button("›",W-40,H-110,28,b->{page++;refreshEntries();});
+        qualityButton=button(qualityLabel(),W-40-8-96,H-110,96,b->cycleQuality());
         qualityButton.setTooltip(Tooltip.create(Component.literal("Максимальна якість відео (HLS). Потік перезапуститься.")));
-        nextPage=button("›",imageWidth-40,imageHeight-86,28,b->{page++;refreshEntries();});
-        int y=imageHeight-36, bw=(imageWidth-32)/3;
-        play=button(tr("play"),12,y,bw,b->send("play"));
-        pause=button(tr("pause"),16+bw,y,bw,b->send("pause"));
-        stop=button(tr("stop"),20+bw*2,y,bw,b->send("stop"));
-        quieter=button("−",imageWidth-70,y-25,26,b->volume(-10));
-        louder=button("+",imageWidth-40,y-25,26,b->volume(10));
-        skipBack=button("−10",imageWidth-158,y-25,34,b->seek(-10_000));
-        skipForward=button("+10",imageWidth-118,y-25,34,b->seek(10_000));
+        // Transport row: three big actions on the left, seek and volume tucked into one cluster on the right.
+        int ty=H-34, cluster=30+4+30+10+22+38+22;
+        int bw=(W-24-cluster-12-8)/3;
+        boolean wide=bw>=96;
+        play=button((wide?"▶  ":"")+(wide?tr("play").getString():"▶"),12,ty,bw,b->send("play"));
+        pause=button((wide?"❚❚  ":"")+(wide?tr("pause").getString():"❚❚"),16+bw,ty,bw,b->send("pause"));
+        stop=button((wide?"■  ":"")+(wide?tr("stop").getString():"■"),20+bw*2,ty,bw,b->send("stop"));
+        ((CinemaButton)play).primary=true; ((CinemaButton)play).centered=true;
+        ((CinemaButton)pause).centered=true; ((CinemaButton)stop).centered=true;
+        int cx=W-12-cluster;
+        skipBack=button("−10",cx,ty,30,b->seek(-10_000));
+        skipForward=button("+10",cx+34,ty,30,b->seek(10_000));
+        quieter=button("−",cx+64+10,ty,22,b->volume(-10));
+        louder=button("+",W-12-22,ty,22,b->volume(10));
         skipBack.setTooltip(Tooltip.create(Component.literal("Перемотати назад на 10 секунд")));
         skipForward.setTooltip(Tooltip.create(Component.literal("Перемотати вперед на 10 секунд")));
         quieter.setTooltip(Tooltip.create(tr("local_volume"))); louder.setTooltip(Tooltip.create(tr("local_volume")));
@@ -221,7 +231,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
                 // Also find individual videos by a partial title in non-anime categories.
                 if(!libraryQuery.isBlank()) for(Category c:categories()) if(c.getVideos()!=null && (c.getName()==null || !c.getName().startsWith("AniUA:")))
                     for(Video v:c.getVideos()) if(v!=null && CatalogueOrder.matches(v.getTitle(),libraryQuery))
-                        rows.add(new Row(v.getTitle(),v.getTitle(),playable(v),()->select(v)));
+                        rows.add(new Row(v.getTitle(),v.getTitle(),playable(v),()->select(v),url(v)));
             }
             case VOICES -> {
                 var voices=new LinkedHashMap<String,Set<String>>();
@@ -239,7 +249,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
             }
             case EPISODES -> {
                 if(voice.isEmpty()) {
-                    for(Video v:videos()) rows.add(new Row(v.getTitle(),v.getTitle(),playable(v),()->select(v)));
+                    for(Video v:videos()) rows.add(new Row(v.getTitle(),v.getTitle(),playable(v),()->select(v),url(v)));
                 } else {
                     var grouped=new LinkedHashMap<String,List<Video>>();
                     for(Video v:videos()) if(v.getDub().equals(voice)) grouped.computeIfAbsent(v.getEpisode(),k->new ArrayList<>()).add(v);
@@ -252,7 +262,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
                             !playable.isEmpty(),()->{
                                 if(playable.size()==1) select(playable.get(0));
                                 else {episode=number;view=View.SOURCES;page=0;rebuildWidgets();}
-                            }));
+                            },playable.isEmpty()?"":url(playable.get(0))));
                     });
                 }
             }
@@ -261,11 +271,12 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
                 var urls=new HashSet<String>();
                 for(Video v:videos()) if(v.getDub().equals(voice) && v.getEpisode().equals(episode) && playable(v) && urls.add(v.getUrl())) {
                     String label="Серія "+episode+" · "+(v.getProvider().isBlank()?"Джерело "+(++n):v.getProvider());
-                    rows.add(new Row(label,label,true,()->select(v)));
+                    rows.add(new Row(label,label,true,()->select(v),url(v)));
                 }
             }
         }
     }
+    private static String url(Video v) {return v.getUrl()==null?"":v.getUrl();}
     private static boolean playable(Video v) {return v.getUrl()!=null && !v.getUrl().isBlank();}
     private void select(Video video) {
         Networking.INSTANCE.sendToServer(new PacketControlVideo(menu.getBlockEntity().getBlockPos(),"select",video.getUrl(),""));
@@ -273,13 +284,18 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
     private void refreshEntries() {
         if(construction) return;
         buildRows();
+        var playingRoot=screen();
+        String currentUrl=playingRoot==null?"":playingRoot.getCurrentVideoUrl();
         int pages=Math.max(1,(rows.size()+visibleRows-1)/visibleRows);
         page=Math.max(0,Math.min(page,pages-1));
         for(int i=0;i<entries.size();i++) {
             var button=entries.get(i);int n=page*visibleRows+i;
             button.visible=n<rows.size();
             if(button.visible) {
-                var row=rows.get(n);button.setMessage(Component.literal(row.label()));
+                var row=rows.get(n);
+                boolean current=!row.url().isBlank() && row.url().equals(currentUrl);
+                button.setMessage(Component.literal((current?"▶ ":"")+row.label()));
+                if(button instanceof CinemaButton cb) cb.selected=current;
                 button.active=row.enabled();button.setTooltip(Tooltip.create(Component.literal(row.hint())));
             }
         }
@@ -379,7 +395,6 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
                     preview != null && preview.valid() ? GOLD : 0xFF9D92);
 
         } else {
-            g.fill(leftPos+12,topPos+imageHeight-64,leftPos+imageWidth-12,topPos+imageHeight-63,0xFF48617A);
             boolean noPlayableVoice=detail() && view==View.EPISODES && !voice.isBlank()
                     && !rows.isEmpty() && rows.stream().noneMatch(Row::enabled);
             String line=detail() ? selected.getSeason()+" · "+(view==View.VOICES?"Вибери озвучку":voice)
@@ -392,31 +407,54 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
                     float scale=Math.min(w/(float)poster.width(),h/(float)poster.height());
                     int pw=(int)(poster.width()*scale),ph=(int)(poster.height()*scale);
                     g.blit(poster.texture(),leftPos+12+(w-pw)/2,topPos+100+(h-ph)/2,pw,ph,0,0,poster.width(),poster.height(),poster.width(),poster.height());
-                } else g.drawCenteredString(font,"?",leftPos+12+w/2,topPos+100+h/2-4,MUTED);
+                } else {
+                    String title=selected.getDisplayTitle();
+                    String initial=title==null||title.isBlank()?"?":title.substring(0,1).toUpperCase();
+                    g.pose().pushPose();
+                    g.pose().translate(leftPos+12+w/2f,topPos+100+h/2f-8,0);
+                    g.pose().scale(2f,2f,1f);
+                    g.drawCenteredString(font,initial,0,0,MUTED);
+                    g.pose().popPose();
+                }
             }
             if(rows.isEmpty()) {
                 String empty=loading?"Завантаження…":detail() && "Фільм".equals(selected.getSeason())
                         ? "Це фільм. AniUA не передав доступного відеопотоку для цього релізу."
                         : detail()?"У цьому релізі немає серій.":
                         view==View.LIBRARY?"Нічого не знайдено. Знайди аніме у вкладці AniUA.":status;
-                g.drawWordWrap(font,Component.literal(empty),leftPos+(detail()?76:12),topPos+103,imageWidth-(detail()?88:24),MUTED);
+                if(!empty.equals(line)) g.drawWordWrap(font,Component.literal(empty),leftPos+(detail()?76:12),topPos+103,imageWidth-(detail()?88:24),MUTED);
             }
             int pages=Math.max(1,(rows.size()+visibleRows-1)/visibleRows);
             g.drawCenteredString(font,(page+1)+" / "+pages+"  ·  "+rows.size()+" "+(view==View.EPISODES?"серій":"записів"),
-                    leftPos+imageWidth/2,topPos+imageHeight-80,MUTED);
+                    leftPos+imageWidth/2-20,topPos+imageHeight-104,MUTED);
+            // "Now playing" card: what is on the screen, its state, time and a progress bar.
             String name=screen==null || screen.getCurrentVideoUrl().isBlank()?tr("none").getString():screen.getCurrentVideoTitle();
             var display=screen==null?null:ClientVideoManager.getInstance().getDisplay(screen.getBlockPos());
-            text(g,Component.literal("Екран: " + name),12,imageHeight-59,GOLD,imageWidth-270);
-            text(g,tr(screen==null?"error.unloaded":screen.isPlaying()?"playing":screen.isStopped()?"stopped":"paused"),12,imageHeight-47,MUTED,imageWidth-270);
+            boolean isPlaying=screen!=null && screen.isPlaying(), isStopped=screen==null || screen.isStopped();
+            int stateColor=isPlaying?GOLD:isStopped?0xFF6B7885:0xFF6FA8DC;
+            int cardX=leftPos+12,cardY=topPos+imageHeight-84,cardW=imageWidth-24;
+            StarMenuPaint.round(g,cardX,cardY,cardW,44,5,0xFF243545);
+            StarMenuPaint.round(g,cardX,cardY,3,44,1,stateColor);
             long position=screen==null?0:screen.getPlaybackPositionMs();
             if(display!=null) {
                 long mediaTime=display.getPlaybackTime();
                 if(mediaTime>=0) position=mediaTime;
             }
             long duration=display==null?-1:display.getDuration();
-            text(g,Component.literal(formatTime(position)+" / "+(duration>0?formatTime(duration):"--:--")),imageWidth-262,imageHeight-55,TEXT,94);
-            text(g,Component.literal(display==null?"—":display.getVolume()+"%"),imageWidth-106,imageHeight-55,TEXT,34);
-            text(g,Component.literal("Глядачі: "+(viewerCount<0?"…":viewerCount)),imageWidth-196,imageHeight-75,TEXT,86);
+            String time=formatTime(position)+" / "+(duration>0?formatTime(duration):"--:--");
+            int timeWidth=font.width(time);
+            g.drawString(font,font.plainSubstrByWidth(name,Math.max(1,cardW-timeWidth-34)),cardX+11,cardY+7,GOLD,false);
+            g.drawString(font,time,cardX+cardW-9-timeWidth,cardY+7,TEXT,false);
+            String state=tr(screen==null?"error.unloaded":isPlaying?"playing":isStopped?"stopped":"paused").getString();
+            g.drawString(font,(isPlaying?"▶ ":isStopped?"■ ":"❚❚ ")+state,cardX+11,cardY+20,stateColor,false);
+            int barX=cardX+11,barY=cardY+34,barW=cardW-22;
+            g.fill(barX,barY,barX+barW,barY+4,0xFF34495C);
+            if(duration>0) g.fill(barX,barY,barX+(int)(barW*Math.max(0,Math.min(1,position/(double)duration))),barY+4,stateColor);
+            // Volume read-out sits between its two buttons.
+            int volumeX=leftPos+imageWidth-12-22-19;
+            g.drawCenteredString(font,display==null?"—":display.getVolume()+"%",volumeX,topPos+imageHeight-28,TEXT);
+            String viewers="Глядачі: "+(viewerCount<0?"…":viewerCount);
+            g.drawString(font,viewers,leftPos+imageWidth-36-font.width(viewers),topPos+13,MUTED,false);
         }
     }
     @Override public boolean keyPressed(int key,int scan,int modifiers) {
@@ -428,7 +466,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         return super.keyPressed(key,scan,modifiers);
     }
     @Override public boolean mouseScrolled(double x,double y,double delta) {
-        if(!construction && y>=topPos+100 && y<topPos+imageHeight-86) {
+        if(!construction && y>=topPos+100 && y<topPos+imageHeight-114) {
             page+=delta<0?1:-1;refreshEntries();return true;
         }
         return super.mouseScrolled(x,y,delta);
@@ -441,10 +479,11 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         renderBackground(g);super.render(g,mx,my,partialTick);renderTooltip(g,mx,my);
         if(!construction && !detail() && my>=topPos+80 && my<=topPos+96 && mx>=leftPos+12 && mx<leftPos+imageWidth-12)
             g.renderTooltip(font,font.split(Component.literal(status),imageWidth-30),mx,my);
-        if(!construction && detail() && mx>=leftPos+12 && mx<leftPos+70 && my>=topPos+100 && my<topPos+imageHeight-92
+        if(!construction && detail() && mx>=leftPos+12 && mx<leftPos+70 && my>=topPos+100 && my<topPos+imageHeight-114
                 && poster.texture()==null) g.renderTooltip(font,Component.literal(poster.status()),mx,my);
-        if(!construction && viewerCount>=0 && mx>=leftPos+imageWidth-196 && mx<leftPos+imageWidth-106
-                && my>=topPos+imageHeight-84 && my<topPos+imageHeight-64) {
+        int viewersWidth=font.width("Глядачі: "+(viewerCount<0?"…":viewerCount));
+        if(!construction && viewerCount>=0 && mx>=leftPos+imageWidth-36-viewersWidth && mx<leftPos+imageWidth-36
+                && my>=topPos+9 && my<topPos+23) {
             String names=viewerNames.isEmpty()?"Ніхто не дивиться зараз.":String.join(", ",viewerNames);
             g.renderTooltip(font,font.split(Component.literal(names),240),mx,my);
         }
