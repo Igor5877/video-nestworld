@@ -555,7 +555,8 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
             String name=screen==null || screen.getCurrentVideoUrl().isBlank()?tr("none").getString():screen.getCurrentVideoTitle();
             var display=screen==null?null:ClientVideoManager.getInstance().getDisplay(screen.getBlockPos());
             boolean isPlaying=screen!=null && screen.isPlaying(), isStopped=screen==null || screen.isStopped();
-            int stateColor=isPlaying?GOLD:isStopped?0xFF6B7885:0xFF6FA8DC;
+            // Fills ignore colours without an alpha channel (GOLD is an RGB text colour), so force it opaque.
+            int stateColor=0xFF000000|(isPlaying?GOLD:isStopped?0x6B7885:0x6FA8DC);
             int cardX=leftPos+12,cardY=topPos+imageHeight-84,cardW=imageWidth-24;
             StarMenuPaint.round(g,cardX,cardY,cardW,44,5,0xFF243545);
             StarMenuPaint.round(g,cardX,cardY,3,44,1,stateColor);
