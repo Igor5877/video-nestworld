@@ -166,12 +166,20 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
         float unit = Math.min(cols, rows);
         float cx = cols * 0.5f, cy = 1f - rows * 0.5f - unit * 0.06f;
         float radius = unit * 0.24f, thickness = unit * 0.022f;
-        int segments = 40;
+        // The ring is one strip of touching quads (overlapping ones would z-fight and flicker).
+        Tesselator tesselator = Tesselator.getInstance();
+        BufferBuilder builder = tesselator.getBuilder();
+        builder.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
+        int segments = 64;
         for (int i = 0; i < segments; i++) {
-            double angle = i * Math.PI * 2.0 / segments;
-            float x = cx + (float) Math.cos(angle) * radius, y = cy + (float) Math.sin(angle) * radius;
-            drawColorQuad(matrix, x - thickness, y - thickness, x + thickness, y + thickness, 0.906f, 0.745f, 0.439f, 1f);
+            double a0 = i * Math.PI * 2.0 / segments, a1 = (i + 1) * Math.PI * 2.0 / segments;
+            float inner = radius - thickness, outer = radius + thickness;
+            builder.vertex(matrix, cx + (float) Math.cos(a0) * inner, cy + (float) Math.sin(a0) * inner, 0).color(0.906f, 0.745f, 0.439f, 1f).endVertex();
+            builder.vertex(matrix, cx + (float) Math.cos(a0) * outer, cy + (float) Math.sin(a0) * outer, 0).color(0.906f, 0.745f, 0.439f, 1f).endVertex();
+            builder.vertex(matrix, cx + (float) Math.cos(a1) * outer, cy + (float) Math.sin(a1) * outer, 0).color(0.906f, 0.745f, 0.439f, 1f).endVertex();
+            builder.vertex(matrix, cx + (float) Math.cos(a1) * inner, cy + (float) Math.sin(a1) * inner, 0).color(0.906f, 0.745f, 0.439f, 1f).endVertex();
         }
+        tesselator.end();
         RenderSystem.polygonOffset(0.0F, 0.0F);
         RenderSystem.disablePolygonOffset();
         RenderSystem.disableBlend();
@@ -185,7 +193,7 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
     private void centeredText(PoseStack poseStack, MultiBufferSource buffer, net.minecraft.client.gui.Font font, String text,
                               float x, float y, float scale, int color) {
         poseStack.pushPose();
-        poseStack.translate(x - font.width(text) * scale / 2f, y - 4f * scale, -0.003f);
+        poseStack.translate(x - font.width(text) * scale / 2f, y - 4f * scale, 0.006f);   // the screen surface faces +z: put the text in front of it
         poseStack.scale(scale, scale, 1f);
         font.drawInBatch(text, 0f, 0f, color, false, poseStack.last().pose(), buffer,
                 net.minecraft.client.gui.Font.DisplayMode.NORMAL, 0, LightTexture.FULL_BRIGHT);
