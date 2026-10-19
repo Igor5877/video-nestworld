@@ -72,6 +72,9 @@ public final class FfmpegDisplay extends Display {
     private long pendingSyncUs = -1, seekTargetUs = -1;
     private long startedWallNanos, mediaBaseUs, frozenUs, lastMediaUs, lastShownPtsUs;
     private long firstFrameWaitNanos, lastDiagnosticNanos, lastRenderNanos;
+    // Statistics for video.debug_stats (written by the decoder thread, read by the client tick).
+    private volatile long statVideoFrames, statAudioChunks, statBlockedVideoNanos, statLastVideoPts, statLastAudioPts;
+    private long statWallNanos, statMediaUs, statVideoFramesSeen, statAudioChunksSeen, statBlockedSeen;
     private int baseVolume = 100;
     private double spatial = 1.0;
 
@@ -137,6 +140,7 @@ public final class FfmpegDisplay extends Display {
             VFrame frame;
             synchronized (lock) {
                 int waited = 0;
+                long blockedFrom = System.nanoTime();
                 while (!closed && frames.size() >= frameLimit && generation >= expectedGeneration) {
                     lock.wait(50);
                     // Streams often carry the audio a second or more behind the video. If we stop reading while the
@@ -155,6 +159,7 @@ public final class FfmpegDisplay extends Display {
                         }
                     }
                 }
+                statBlockedVideoNanos += System.nanoTime() - blockedFrom;
                 if (closed || generation < expectedGeneration) return;
                 frame = pool.isEmpty() ? null : pool.remove(pool.size() - 1);
             }
@@ -175,6 +180,7 @@ public final class FfmpegDisplay extends Display {
             }
             dst.flip();
             frame.width = width; frame.height = height; frame.ptsUs = ptsUs; frame.generation = generation;
+            statVideoFrames++; statLastVideoPts = ptsUs;
             synchronized (lock) {
                 if (closed || generation < expectedGeneration) { pool.add(frame); return; }
                 frames.add(frame);
@@ -183,6 +189,7 @@ public final class FfmpegDisplay extends Display {
         }
 
         @Override public void onAudio(ByteBuffer pcm, long ptsUs, int generation) throws InterruptedException {
+            statAudioChunks++; statLastAudioPts = ptsUs;
             AlAudio output = audio;
             if (output != null && output.isAvailable()) output.offer(pcm, ptsUs, generation);
         }
@@ -335,6 +342,31 @@ public final class FfmpegDisplay extends Display {
         if (started && System.nanoTime() - lastRenderNanos > 150_000_000L) discardDueFrames();
         watchdog();
         diagnose();
+        stats();
+    }
+
+    private void stats() {
+        if (!NestworldConfig.DEBUG_STATS.get() || !started) { statWallNanos = 0; return; }
+        long now = System.nanoTime();
+        if (statWallNanos == 0) {
+            statWallNanos = now; statMediaUs = mediaTimeUs(); statVideoFramesSeen = statVideoFrames;
+            statAudioChunksSeen = statAudioChunks; statBlockedSeen = statBlockedVideoNanos; return;
+        }
+        if (now - statWallNanos < 2_000_000_000L) return;
+        long wall = (now - statWallNanos) / 1000L, media = mediaTimeUs();
+        int queued; synchronized (lock) { queued = frames.size(); }
+        AlAudio output = audio;
+        LOGGER.info("Nestworld Video stats: clock x{} (media +{}ms in {}ms wall), decoded {} fps / {} audio chunks, decoder blocked on video {}ms, "
+                        + "frames {}/{} (cap {}), audio queued {}ms {}, decoder a/v pts skew {}ms (audio - video), paused={}",
+                String.format(java.util.Locale.ROOT, "%.2f", (media - statMediaUs) / (double) Math.max(1, wall)),
+                (media - statMediaUs) / 1000, wall / 1000,
+                String.format(java.util.Locale.ROOT, "%.1f", (statVideoFrames - statVideoFramesSeen) * 1e6 / Math.max(1, wall)),
+                statAudioChunks - statAudioChunksSeen, (statBlockedVideoNanos - statBlockedSeen) / 1_000_000L,
+                queued, frameLimit, frameCap,
+                output == null ? -1 : output.queuedUs() / 1000, output == null ? "none" : output.isPlaying() ? "playing" : "STOPPED",
+                (statLastAudioPts - statLastVideoPts) / 1000, !playing);
+        statWallNanos = now; statMediaUs = media; statVideoFramesSeen = statVideoFrames;
+        statAudioChunksSeen = statAudioChunks; statBlockedSeen = statBlockedVideoNanos;
     }
 
     private void applySync() {

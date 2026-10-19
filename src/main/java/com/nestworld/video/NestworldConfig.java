@@ -12,7 +12,7 @@ public final class NestworldConfig {
     public static final ForgeConfigSpec.ConfigValue<String> DECODER;
     public static final ForgeConfigSpec.BooleanValue SPATIAL_AUDIO;
     public static final ForgeConfigSpec.BooleanValue MIPMAPS;
-    public static final ForgeConfigSpec.BooleanValue AUTO_VSYNC;
+    public static final ForgeConfigSpec.BooleanValue AUTO_VSYNC, DEBUG_STATS;
     public static final ForgeConfigSpec.IntValue SPATIAL_SOFTNESS;
     public static final ForgeConfigSpec.IntValue SHARPNESS;
     public static final ForgeConfigSpec.IntValue SHADER_TINT_RED, SHADER_TINT_GREEN, SHADER_TINT_BLUE;
@@ -53,6 +53,10 @@ public final class NestworldConfig {
                 .comment("Temporarily enable VSync while a video screen is playing in front of you, to avoid horizontal tearing",
                         "bands at a high frame rate. Your own VSync setting is restored afterwards and never overwritten.")
                 .define("auto_vsync", true);
+        DEBUG_STATS = builder
+                .comment("Write playback statistics (clock speed, queues, audio/video skew, decoder rate) to the log every 2 s.",
+                        "For troubleshooting stutter and freezes; leave off normally.")
+                .define("debug_stats", false);
         MIPMAPS = builder
                 .comment("FFmpeg decoder only: build mipmaps with anisotropic filtering so distant screens do not shimmer.")
                 .define("mipmaps", true);
