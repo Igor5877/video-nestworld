@@ -197,6 +197,31 @@ public class GuiSelfTest {
                 if (shots == 3 && ticks == waitUntil) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
                 return;
             }
+            if (Boolean.getBoolean("nestworldvideo.guisodium")) {
+                if (ticks == 50) {
+                    try {
+                        var cls = Class.forName("me.jellysquid.mods.sodium.client.gui.SodiumOptionsGUI");
+                        mc.setScreen((net.minecraft.client.gui.screens.Screen) cls.getConstructor(net.minecraft.client.gui.screens.Screen.class).newInstance((Object) null));
+                    } catch (Throwable t) { failure = t; }
+                }
+                if (ticks == 90) capture = 1;
+                if (ticks == 100) {   // switch to our page by clicking its tab
+                    var s = mc.screen;
+                    try {
+                        var field = s.getClass().getDeclaredField("pages");
+                        field.setAccessible(true);
+                        for (Object page : (java.util.List<?>) field.get(s)) {
+                            var op = (me.jellysquid.mods.sodium.client.gui.options.OptionPage) page;
+                            System.out.println("PAGE: " + op.getName().getString());
+                            
+                        }
+                    } catch (Throwable t) { System.out.println("no pages field: " + t); }
+                }
+                if (ticks == 105) { mc.screen.mouseMoved(111, 166); mc.screen.mouseClicked(111, 166, 0); mc.screen.mouseReleased(111, 166, 0); }
+                if (ticks == 125) capture = 2;
+                if (ticks == 140) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
+                return;
+            }
             if (Boolean.getBoolean("nestworldvideo.guisettings")) {
                 if (ticks == 50) mc.setScreen(new com.nestworld.video.client.gui.NestworldSettingsScreen(null));
                 if (ticks == 70) capture = 1;

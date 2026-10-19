@@ -23,6 +23,8 @@ public final class SettingsEntryPoints {
         String name = screen.getClass().getName();
         boolean sodium = name.endsWith("SodiumOptionsGUI") || name.endsWith("EmbeddiumOptionsGUI");
         if (!(screen instanceof VideoSettingsScreen) && !sodium) return;
+        // Embeddium shows our own page among its tabs; the button is only the fallback if that did not register.
+        if (sodium && com.nestworld.video.client.integration.EmbeddiumOptionsState.registered()) return;
         var open = new CinemaButton(Component.literal("Nestworld Video ⚙"), 0, 0, 120,
                 b -> Minecraft.getInstance().setScreen(new NestworldSettingsScreen(screen)));
         open.centered = true;

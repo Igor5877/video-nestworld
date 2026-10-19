@@ -64,6 +64,7 @@ minecraft {
             if (project.hasProperty('ffmpegtest')) property 'nestworldvideo.ffmpegtest', 'true'
             if (project.hasProperty('guitest')) property 'nestworldvideo.guitest', 'true'
             if (project.hasProperty('guiscale')) property 'nestworldvideo.guiscale', project.property('guiscale')
+            if (project.hasProperty('guisodium')) property 'nestworldvideo.guisodium', 'true'
             if (project.hasProperty('guisettings')) property 'nestworldvideo.guisettings', 'true'
             if (project.hasProperty('guiend')) property 'nestworldvideo.guiend', 'true'
             if (project.hasProperty('guirestart')) property 'nestworldvideo.guirestart', 'true'
@@ -141,6 +142,11 @@ repositories {
     maven {
         url "https://www.cursemaven.com"
     }
+    // Embeddium's option API: the mod adds a "Nestworld Video" page to its video settings (optional at runtime).
+    maven {
+        url "https://api.modrinth.com/maven"
+        content { includeGroup "maven.modrinth" }
+    }
     // maven {
     maven {
         url "https://www.cursemaven.com"
@@ -158,6 +164,7 @@ dependencies {
     }
     // FFmpeg decoder API. compileOnly on purpose: at runtime these jars are downloaded once into the game
     // directory and loaded by an isolated class loader (see com.nestworld.video.ffmpeg.FfmpegLibs).
+    compileOnly(fg.deobf("maven.modrinth:embeddium:0.3.31+mc1.20.1")) { transitive = false }
     compileOnly('org.bytedeco:javacv:1.5.10') { transitive = false }
     compileOnly 'org.bytedeco:javacpp:1.5.10'
     compileOnly('org.bytedeco:ffmpeg:6.1.1-1.5.10') { transitive = false }

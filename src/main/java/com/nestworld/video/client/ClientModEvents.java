@@ -28,6 +28,9 @@ public class ClientModEvents {
         // This is a good place to enqueue client-specific tasks
         event.enqueueWork(() -> {
             MenuScreens.register(ModBlocks.VIDEO_SCREEN_MENU.get(), VideoScreenScreen::new);
+            // Embeddium's video settings get their own "Nestworld Video" page.
+            if (net.minecraftforge.fml.ModList.get().isLoaded("embeddium"))
+                com.nestworld.video.client.integration.EmbeddiumOptions.register();
             // Mods list -> Nestworld Video -> Config opens the same settings screen.
             net.minecraftforge.fml.ModLoadingContext.get().registerExtensionPoint(
                     net.minecraftforge.client.ConfigScreenHandler.ConfigScreenFactory.class,
