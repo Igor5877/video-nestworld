@@ -245,8 +245,16 @@ public class GuiSelfTest {
                 var be = (VideoScreenBlockEntity) mc.level.getBlockEntity(ORIGIN);
                 if (Boolean.getBoolean("nestworldvideo.guisession")) {   // pretend the local player owns an active protected session
                     try {
-                        var owner = VideoScreenBlockEntity.class.getDeclaredField("sessionOwner"); owner.setAccessible(true); owner.set(be, mc.player.getUUID());
-                        var name = VideoScreenBlockEntity.class.getDeclaredField("sessionOwnerName"); name.setAccessible(true); name.set(be, "Dev");
+                        boolean foreign = Boolean.getBoolean("nestworldvideo.guilocked");   // somebody else owns it and is online
+                        java.util.UUID ownerId = foreign ? java.util.UUID.nameUUIDFromBytes("friend".getBytes()) : mc.player.getUUID();
+                        if (foreign) {
+                            mc.player.setPermissionLevel(0);   // an ordinary player: operators are exempt from the protection
+                            var map = net.minecraft.client.multiplayer.ClientPacketListener.class.getDeclaredField("playerInfoMap"); map.setAccessible(true);
+                            @SuppressWarnings("unchecked") var infos = (java.util.Map<java.util.UUID, net.minecraft.client.multiplayer.PlayerInfo>) map.get(mc.getConnection());
+                            infos.put(ownerId, new net.minecraft.client.multiplayer.PlayerInfo(new com.mojang.authlib.GameProfile(ownerId, "Друг"), false));
+                        }
+                        var owner = VideoScreenBlockEntity.class.getDeclaredField("sessionOwner"); owner.setAccessible(true); owner.set(be, ownerId);
+                        var name = VideoScreenBlockEntity.class.getDeclaredField("sessionOwnerName"); name.setAccessible(true); name.set(be, foreign ? "Друг" : "Dev");
                         var stopped = VideoScreenBlockEntity.class.getDeclaredField("stopped"); stopped.setAccessible(true); stopped.set(be, false);
                     } catch (ReflectiveOperationException e) { throw new AssertionError(e); }
                 }
