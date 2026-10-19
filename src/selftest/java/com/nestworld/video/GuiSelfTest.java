@@ -49,6 +49,13 @@ public class GuiSelfTest {
         return c;
     }
 
+    static int field(Object screen, String name) throws ReflectiveOperationException {
+        for (Class<?> c = screen.getClass(); c != null; c = c.getSuperclass()) {
+            try { var f = c.getDeclaredField(name); f.setAccessible(true); return f.getInt(screen); } catch (NoSuchFieldException ignored) { }
+        }
+        throw new NoSuchFieldException(name);
+    }
+
     static void click(String text) {
         var mc = Minecraft.getInstance();
         var b = mc.screen.children().stream().filter(e -> e instanceof Button bt && bt.getMessage().getString().equals(text)).map(e -> (Button) e).findFirst().orElseThrow(() -> new AssertionError("no button " + text));
@@ -98,9 +105,20 @@ public class GuiSelfTest {
             if (ticks == 70) capture = 1;                       // episode list
             if (ticks == 90) click("Пошук AniUA");
             if (ticks == 110) capture = 2;                      // search tab
-            if (ticks == 120) click("Екран");
-            if (ticks == 140) capture = 3;                      // build tab
-            if (ticks == 160) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
+            if (ticks == 120) {                                 // click "↩ До списку серій" on the now-playing card
+                var scr = mc.screen;
+                int left = field(scr, "leftPos"), top = field(scr, "topPos"), w = field(scr, "imageWidth"), h = field(scr, "imageHeight");
+                double x = left + w - 12 - 30, y = top + h - 84 + 23;
+                if (!scr.mouseClicked(x, y, 0)) throw new AssertionError("link click not handled");
+            }
+            if (ticks == 140) {
+                boolean back = mc.screen.children().stream().anyMatch(e -> e instanceof Button b && b.getMessage().getString().contains("Серія 1"));
+                if (!back) throw new AssertionError("did not return to the episode list");
+                capture = 3;                                    // back on the episode list
+            }
+            if (ticks == 160) click("Екран");
+            if (ticks == 180) capture = 4;                      // build tab
+            if (ticks == 200) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
         } catch (Throwable t) { failure = t; }
     }
 

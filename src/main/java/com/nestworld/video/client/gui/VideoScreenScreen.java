@@ -319,6 +319,63 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         var root=screen();var display=root==null?null:ClientVideoManager.getInstance().getDisplay(root.getBlockPos());
         if(display!=null) display.setVolume(display.getVolume()+delta);
     }
+    // Card geometry shared by drawing, hit-testing and tooltips (relative to the card's top-left corner).
+    private int cardX() { return leftPos+12; }
+    private int cardY() { return topPos+imageHeight-84; }
+    private int cardW() { return imageWidth-24; }
+    private boolean overBar(double mx,double my) {
+        return mx>=cardX()+8 && mx<cardX()+cardW()-8 && my>=cardY()+30 && my<cardY()+43;
+    }
+    /** Position of the playing video in ms as the viewer's own decoder sees it. */
+    private long currentPosition() {
+        var root=screen();
+        if(root==null) return 0;
+        var display=ClientVideoManager.getInstance().getDisplay(root.getBlockPos());
+        long position=root.getPlaybackPositionMs();
+        if(display!=null) { long media=display.getPlaybackTime(); if(media>=0) position=media; }
+        return position;
+    }
+    private long currentDuration() {
+        var root=screen();
+        var display=root==null?null:ClientVideoManager.getInstance().getDisplay(root.getBlockPos());
+        return display==null?-1:display.getDuration();
+    }
+    private double barFraction(double mx) {
+        double inner=cardW()-22;
+        return Math.max(0,Math.min(1,(mx-(cardX()+11))/inner));
+    }
+    private boolean canSeekOnBar() {
+        var root=screen();
+        return root!=null && !root.getCurrentVideoUrl().isBlank() && !root.isStopped() && currentDuration()>0;
+    }
+    /** The release/voice list that contains the video now on the screen, or null when it is not in the catalogue. */
+    private Category categoryOfCurrent(Video[] found) {
+        var root=screen();
+        String url=root==null?"":root.getCurrentVideoUrl();
+        if(url.isBlank()) return null;
+        for(Category c:categories()) {
+            if(c.getVideos()==null) continue;
+            for(Video v:c.getVideos()) if(v!=null && url.equals(v.getUrl())) { if(found!=null) found[0]=v; return c; }
+        }
+        return null;
+    }
+    /** Back to the episode list of whatever is playing: same release, same voice, on the page that holds it. */
+    private void jumpToCurrent() {
+        Video[] video=new Video[1];
+        Category category=categoryOfCurrent(video);
+        if(category==null) return;
+        construction=false;
+        selected=category;
+        voice=video[0].getDub();
+        if(origin==View.SEARCH && results.isEmpty()) origin=View.LIBRARY;
+        view=View.EPISODES;
+        page=0;
+        status="";
+        rebuildWidgets();
+        String url=video[0].getUrl();
+        for(int i=0;i<rows.size();i++) if(url.equals(rows.get(i).url())) { page=i/Math.max(1,visibleRows); break; }
+        refreshEntries();
+    }
     private void seek(long deltaMs) {
         var root=screen();
         if(root!=null) Networking.INSTANCE.sendToServer(new PacketControlVideo(root.getBlockPos(),"seek_by",deltaMs));
@@ -447,9 +504,21 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
             g.drawString(font,time,cardX+cardW-9-timeWidth,cardY+7,TEXT,false);
             String state=tr(screen==null?"error.unloaded":isPlaying?"playing":isStopped?"stopped":"paused").getString();
             g.drawString(font,(isPlaying?"▶ ":isStopped?"■ ":"❚❚ ")+state,cardX+11,cardY+20,stateColor,false);
-            int barX=cardX+11,barY=cardY+34,barW=cardW-22;
-            g.fill(barX,barY,barX+barW,barY+4,0xFF34495C);
-            if(duration>0) g.fill(barX,barY,barX+(int)(barW*Math.max(0,Math.min(1,position/(double)duration))),barY+4,stateColor);
+            int barX=cardX+11,barY=cardY+33,barW=cardW-22;
+            boolean hoverBar=overBar(mouseX,mouseY) && canSeekOnBar();
+            StarMenuPaint.round(g,barX,barY,barW,hoverBar?6:4,2,0xFF34495C);
+            if(duration>0) {
+                int filled=(int)(barW*Math.max(0,Math.min(1,position/(double)duration)));
+                if(filled>0) StarMenuPaint.round(g,barX,barY,Math.max(3,filled),hoverBar?6:4,2,stateColor);
+                if(hoverBar) StarMenuPaint.round(g,barX+filled-3,barY-2,6,10,2,0xFFF7DE9D);
+            }
+            if(categoryOfCurrent(null)!=null) {
+                String link="↩ До списку серій";
+                int linkWidth=font.width(link);
+                boolean hoverLink=mouseX>=cardX+cardW-12-linkWidth && mouseX<cardX+cardW-8 && mouseY>=cardY+17 && mouseY<cardY+30;
+                g.drawString(font,link,cardX+cardW-10-linkWidth,cardY+19,hoverLink?0xFFF7DE9D:GOLD,false);
+                if(hoverLink) g.fill(cardX+cardW-10-linkWidth,cardY+29,cardX+cardW-10,cardY+30,0xFFF7DE9D);
+            }
             // Volume read-out sits between its two buttons.
             int volumeX=leftPos+imageWidth-12-22-19;
             g.drawCenteredString(font,display==null?"—":display.getVolume()+"%",volumeX,topPos+imageHeight-28,TEXT);
@@ -465,6 +534,20 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         }
         return super.keyPressed(key,scan,modifiers);
     }
+    @Override public boolean mouseClicked(double mx,double my,int button) {
+        if(!construction && button==0) {
+            if(overBar(mx,my) && canSeekOnBar()) {
+                seek((long)(barFraction(mx)*currentDuration())-currentPosition());
+                return true;
+            }
+            if(categoryOfCurrent(null)!=null && my>=cardY()+4 && my<cardY()+30 && mx>=cardX()+8 && mx<cardX()+cardW()-8
+                    && (my<cardY()+16 || mx>=cardX()+cardW()-12-font.width("↩ До списку серій"))) {
+                jumpToCurrent();
+                return true;
+            }
+        }
+        return super.mouseClicked(mx,my,button);
+    }
     @Override public boolean mouseScrolled(double x,double y,double delta) {
         if(!construction && y>=topPos+100 && y<topPos+imageHeight-114) {
             page+=delta<0?1:-1;refreshEntries();return true;
@@ -477,6 +560,10 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
     }
     @Override public void render(GuiGraphics g,int mx,int my,float partialTick) {
         renderBackground(g);super.render(g,mx,my,partialTick);renderTooltip(g,mx,my);
+        if(!construction && overBar(mx,my) && canSeekOnBar())
+            g.renderTooltip(font,Component.literal(formatTime((long)(barFraction(mx)*currentDuration()))+" — клік, щоб перемотати"),mx,my);
+        else if(!construction && categoryOfCurrent(null)!=null && my>=cardY()+4 && my<cardY()+16 && mx>=cardX()+8 && mx<cardX()+cardW()-110)
+            g.renderTooltip(font,Component.literal("Перейти до списку серій цього відео"),mx,my);
         if(!construction && !detail() && my>=topPos+80 && my<=topPos+96 && mx>=leftPos+12 && mx<leftPos+imageWidth-12)
             g.renderTooltip(font,font.split(Component.literal(status),imageWidth-30),mx,my);
         if(!construction && detail() && mx>=leftPos+12 && mx<leftPos+70 && my>=topPos+100 && my<topPos+imageHeight-114
