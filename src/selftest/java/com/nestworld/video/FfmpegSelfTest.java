@@ -31,7 +31,7 @@ public class FfmpegSelfTest {
     static long start = System.nanoTime(), playStart;
     static volatile Throwable failure;
     static boolean sawFrame;
-    static final String URL = System.getProperty("nestworldvideo.testurl", "http://localhost:8765/smpte.m3u8");
+    static final String URL = System.getProperty("nestworldvideo.testurl", "file:///tmp/claude-0/spike/media/smpte.m3u8");
 
     @SubscribeEvent public static void tick(TickEvent.ClientTickEvent event) {
         if (!Boolean.getBoolean("nestworldvideo.ffmpegtest") || event.phase != TickEvent.Phase.END) return;
