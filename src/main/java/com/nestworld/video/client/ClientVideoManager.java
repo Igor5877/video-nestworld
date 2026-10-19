@@ -21,6 +21,8 @@ public class ClientVideoManager {
     private final Map<BlockPos, Long> lastViewerReports = new ConcurrentHashMap<>();
     private final Map<BlockPos, Long> lastHistoryRecords = new ConcurrentHashMap<>();
     /** Screens for which an end-of-video report was already sent for the url they are playing. */
+    /** Per screen: when the decoder was last found out of step, and when it was last pulled back. */
+    private final Map<BlockPos, long[]> driftState = new ConcurrentHashMap<>();
     private final Map<BlockPos, String> lastEndReports = new ConcurrentHashMap<>();
     /** Announcement of the next episode, shown a few seconds before the current one ends. */
     public record NextUp(BlockPos pos, int seconds, String title) {}
@@ -55,6 +57,7 @@ public class ClientVideoManager {
     public void stopPlaying(BlockPos pos) {
         reportViewer(pos, false);
         lastEndReports.remove(pos);
+        driftState.remove(pos);
         Display display = activeDisplays.remove(pos);
         if (display != null) {
             display.release();
@@ -214,6 +217,7 @@ public class ClientVideoManager {
                     if (next != null) announce = new NextUp(pos, (int) Math.ceil((duration - time) / 1000.0), next.getTitle());
                 }
             }
+            if (current != null) correctDrift(pos, screen, current, mc.level.getGameTime());
             Long lastReport = lastViewerReports.get(pos);
             if (lastReport == null || now - lastReport >= 100) {
                 reportViewer(pos, true);
@@ -251,6 +255,32 @@ public class ClientVideoManager {
         }
         nextUp = announce;
         AutoVsync.update(watching);
+    }
+
+    /**
+     * Every viewer opens its own stream and a slow start leaves it behind the others for good. Compare the decoder with
+     * the screen's shared timeline (game clock) and pull it back with a seek when it is clearly off.
+     */
+    private void correctDrift(BlockPos pos, VideoScreenBlockEntity screen, Display display, long gameTime) {
+        long[] state = driftState.computeIfAbsent(pos, k -> new long[]{0, 0, 0});   // {off-since tick, last seek tick, last log tick}
+        long expected = screen.getTimelinePositionMs(), actual = display.getPlaybackTime();
+        if (expected < 0 || actual < 0 || !screen.isPlaying() || !display.isPlaying() || display.isBuffering() || display.getDuration() <= 0) {
+            state[0] = 0; return;
+        }
+        long drift = actual - expected;
+        if (NestworldConfig.DEBUG_STATS.get() && gameTime - state[2] >= 40) {
+            state[2] = gameTime;
+            com.mojang.logging.LogUtils.getLogger().info("Nestworld Video sync: this player is {}ms {} the shared timeline ({}ms vs {}ms)",
+                    Math.abs(drift), drift < 0 ? "BEHIND" : "ahead of", actual, expected);
+        }
+        if (Math.abs(drift) < 2000) { state[0] = 0; return; }
+        if (state[0] == 0) state[0] = gameTime;
+        // Off for a second and not corrected in the last 15 s (a seek takes a moment to land).
+        if (gameTime - state[0] >= 20 && gameTime - state[1] >= 300) {
+            state[1] = gameTime; state[0] = 0;
+            com.mojang.logging.LogUtils.getLogger().info("Nestworld Video: re-syncing with the other viewers ({}ms off)", drift);
+            display.syncPosition(expected);
+        }
     }
 
     private static java.util.List<com.nestworld.video.Category> categories() {

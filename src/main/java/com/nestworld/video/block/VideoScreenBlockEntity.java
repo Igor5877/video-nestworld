@@ -255,6 +255,14 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         refreshPlaybackPosition();
         return playbackPositionMs;
     }
+    /**
+     * Where the shared timeline of this screen is right now, derived from the game clock only (not from this client's
+     * decoder), or -1 when paused/stopped. Every viewer computes the same value, so it is what decoders are held to.
+     */
+    public long getTimelinePositionMs() {
+        if (!isPlaying || level == null || playbackStartedTick == Long.MIN_VALUE) return -1;
+        return Math.max(0, (level.getGameTime() - playbackStartedTick) * 50L);
+    }
     public long getPlaybackServerGameTime() {
         return level == null ? 0 : level.getGameTime();
     }
