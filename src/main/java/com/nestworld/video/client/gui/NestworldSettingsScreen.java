@@ -73,7 +73,7 @@ public final class NestworldSettingsScreen extends Screen {
         slider("Луна приміщення", cellW, 100, 0, NestworldConfig.ACOUSTICS_REVERB::get, NestworldConfig.ACOUSTICS_REVERB::set,
                 "0 — лише приглушення стінами. Звукова доріжка вже може містити власну луну.");
         choice("Якість акустики", cellW, () -> switch (NestworldConfig.ACOUSTICS_QUALITY.get()) { case 1 -> "Швидка"; case 3 -> "Детальна"; default -> "Збалансована"; },
-                () -> NestworldConfig.ACOUSTICS_QUALITY.set(NestworldConfig.ACOUSTICS_QUALITY.get() % 3 + 1),
+                () -> safely(() -> NestworldConfig.ACOUSTICS_QUALITY.set(NestworldConfig.ACOUSTICS_QUALITY.get() % 3 + 1)),
                 "Кількість променів і відбиттів. Детальна точніша, але важча для процесора.");
         toggle("Авто-VSync біля екрана", cellW, NestworldConfig.AUTO_VSYNC,
                 "Вмикає вертикальну синхронізацію, лише коли ви дивитеся на екран, щоб не було смуг. Ваше налаштування не змінюється.");
@@ -121,21 +121,34 @@ public final class NestworldSettingsScreen extends Screen {
         Supplier<String> text = () -> value.get() ? "Увімкнено" : "Вимкнено";
         CinemaButton[] self = new CinemaButton[1];
         self[0] = new CinemaButton(Component.literal(text.get()), 0, 0, w, b -> {
-            value.set(!value.get()); self[0].setMessage(Component.literal(text.get())); self[0].selected = value.get();
+            safely(() -> value.set(!value.get())); self[0].setMessage(Component.literal(text.get())); self[0].selected = value.get();
         });
         self[0].selected = value.get();
         add(label, self[0], hint);
     }
     private void slider(String label, int w, int max, int mark, IntSupplier get, IntConsumer set, String hint) {
-        add(label, new CinemaSlider(0, 0, w, max, mark, get, v -> set.accept(Math.max(0, Math.min(max, v)))), hint);
+        add(label, new CinemaSlider(0, 0, w, max, mark, get, v -> safely(() -> set.accept(Math.max(0, Math.min(max, v)))), true), hint);
+    }
+    /**
+     * Forge saves the config file on every set while its file watcher may reload it on another thread; if the two collide
+     * the set throws a ConcurrentModificationException. Retry once instead of crashing the game.
+     */
+    private static void safely(Runnable write) {
+        try { write.run(); }
+        catch (java.util.ConcurrentModificationException first) {
+            try { Thread.sleep(60); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            try { write.run(); }
+            catch (java.util.ConcurrentModificationException second) { com.mojang.logging.LogUtils.getLogger().warn("Nestworld Video: the setting could not be saved right now, try again"); }
+        }
     }
     private static void cycleString(net.minecraftforge.common.ForgeConfigSpec.ConfigValue<String> value, List<String> options) {
-        value.set(options.get((options.indexOf(value.get()) + 1) % options.size()));
+        safely(() -> value.set(options.get((options.indexOf(value.get()) + 1) % options.size())));
     }
     private static void cycleInt(net.minecraftforge.common.ForgeConfigSpec.IntValue value, int[] options) {
         int next = options[0];
         for (int i = 0; i < options.length; i++) if (options[i] == value.get()) next = options[(i + 1) % options.length];
-        value.set(next);
+        int chosen = next;
+        safely(() -> value.set(chosen));
     }
 
     @Override public boolean mouseScrolled(double x, double y, double delta) {

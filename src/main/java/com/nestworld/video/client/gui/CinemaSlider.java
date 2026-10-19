@@ -16,22 +16,37 @@ public final class CinemaSlider extends AbstractWidget {
     /** Value that is drawn as a small tick on the track (e.g. 100% = original loudness). */
     private final int mark;
 
+    /**
+     * When set, the value is only handed over when the mouse is released. Used for sliders that write a config file:
+     * a write for every pixel of a drag races with Forge's config file watcher (it reloads the file on another thread)
+     * and can crash with a ConcurrentModificationException.
+     */
+    private final boolean commitOnRelease;
+    private Integer pending;
+
     public CinemaSlider(int x, int y, int width, int max, int mark, IntSupplier value, IntConsumer onChange) {
+        this(x, y, width, max, mark, value, onChange, false);
+    }
+
+    public CinemaSlider(int x, int y, int width, int max, int mark, IntSupplier value, IntConsumer onChange, boolean commitOnRelease) {
         super(x, y, width, 20, Component.empty());
-        this.max = max; this.mark = mark; this.value = value; this.onChange = onChange;
+        this.max = max; this.mark = mark; this.value = value; this.onChange = onChange; this.commitOnRelease = commitOnRelease;
     }
 
     private void apply(double mouseX) {
         double fraction = Math.max(0, Math.min(1, (mouseX - (getX() + 3)) / (double) (width - 6)));
         int target = (int) Math.round(fraction * max / 5.0) * 5;
-        onChange.accept(target);
+        if (commitOnRelease) pending = target; else onChange.accept(target);
     }
     @Override public void onClick(double mouseX, double mouseY) { apply(mouseX); }
     @Override protected void onDrag(double mouseX, double mouseY, double dx, double dy) { apply(mouseX); }
+    @Override public void onRelease(double mouseX, double mouseY) {
+        if (pending != null) { int target = pending; pending = null; onChange.accept(target); }
+    }
     @Override public void playDownSound(net.minecraft.client.sounds.SoundManager manager) {}
 
     @Override protected void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        int v = Math.max(0, Math.min(max, value.getAsInt()));
+        int v = Math.max(0, Math.min(max, pending != null ? pending : value.getAsInt()));
         int trackY = getY() + 13, inner = width - 6;
         boolean hot = active && (isHoveredOrFocused());
         String label = active ? v + "%" : "—";
