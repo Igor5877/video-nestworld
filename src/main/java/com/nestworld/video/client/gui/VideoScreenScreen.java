@@ -92,14 +92,36 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
     /** The release poster gets a proper column of its own; the list and the quick action sit around it. */
     private int rawPosterWidth() { return Math.max(56,Math.min(92,imageWidth/5)); }
     /** On a short window the poster column would be a sliver: drop it and give the list the whole width. */
-    private int posterWidth() { return detail() && Math.min(rawPosterWidth()*3/2,imageHeight-114-100-28)>=48 ? rawPosterWidth() : 0; }
-    private int posterHeight() { return Math.min(posterWidth()*3/2,imageHeight-114-100-28); }
+    private int posterWidth() { return detail() && Math.min(rawPosterWidth()*3/2,imageHeight-114-100-below())>=48 ? rawPosterWidth() : 0; }
+    private int posterHeight() { return Math.min(posterWidth()*3/2,imageHeight-114-100-below()); }
+    /** Room kept under the poster for the "Дивитись" button, plus "Продовжити" when this release has progress. */
+    private int below() { return resume!=null ? 52 : 28; }
+    private record ResumePoint(Video video,long position,String label) {}
+    private ResumePoint resume;
+    /** Where this release left off: the half-watched episode, or the one after the last finished episode. */
+    private ResumePoint resumePoint() {
+        if(selected==null || selected.getVideos()==null) return null;
+        var entry=WatchHistory.latest(selected);
+        if(entry==null) return null;
+        Video current=null;
+        for(Video v:selected.getVideos())
+            if(v!=null && playable(v) && v.getDub().equals(entry.dub) && v.getEpisode().equals(entry.episode)) { current=v; break; }
+        if(current==null) return null;
+        if(entry.watched) {
+            Video next=NextEpisode.find(selected.getVideos(),current.getUrl());
+            return next==null ? null : new ResumePoint(next,0,"Серія "+(next.getEpisode().isBlank()?next.getTitle():next.getEpisode()));
+        }
+        long position=entry.position>=WatchHistory.MIN_RESUME_MS ? entry.position : 0;
+        return new ResumePoint(current,position,"Серія "+(current.getEpisode().isBlank()?current.getTitle():current.getEpisode())
+                +(position>0?" · "+formatTime(position):""));
+    }
     private int listLeft() { return detail() ? 12+posterWidth()+8 : 12; }
     private boolean detail() { return view==View.VOICES || view==View.EPISODES || view==View.SOURCES; }
     @Override protected void init() {
         imageWidth=Math.min(500,width-12); imageHeight=Math.min(430,height-12);
         super.init();
         if(menu.getBlockEntity()==null) { onClose(); return; }
+        resume=detail() ? resumePoint() : null;
         entries.clear(); search=null; searchButton=null; qualityButton=null; sortButton=null; favButton=null; favToggle=null; volumeSlider=null; skipIntro=null;
         int tab=(imageWidth-32)/3;
         View tabView=detail() ? origin : view;
@@ -169,6 +191,13 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
             ((CinemaButton)watch).primary=true; ((CinemaButton)watch).centered=true;
             watch.active=bestStart()!=null;
             watch.setTooltip(Tooltip.create(Component.literal("Почати з першої доступної серії в найкращій озвучці")));
+            if(resume!=null) {
+                var again=button("▶ Продовжити",12,100+posterHeight()+6+24,Math.max(actionWidth,76),b->resume(selected,resume.video(),resume.position()));
+                ((CinemaButton)again).centered=true; ((CinemaButton)again).selected=true;
+                again.setTooltip(Tooltip.create(Component.literal("Продовжити: "+resume.label())));
+                ((CinemaButton)watch).primary=false;
+                ((CinemaButton)again).primary=true;
+            }
             }
         }
         boolean cards=!detail() && (view==View.SEARCH || view==View.LIBRARY), voiceCards=view==View.VOICES;
