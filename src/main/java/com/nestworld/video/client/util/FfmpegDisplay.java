@@ -74,6 +74,9 @@ public final class FfmpegDisplay extends Display {
     private long firstFrameWaitNanos, lastDiagnosticNanos, lastRenderNanos;
     // Statistics for video.debug_stats (written by the decoder thread, read by the client tick).
     private volatile long statVideoFrames, statAudioChunks, statBlockedVideoNanos, statLastVideoPts, statLastAudioPts;
+    // Render-side statistics (render thread only).
+    private long statShown, statSkipped, statUploadNanos, statMaxUploadNanos, statMaxGapNanos, statLastShownNanos;
+    private long statShownSeen, statSkippedSeen, statUploadSeen;
     private long statWallNanos, statMediaUs, statVideoFramesSeen, statAudioChunksSeen, statBlockedSeen;
     private int baseVolume = 100;
     private double spatial = 1.0;
@@ -218,13 +221,19 @@ public final class FfmpegDisplay extends Display {
             VFrame show = null;
             synchronized (lock) {
                 while (!frames.isEmpty() && frames.peek().ptsUs <= media) {
-                    if (show != null) pool.add(show);
+                    if (show != null) { pool.add(show); statSkipped++; }
                     show = frames.poll();
                 }
                 lock.notifyAll();
             }
             if (show != null) {
+                long uploadStart = System.nanoTime();
                 upload(show);
+                long uploaded = System.nanoTime();
+                statShown++; statUploadNanos += uploaded - uploadStart;
+                statMaxUploadNanos = Math.max(statMaxUploadNanos, uploaded - uploadStart);
+                if (statLastShownNanos != 0) statMaxGapNanos = Math.max(statMaxGapNanos, uploaded - statLastShownNanos);
+                statLastShownNanos = uploaded;
                 lastShownPtsUs = show.ptsUs;
                 synchronized (lock) { pool.add(show); }
             }
@@ -365,6 +374,12 @@ public final class FfmpegDisplay extends Display {
                 queued, frameLimit, frameCap,
                 output == null ? -1 : output.queuedUs() / 1000, output == null ? "none" : output.isPlaying() ? "playing" : "STOPPED",
                 (statLastAudioPts - statLastVideoPts) / 1000, !playing);
+        long shown = statShown, skipped = statSkipped, uploadNanos = statUploadNanos;
+        LOGGER.info("Nestworld Video render: game fps {}, shown {} frames, skipped (late) {}, upload avg {}ms / max {}ms, longest gap between shown frames {}ms",
+                net.minecraft.client.Minecraft.getInstance().getFps(), shown - statShownSeen, skipped - statSkippedSeen,
+                String.format(java.util.Locale.ROOT, "%.2f", (uploadNanos - statUploadSeen) / 1e6 / Math.max(1, shown - statShownSeen)),
+                String.format(java.util.Locale.ROOT, "%.1f", statMaxUploadNanos / 1e6), statMaxGapNanos / 1_000_000L);
+        statShownSeen = shown; statSkippedSeen = skipped; statUploadSeen = uploadNanos; statMaxUploadNanos = 0; statMaxGapNanos = 0;
         statWallNanos = now; statMediaUs = media; statVideoFramesSeen = statVideoFrames;
         statAudioChunksSeen = statAudioChunks; statBlockedSeen = statBlockedVideoNanos;
     }
