@@ -85,11 +85,14 @@ public class FfmpegSelfTest {
                 d == null ? "-" : d.getDimensions(), d == null ? -1 : d.getPlaybackTime(), d == null ? -1 : d.getDuration(),
                 d != null && d.isPlaying(), d != null && d.isBuffering(), d != null && d.isBroken());
         }
-        if (ticks == 20 * 14) capture = 14;                                   // daytime
-        if (ticks == 20 * 15) mc.getSingleplayerServer().execute(() -> mc.getSingleplayerServer().getCommands()
-                .performPrefixedCommand(mc.getSingleplayerServer().createCommandSourceStack().withSuppressedOutput(), "time set midnight"));
-        if (ticks == 20 * 24) capture = 24;                                   // night
-        if (ticks == 20 * 27) {
+        // Under a shader pack: show the same colour bars through each candidate render type.
+        String[] kinds = {"text", "eyes", "emissive", "beacon"};
+        for (int k = 0; k < kinds.length; k++) {
+            int begin = 20 * (12 + k * 8);
+            if (ticks == begin) com.nestworld.video.client.VideoRenderTypes.variant = kinds[k];
+            if (ticks == begin + 20 * 5) capture = k + 1;
+        }
+        if (ticks == 20 * 52) {
             // The clip is short: by now it has finished and the screen has stopped, so remember earlier frames.
             boolean ok = sawFrame;
             System.out.println(ok ? "NESTWORLD FFMPEG TEST PASS: frames are being displayed" : "NESTWORLD FFMPEG TEST FAIL: no frame displayed");

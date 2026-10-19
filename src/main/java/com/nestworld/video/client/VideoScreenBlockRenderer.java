@@ -148,10 +148,7 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
         Matrix4f matrix = poseStack.last().pose();
         int light = LightTexture.FULL_BRIGHT;
         float[] scale = display.uvScale();
-        consumer.vertex(matrix, x, y + h, 0).color(255, 255, 255, 255).uv(0, scale[1]).uv2(light).endVertex();
-        consumer.vertex(matrix, x + w, y + h, 0).color(255, 255, 255, 255).uv(scale[0], scale[1]).uv2(light).endVertex();
-        consumer.vertex(matrix, x + w, y, 0).color(255, 255, 255, 255).uv(scale[0], 0).uv2(light).endVertex();
-        consumer.vertex(matrix, x, y, 0).color(255, 255, 255, 255).uv(0, 0).uv2(light).endVertex();
+        VideoRenderTypes.quad(consumer, poseStack, x, y, w, h, scale[0], scale[1], LightTexture.FULL_BRIGHT);
     }
 
     private void drawBackground(PoseStack poseStack, int cols, int rows) {
