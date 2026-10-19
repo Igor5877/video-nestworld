@@ -51,7 +51,7 @@ public class GuiSelfTest {
             } catch (Exception e) { throw new RuntimeException(e); }
         }
     }
-    static int restartAt, stopStage, stopTick, relayAt;
+    static int restartAt, stopStage, stopTick, relayAt, leakStart;
     static long stopTime;
     static final boolean STUB = Boolean.getBoolean("nestworldvideo.guistub");
     static final boolean ANIME = Boolean.getBoolean("nestworldvideo.guianime");
@@ -237,6 +237,23 @@ public class GuiSelfTest {
             if (PLAY) {
                 if (ticks == 45) mc.getSingleplayerServer().execute(() -> ((VideoScreenBlockEntity) mc.getSingleplayerServer().overworld().getBlockEntity(ORIGIN)).play());
                 var display = com.nestworld.video.client.ClientVideoManager.getInstance().getDisplay(ORIGIN);
+                if (Boolean.getBoolean("nestworldvideo.guileak")) {
+                    // Restart the stream many times and watch threads, direct memory and heap for growth.
+                    if (leakStart == 0 && display != null && display.getPlaybackTime() > 3000) leakStart = ticks;
+                    if (leakStart > 0 && (ticks - leakStart) % 60 == 0) {
+                        int cycle = (ticks - leakStart) / 60;
+                        if (cycle % 5 == 0) System.gc();
+                        long threads = Thread.getAllStackTraces().keySet().stream().filter(t -> t.getName().startsWith("nestworld")).count();
+                        long direct = java.lang.management.ManagementFactory.getPlatformMXBeans(java.lang.management.BufferPoolMXBean.class).stream()
+                                .filter(b -> b.getName().equals("direct")).mapToLong(java.lang.management.BufferPoolMXBean::getMemoryUsed).sum();
+                        var rt = Runtime.getRuntime();
+                        System.out.println("LEAK-TEST cycle=" + cycle + " nestworldThreads=" + threads + " directMB=" + direct / 1048576 + " heapMB=" + (rt.totalMemory() - rt.freeMemory()) / 1048576
+                                + " displays=" + (com.nestworld.video.client.ClientVideoManager.getInstance().getDisplay(ORIGIN) == null ? 0 : 1));
+                        if (cycle >= 40) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
+                        else com.nestworld.video.client.ClientVideoManager.getInstance().restartAll();
+                    }
+                    return;
+                }
                 if (RELAY) {
                     if (display != null && ticks % 100 == 0) System.out.println("RELAY-TEST t=" + ticks + " source=" + display.getSourceUrl() + " media=" + display.getPlaybackTime() + " playing=" + display.isPlaying());
                     if (display != null && display.getSourceUrl().contains(":25580/r/") && relayAt == 0) { relayAt = ticks; System.out.println("RELAY-TEST now on the relay at media " + display.getPlaybackTime()); }
