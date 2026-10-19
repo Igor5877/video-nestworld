@@ -364,6 +364,7 @@ public final class FfmpegDisplay extends Display {
         // client tick, and keep consuming frames while the renderer is not drawing this screen.
         maybeStart();
         if (started && System.nanoTime() - lastRenderNanos > 150_000_000L) discardDueFrames();
+        trackEndStall();
         watchdog();
         diagnose();
         stats();
@@ -443,6 +444,8 @@ public final class FfmpegDisplay extends Display {
         if (output != null) output.flush(generation);
         started = false;
         eos = false;
+        endedByStall = false;
+        endReported = false;   // a repeat or a seek back must be able to report the next end again
         firstFrameWaitNanos = 0;
         lastMediaUs = target;
         frozenUs = target;
@@ -482,7 +485,18 @@ public final class FfmpegDisplay extends Display {
         return libsReady && !frameShown && openedNanos != 0 && System.nanoTime() - openedNanos > STARTUP_TIMEOUT_NANOS;
     }
 
+    /** At the very end the audio often stops a moment before the last video frames: the clock stands still, so wait it out. */
+    private long eosMediaUs = Long.MIN_VALUE, eosStallSince;
+    private boolean endedByStall;
+    private void trackEndStall() {
+        if (!eos || !started || !playing) { eosStallSince = 0; eosMediaUs = Long.MIN_VALUE; return; }
+        long now = System.nanoTime(), media = mediaTimeUs();
+        if (media != eosMediaUs || eosStallSince == 0) { eosMediaUs = media; eosStallSince = now; return; }
+        if (now - eosStallSince > 1_500_000_000L) endedByStall = true;
+    }
+
     @Override public boolean isEnded() {
+        if (endedByStall && eos) return true;
         if (!eos || !frameShown) return false;
         synchronized (lock) { if (!frames.isEmpty()) return false; }
         AlAudio output = audio;

@@ -20,6 +20,8 @@ public class ClientVideoManager {
     private final Map<BlockPos, String> desiredScreens = new ConcurrentHashMap<>();
     private final Map<BlockPos, Long> lastViewerReports = new ConcurrentHashMap<>();
     private final Map<BlockPos, Long> lastHistoryRecords = new ConcurrentHashMap<>();
+    /** Screens for which an end-of-video report was already sent for the url they are playing. */
+    private final Map<BlockPos, String> lastEndReports = new ConcurrentHashMap<>();
     /** Announcement of the next episode, shown a few seconds before the current one ends. */
     public record NextUp(BlockPos pos, int seconds, String title) {}
     public static final long NEXT_UP_MS = 5_000;
@@ -52,6 +54,7 @@ public class ClientVideoManager {
 
     public void stopPlaying(BlockPos pos) {
         reportViewer(pos, false);
+        lastEndReports.remove(pos);
         Display display = activeDisplays.remove(pos);
         if (display != null) {
             display.release();
@@ -181,6 +184,16 @@ public class ClientVideoManager {
             if (!activeDisplays.containsKey(pos)) continue;
             Display current = activeDisplays.get(pos);
             if (current != null) current.tick();
+            // The server's timeline ran past the end of the stream (e.g. the decoder only just started or lagged): report it
+            // anyway, otherwise nobody tells the server and auto-next never happens.
+            if (current != null && current.getDuration() > 0 && screen.getPlaybackPositionMs() < current.getDuration() - 1000)
+                lastEndReports.remove(pos);
+            if (current != null && screen.isPlaying() && current.getDuration() > 0
+                    && screen.getPlaybackPositionMs() > current.getDuration() + 3000 && current.getPlaybackTime() >= 0
+                    && lastEndReports.putIfAbsent(pos, current.getUrl()) == null) {
+                recordHistory(pos, current, true);
+                Networking.INSTANCE.sendToServer(new PacketVideoEnded(pos, current.getUrl()));
+            }
             if (current != null && screen.isPlaying() && current.pollEnded()) {
                 recordHistory(pos, current, true);
                 Networking.INSTANCE.sendToServer(new PacketVideoEnded(pos, current.getUrl()));
