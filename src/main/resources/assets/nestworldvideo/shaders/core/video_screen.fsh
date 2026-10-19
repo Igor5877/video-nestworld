@@ -3,7 +3,7 @@
 uniform sampler2D Sampler0;
 uniform vec4 ColorModulator;
 uniform float Sharpness;
-// 0 = bicubic (Catmull-Rom), 1 = edge-adaptive upscaling (EASU-style)
+// 0 = bicubic (Catmull-Rom), 1 = edge-adaptive upscaling (EASU-style), 2 = Anime4K-style line sharpening (experimental)
 uniform float Upscaler;
 // Fraction of the texture that holds the picture (decoders may allocate larger frame buffers).
 uniform vec2 UvMax;
@@ -157,6 +157,41 @@ vec3 easu(sampler2D tex, vec2 uv) {
     return min(max4, max(min4, aC / aW));
 }
 
+// ---------------------------------------------------------------------------------------------------------------
+// EXPERIMENTAL "Anime4K-style" mode, single pass. The real Anime4K (MIT licence, bloc97) runs several passes of small
+// convolutional networks; that needs off-screen render targets, which a block-entity renderer cannot cheaply have.
+// This keeps its core idea, which suits line art: take the edge-directed upscale as a base, then "push" every pixel
+// next to a strong edge towards the darkest or brightest colour of its 3x3 source neighbourhood (thinner, crisper
+// lines and flat colour areas without halos) and slightly deepen dark lines.
+// ---------------------------------------------------------------------------------------------------------------
+float a4kLuma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
+
+vec3 anime4k(sampler2D tex, vec2 uv, vec3 base, float strength) {
+    ivec2 size = textureSize(tex, 0);
+    ivec2 hi = max(ivec2(UvMax * vec2(size)) - 1, ivec2(0));
+    ivec2 ip = clamp(ivec2(floor(uv * vec2(size))), ivec2(0), hi);
+    vec3 cMin = base, cMax = base;
+    float lMin = a4kLuma(base), lMax = lMin, lSum = 0.0;
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            vec3 c = texelFetch(tex, clamp(ip + ivec2(dx, dy), ivec2(0), hi), 0).rgb;
+            float l = a4kLuma(c);
+            lSum += l;
+            if (l < lMin) { lMin = l; cMin = c; }
+            if (l > lMax) { lMax = l; cMax = c; }
+        }
+    }
+    float lMean = lSum / 9.0;
+    float range = lMax - lMin;
+    float edge = smoothstep(0.06, 0.30, range);
+    float side = (a4kLuma(base) - lMean) / max(range, 0.001);        // -1 .. 1: which side of the edge this pixel is on
+    vec3 target = side > 0.0 ? cMax : cMin;
+    float push = clamp(abs(side) * 1.6, 0.0, 1.0) * edge * strength;
+    vec3 result = mix(base, target, push * 0.6);
+    result *= 1.0 - 0.12 * edge * step(side, -0.2) * strength;       // deepen the dark side of a line
+    return clamp(result, 0.0, 1.0);
+}
+
 void main() {
     vec2 size = vec2(textureSize(Sampler0, 0));
     vec2 dx = dFdx(texCoord0), dy = dFdy(texCoord0);
@@ -169,12 +204,14 @@ void main() {
         // Shrinking: let the hardware pick the mip level and filter anisotropically.
         vec2 safeUv = clamp(texCoord0, vec2(0.5) / size, (UvMax * size - 0.5) / size);
         color = textureGrad(Sampler0, safeUv, dx, dy).rgb;
+    } else if (Upscaler > 1.5) {
+        color = anime4k(Sampler0, texCoord0, easu(Sampler0, texCoord0), clamp(0.6 + Sharpness * 0.8, 0.0, 1.4));
     } else if (Upscaler > 0.5) {
         color = easu(Sampler0, texCoord0);
     } else {
         color = catmullRom(Sampler0, texCoord0);
     }
-    if (Sharpness > 0.0 && magnification < 1.0) {
+    if (Sharpness > 0.0 && magnification < 1.0 && Upscaler < 1.5) {
         // Unsharp mask against the four neighbouring texels.
         vec2 px = 1.0 / size;
         vec3 blur = (texture(Sampler0, texCoord0 + vec2(px.x, 0.0)).rgb + texture(Sampler0, texCoord0 - vec2(px.x, 0.0)).rgb

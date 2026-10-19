@@ -50,7 +50,7 @@ public final class EmbeddiumOptions {
     private enum RenderMode { AUTO("auto", "Авто"), PIPELINE("vanilla_pipeline", "Конвеєр гри"), DIRECT("direct", "Напряму");
         final String key, label; RenderMode(String key, String label) { this.key = key; this.label = label; }
         static RenderMode of(String key) { for (var m : values()) if (m.key.equals(key)) return m; return AUTO; } }
-    private enum Upscaler { EDGE("edge", "Слідує за лініями"), BICUBIC("bicubic", "Бікубічне");
+    private enum Upscaler { EDGE("edge", "Слідує за лініями"), BICUBIC("bicubic", "Бікубічне"), ANIME4K("anime4k", "Anime4K (тест)");
         final String key, label; Upscaler(String key, String label) { this.key = key; this.label = label; }
         static Upscaler of(String key) { for (var u : values()) if (u.key.equals(key)) return u; return EDGE; } }
 

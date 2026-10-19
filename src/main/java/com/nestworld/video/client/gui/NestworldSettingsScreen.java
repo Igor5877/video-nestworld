@@ -56,8 +56,8 @@ public final class NestworldSettingsScreen extends Screen {
                 "Авто перемикається на конвеєр гри, коли ввімкнено шейдери (Iris/Oculus).");
         toggle("Згладжування (бікубічне)", cellW, NestworldConfig.SMOOTH_SCALING,
                 "Згладжує сходинки на великих екранах. Вимкніть, якщо відеокарта не тягне.");
-        choice("Збільшення картинки", cellW, () -> "edge".equals(NestworldConfig.UPSCALER.get()) ? "Слідує за лініями" : "Бікубічне",
-                () -> cycleString(NestworldConfig.UPSCALER, List.of("edge", "bicubic")),
+        choice("Збільшення картинки", cellW, () -> switch (NestworldConfig.UPSCALER.get()) { case "bicubic" -> "Бікубічне"; case "anime4k" -> "Anime4K (тест)"; default -> "Слідує за лініями"; },
+                () -> cycleString(NestworldConfig.UPSCALER, List.of("edge", "bicubic", "anime4k")),
                 "Як збільшується відео, коли екран більший за нього. Не діє з шейдерами.");
         slider("Різкість", cellW, 100, 0, NestworldConfig.SHARPNESS::get, NestworldConfig.SHARPNESS::set,
                 "Додаткове підвищення різкості. Не діє з шейдерами.");

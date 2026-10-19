@@ -53,6 +53,9 @@ public class GuiSelfTest {
     }
     static int restartAt, stopStage, stopTick, relayAt;
     static long stopTime;
+    static final boolean ANIME = Boolean.getBoolean("nestworldvideo.guianime");
+    static int animeStage, animeTick;
+    static final String[] ANIME_MODES = {"bicubic", "edge", "anime4k"};
     static final boolean HISTORY = Boolean.getBoolean("nestworldvideo.guihistory");
     static String shotPrefix = System.getProperty("nestworldvideo.guishots", "gui");
 
@@ -157,6 +160,17 @@ public class GuiSelfTest {
                     level.setBlock(ORIGIN, ModBlocks.VIDEO_SCREEN_BLOCK.get().defaultBlockState().setValue(VideoScreenBlock.FACING, Direction.NORTH), 2);
                     var be = (VideoScreenBlockEntity) level.getBlockEntity(ORIGIN);
                     be.setVideo(catalogue().getVideos().get(0));
+                    if (ANIME) {   // a 6x3 wall in front of the player playing a small line-art video
+                        for (int r = 0; r < 3; r++) for (int c = 0; c < 6; c++)
+                            level.setBlock(ORIGIN.relative(Direction.NORTH.getCounterClockWise(), c).above(r),
+                                    ModBlocks.VIDEO_SCREEN_BLOCK.get().defaultBlockState().setValue(VideoScreenBlock.FACING, Direction.NORTH), 2);
+                        be.assemble();
+                        be.setVideo(new Video("toon", "", "file:///tmp/claude-0/toon/toon.m3u8", "", ""));
+                        be.play();
+                        var source = mc.getSingleplayerServer().createCommandSourceStack().withSuppressedOutput();
+                        for (String cmd : new String[]{"time set day", "weather clear", "tp @a 1.5 -60 -1 0 -3"})
+                            mc.getSingleplayerServer().getCommands().performPrefixedCommand(source, cmd);
+                    }
                     ready = true;
                 } catch (Throwable t) { failure = t; }
             });

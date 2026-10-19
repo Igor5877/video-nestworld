@@ -83,7 +83,7 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
             smooth.safeGetUniform("Sharpness").set(NestworldConfig.SHARPNESS.get() / 100f);
             float[] visible = display.uvScale();
             smooth.safeGetUniform("UvMax").set(visible[0], visible[1]);
-            smooth.safeGetUniform("Upscaler").set("edge".equals(NestworldConfig.UPSCALER.get()) ? 1f : 0f);
+            smooth.safeGetUniform("Upscaler").set("anime4k".equals(NestworldConfig.UPSCALER.get()) ? 2f : "edge".equals(NestworldConfig.UPSCALER.get()) ? 1f : 0f);
             RenderSystem.setShader(() -> smooth);
         }
         else RenderSystem.setShader(GameRenderer::getPositionTexShader);
