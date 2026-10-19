@@ -36,7 +36,8 @@ public class GuiSelfTest {
     static volatile Throwable failure;
     static final boolean PLAY = Boolean.getBoolean("nestworldvideo.guiplay");
     static final String PLAY_URL = "file:///tmp/claude-0/spike/media/smpte.m3u8";
-    static int restartAt;
+    static int restartAt, stopStage, stopTick;
+    static long stopTime;
     static final boolean HISTORY = Boolean.getBoolean("nestworldvideo.guihistory");
     static String shotPrefix = System.getProperty("nestworldvideo.guishots", "gui");
 
@@ -170,6 +171,20 @@ public class GuiSelfTest {
             if (PLAY) {
                 if (ticks == 45) mc.getSingleplayerServer().execute(() -> ((VideoScreenBlockEntity) mc.getSingleplayerServer().overworld().getBlockEntity(ORIGIN)).play());
                 var display = com.nestworld.video.client.ClientVideoManager.getInstance().getDisplay(ORIGIN);
+                if (Boolean.getBoolean("nestworldvideo.guistop")) {
+                    // The test menu is not opened through the server, so control packets would be refused: drive the block entity directly.
+                    if (ticks == 120) mc.getSingleplayerServer().execute(() -> {
+                        var server = (VideoScreenBlockEntity) mc.getSingleplayerServer().overworld().getBlockEntity(ORIGIN);
+                        server.stopKeepingPosition(8000);
+                        System.out.println("STOP-TEST after stop: stopped=" + server.isStopped() + " playing=" + server.isPlaying() + " pos=" + server.getPlaybackPositionMs());
+                        server.play();
+                        System.out.println("STOP-TEST after play: stopped=" + server.isStopped() + " playing=" + server.isPlaying() + " pos=" + server.getPlaybackPositionMs());
+                        boolean ok = server.isPlaying() && Math.abs(server.getPlaybackPositionMs() - 8000) < 500;
+                        System.out.println(ok ? "NESTWORLD GUI TEST PASS" : "NESTWORLD GUI TEST FAIL");
+                        mc.stop();
+                    });
+                    return;
+                }
                 if (Boolean.getBoolean("nestworldvideo.guiend")) {
                     var be = (VideoScreenBlockEntity) mc.level.getBlockEntity(ORIGIN);
                     if (be == null || ticks < 60) return;

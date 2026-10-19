@@ -73,7 +73,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
     private Component tr(String key,Object... args) { return Component.translatable("gui.nestworldvideo."+key,args); }
     private void send(String action) {
         var root=screen();
-        if("pause".equals(action) && root!=null) {
+        if(("pause".equals(action) || "stop".equals(action)) && root!=null) {
             long mediaTime=ClientVideoManager.getInstance().getPlaybackTime(root.getBlockPos());
             // The server validates that the packet's block entity matches the
             // menu's block entity. A menu opened on a child tile still controls

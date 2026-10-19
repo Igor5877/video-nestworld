@@ -184,7 +184,6 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
     public void play() {
         if (!currentVideoUrl.isBlank()) {
             refreshPlaybackPosition();
-            if (stopped) playbackPositionMs = 0;
             long now = level == null ? 0 : level.getGameTime();
             playbackStartedTick = now - playbackPositionMs / 50;
             isPlaying = true; stopped = false; syncToClient();
@@ -226,6 +225,17 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         playbackPositionMs = Math.max(0, positionMs);
         isPlaying = false;
         playbackStartedTick = Long.MIN_VALUE;
+        syncToClient();
+    }
+    /**
+     * The user pressed Stop: the screen stops but remembers where it was, so Play continues from there.
+     * ({@link #stop()} resets to the start: used when a video has finished or the layout is torn down.)
+     */
+    public void stopKeepingPosition(long clientPositionMs) {
+        refreshPlaybackPosition();
+        if (clientPositionMs >= 0) playbackPositionMs = clientPositionMs;
+        isPlaying = false; stopped = true;
+        playbackStartedTick = Long.MIN_VALUE; playbackStartedNanos = Long.MIN_VALUE;
         syncToClient();
     }
     public void stop() {
