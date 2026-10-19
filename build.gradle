@@ -70,6 +70,7 @@ minecraft {
             if (project.hasProperty('guistub')) property 'nestworldvideo.guistub', 'true'
             if (project.hasProperty('guianime')) property 'nestworldvideo.guianime', 'true'
             if (project.hasProperty('guirelay')) property 'nestworldvideo.guirelay', 'true'
+            if (project.hasProperty('guirelaydeny')) property 'nestworldvideo.guirelaydeny', 'true'
             if (project.hasProperty('guistop')) property 'nestworldvideo.guistop', 'true'
             if (project.hasProperty('guivanilla')) property 'nestworldvideo.guivanilla', 'true'
             if (project.hasProperty('guisodium')) property 'nestworldvideo.guisodium', 'true'
