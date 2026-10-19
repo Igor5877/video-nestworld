@@ -126,10 +126,7 @@ sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 repositories {
     if (project.hasProperty('shadertest')) {
-        exclusiveContent {
-            forRepository { maven { url "https://api.modrinth.com/maven" } }
-            filter { includeGroup "maven.modrinth" }
-        }
+        flatDir { dirs "${projectDir}/build/shadertest-libs" }   // oculus-*.jar and embeddium-*.jar, see README of the self-test
     }
     // Put repositories for dependencies here
     // ForgeGradle automatically adds the Forge maven and Maven Central for you
@@ -148,8 +145,8 @@ repositories {
 dependencies {
     // Opt-in (-Pshadertest): a real shader-pack stack for testing how the screens look under Iris/Oculus.
     if (project.hasProperty('shadertest')) {
-        runtimeOnly fg.deobf("maven.modrinth:embeddium:0.3.31+mc1.20.1")
-        runtimeOnly fg.deobf("maven.modrinth:oculus:1.20.1-1.8.0")
+        runtimeOnly fg.deobf("shadertest:embeddium:0.3.31")
+        runtimeOnly fg.deobf("shadertest:oculus:1.20.1-1.8.0")
     }
     // FFmpeg decoder API. compileOnly on purpose: at runtime these jars are downloaded once into the game
     // directory and loaded by an isolated class loader (see com.nestworld.video.ffmpeg.FfmpegLibs).
