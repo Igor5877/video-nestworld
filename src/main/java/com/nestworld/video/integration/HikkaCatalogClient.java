@@ -83,6 +83,31 @@ public final class HikkaCatalogClient {
                 });
     }
 
+    /** Recommendations without a query: "ongoing" (airing now), "top" (best rated ever) or "new" (this and last year). 18+ titles are left out. */
+    public static CompletableFuture<List<Title>> popular(String mode, List<String> hiddenRatings) {
+        JsonObject payload = new JsonObject();
+        var sort = new JsonArray();
+        switch (mode) {
+            case "ongoing" -> { var status = new JsonArray(); status.add("ongoing"); payload.add("status", status); sort.add("score:desc"); }
+            case "top" -> sort.add("score:desc");
+            case "new" -> {
+                int year = java.time.Year.now().getValue();
+                var years = new JsonArray(); years.add(year - 1); years.add(year); payload.add("years", years); sort.add("scored_by:desc");
+            }
+            default -> { return CompletableFuture.failedFuture(new IllegalArgumentException("Невідомий розділ рекомендацій")); }
+        }
+        payload.add("sort", sort);
+        var request = HttpRequest.newBuilder(URI.create("https://api.hikka.io/anime?size=40"))
+                .timeout(Duration.ofSeconds(20)).header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(payload.toString())).build();
+        return jsonCached("popular:" + mode, request, DETAIL_TTL_NANOS).thenApply(root -> {
+            var titles = new ArrayList<Title>();
+            for (Title title : parseSearch(root))
+                if (!hiddenRatings.contains(title.rating().toLowerCase(Locale.ROOT)) && titles.size() < 24) titles.add(title);
+            return (List<Title>) titles;
+        });
+    }
+
     /** Clear remote metadata after a manual refresh or provider change. */
     public static void clearCache() { CACHE.clear(); }
 

@@ -23,7 +23,7 @@ public record PacketBrowseRequest(int menuId, int requestId, String action, Stri
             if (player == null || player.isSpectator() || !(player.containerMenu instanceof VideoScreenMenu menu)
                     || menu.containerId != msg.menuId || !menu.stillValid(player)
                     || !player.level().mayInteract(player, menu.getBlockEntity().getBlockPos())) return;
-            if (!msg.action.equals("search") && !msg.action.equals("load") && !msg.action.equals("seasons")) return;
+            if (!msg.action.equals("search") && !msg.action.equals("load") && !msg.action.equals("seasons") && !msg.action.equals("popular")) return;
             long now = System.nanoTime();
             if (BUSY.getOrDefault(player, 0L) > now) {
                 reply(player, msg, true, "Попередній запит ще виконується. Спробуй за кілька секунд."); return;
@@ -37,6 +37,7 @@ public record PacketBrowseRequest(int menuId, int requestId, String action, Stri
             try {
                 if (msg.action.equals("search")) work = HikkaCatalogClient.searchTitles(msg.query);
                 else if (msg.action.equals("seasons")) work = HikkaCatalogClient.seasons(msg.query);
+                else if (msg.action.equals("popular")) work = HikkaCatalogClient.popular(msg.query, com.nestworld.video.content.AdultAccess.ratings());
                 else work = HikkaCatalogClient.detail(msg.query).thenCompose(title ->
                     AniuaApiClient.loadEpisodes(title.slug(), VideoSourceResolver.load(server.getServerDirectory().toPath()))
                         .thenApply(category -> { category.setDetails(title.title(), title.poster(), title.seasonLabel()); category.setRating(title.rating()); return category; }));

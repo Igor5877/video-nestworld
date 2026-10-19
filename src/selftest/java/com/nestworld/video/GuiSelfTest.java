@@ -218,6 +218,14 @@ public class GuiSelfTest {
             if (ticks == 40) {
                 for (int i = 0; i < 6; i++) com.nestworld.video.client.gui.PosterCache.put("https://cdn.hikka.io/test/" + i + ".jpg", poster(i));
                 var lib = library();
+                try {   // recommendations normally come from the server; the test menu has no server round trip
+                    var field = VideoScreenScreen.class.getDeclaredField("RECOMMENDED");
+                    field.setAccessible(true);
+                    var recs = new ArrayList<com.nestworld.video.integration.HikkaCatalogClient.Title>();
+                    String[] names = {"Проводжальниця Фрірен", "Магічна битва - 3 сезон", "Чіїкава", "Монолог травниці - 3 сезон", "Ван Піс", "Ґачіакута"};
+                    for (int i = 0; i < names.length; i++) recs.add(new com.nestworld.video.integration.HikkaCatalogClient.Title("rec-" + i, names[i], "2025", "tv", "https://cdn.hikka.io/test/" + (i % 6) + ".jpg", "pg_13"));
+                    ((java.util.Map<String, java.util.List<com.nestworld.video.integration.HikkaCatalogClient.Title>>) field.get(null)).put("ongoing", recs);
+                } catch (ReflectiveOperationException e) { throw new AssertionError(e); }
                 ClientData.setVideoConfig(new VideoConfig(lib));
                 if (HISTORY) {
                     

@@ -37,7 +37,7 @@ public final class AdultAccess {
         return false;
     }
 
-    private static java.util.List<String> ratings() {
+    public static java.util.List<String> ratings() {
         try { return ContentConfig.ADULT_RATINGS.get().stream().map(String::toLowerCase).toList(); }
         catch (RuntimeException e) { return java.util.List.of("rx"); }
     }

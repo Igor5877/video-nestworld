@@ -41,6 +41,11 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
     private ScreenLayout preview;
     private Button assemble,play,pause,stop,skipBack,skipForward,skipIntro,previousPage,nextPage,searchButton,qualityButton,sortButton,favButton,favToggle;
     private CinemaSlider volumeSlider;
+    /** Recommendations shown on the search tab while nothing was searched; the last answer per section survives closing the menu. */
+    private static final Map<String,List<Title>> RECOMMENDED=new HashMap<>();
+    private static final String[][] SECTIONS={{"ongoing","Виходять"},{"top","Топ"},{"new","Новинки"}};
+    private static String recommendedMode="ongoing";
+    private boolean recommendationsShown, wantRecommended;
     private enum Sort { RECENT("Останні"), AZ("А–Я"), UNWATCHED("Не дивився"); final String label; Sort(String label) { this.label=label; } }
     /** Library filters survive closing the menu. */
     private static Sort sort=Sort.RECENT;
@@ -155,7 +160,21 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
             search.setValue(remote ? query : libraryQuery);
             search.setResponder(value->{ if(remote) query=value; else {libraryQuery=value;page=0;refreshEntries();} });
             addRenderableWidget(search);
-            if(remote) searchButton=button("Знайти",imageWidth-88,58,76,b->requestSearch());
+            if(remote) {
+                searchButton=button("Знайти",imageWidth-88,58,76,b->requestSearch());
+                int chipW=70;
+                for(int i=0;i<SECTIONS.length;i++) {
+                    final String mode=SECTIONS[i][0];
+                    var chip=button(SECTIONS[i][1],imageWidth-12-(SECTIONS.length-i)*(chipW+4)+4,79,chipW,b->showRecommended(mode));
+                    ((CinemaButton)chip).selected=recommendationsShown && recommendedMode.equals(mode);
+                    chip.setTooltip(Tooltip.create(Component.literal(switch(mode) {
+                        case "ongoing" -> "Аніме, що виходять зараз, за оцінкою";
+                        case "top" -> "Найвище оцінені аніме за весь час";
+                        default -> "Популярне за цей і минулий рік";
+                    }+"\nБез 18+. Можливо, не всі є у відеохостингу.")));
+                }
+                if(results.isEmpty() && query.isBlank() && !loading && !recommendationsShown) wantRecommended=true;
+            }
             else {
                 sortButton=button("",imageWidth-12-26-110+4,58,106,b->{
                     sort=Sort.values()[(sort.ordinal()+1)%Sort.values().length]; page=0; sortButton.setMessage(Component.literal("Сорт.: "+sort.label)); refreshEntries();
@@ -266,10 +285,18 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         rebuildWidgets();
         if (stale) request("load", category.getName().substring("AniUA:".length()).trim());
     }
+    private void showRecommended(String mode) {
+        recommendedMode=mode; recommendationsShown=true;
+        var cached=RECOMMENDED.get(mode);
+        if(cached!=null) { results=cached; page=0; status=""; rebuildWidgets(); return; }
+        if(loading) return;
+        results=List.of(); page=0; status="Завантажую рекомендації…";
+        request("popular",mode);
+    }
     private void requestSearch() {
         if(loading) return;
         if(query.trim().length()<2) {status="Введи хоча б 2 символи.";return;}
-        results=List.of();page=0;status="Шукаю «"+query.trim()+"»…";
+        recommendationsShown=false; results=List.of();page=0;status="Шукаю «"+query.trim()+"»…";
         request("search",query.trim());
     }
     private void request(String action,String input) {
@@ -282,7 +309,13 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         loading=false;
         if(result.error()) {status=result.body();refreshEntries();return;}
         try {
-            if(result.action().equals("search") || result.action().equals("seasons")) {
+            if(result.action().equals("popular")) {
+                var list=Arrays.asList(new Gson().fromJson(result.body(),Title[].class));
+                RECOMMENDED.put(recommendedMode,list);
+                results=list; if(view==View.SEARCH) page=0;
+                status=list.isEmpty() ? "Рекомендацій поки немає. Скористайся пошуком." : "";
+                rebuildWidgets(); return;
+            } else if(result.action().equals("search") || result.action().equals("seasons")) {
                 results=Arrays.asList(new Gson().fromJson(result.body(),Title[].class));
                 if(view==View.SEARCH) page=0;
                 status=results.isEmpty() ? "Нічого не знайдено. Спробуй коротшу або іншу назву." :
@@ -649,6 +682,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
     }
 
     @Override protected void containerTick() {
+        if(wantRecommended && !loading && !construction) { wantRecommended=false; showRecommended(recommendedMode); }
         super.containerTick();
         if(++ticks%20==0) { if(construction) refreshPreview();else refreshEntries(); }
         if(ticks%40==0) send("viewers");
@@ -700,7 +734,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
                     && !rows.isEmpty() && rows.stream().noneMatch(Row::enabled);
             String line=detail() ? selected.getSeason()+" · "+(view==View.VOICES?"Вибери озвучку":voice)
                     +(noPlayableVoice?" · немає доступних потоків":"") : status;
-            text(g,Component.literal(line),listLeft(),84,MUTED,imageWidth-listLeft()-12);
+            text(g,Component.literal(line),listLeft(),84,MUTED,imageWidth-listLeft()-12-(view==View.SEARCH && !detail() ? 3*74 : 0));
             if(posterWidth()>0) {
                 int h=posterHeight(),w=h*2/3;
                 StarMenuPaint.round(g,leftPos+12,topPos+100,w,h,4,0xFF1E2B37);
