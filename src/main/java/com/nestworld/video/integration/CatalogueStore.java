@@ -19,7 +19,7 @@ public final class CatalogueStore {
         categories.add(category);
         var updated = new VideoConfig(categories);
         String json = new Gson().toJson(updated);
-        if (json.length() > PacketSyncVideos.MAX_LENGTH) throw new java.io.IOException("Каталог завеликий");
+        if (PacketSyncVideos.compressedSize(json) < 0) throw new java.io.IOException("Каталог завеликий");
         Path config = server.getServerDirectory().toPath().resolve("config/videos.json");
         Files.createDirectories(config.getParent());
         Path temp = Files.createTempFile(config.getParent(), "videos-", ".tmp");
@@ -30,6 +30,6 @@ public final class CatalogueStore {
         } finally { Files.deleteIfExists(temp); }
         CinemaMod.videoConfig = updated;
         for (var player : server.getPlayerList().getPlayers())
-            Networking.INSTANCE.send(PacketDistributor.PLAYER.with(() -> player), new PacketSyncVideos(json));
+            PacketSyncVideos.send(player, json);
     }
 }

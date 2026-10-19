@@ -49,11 +49,7 @@ public class ReloadVideosCommand {
             
             // Відправляємо оновлену конфігурацію всім гравцям
             String json = new Gson().toJson(newConfig);
-            PacketSyncVideos packet = new PacketSyncVideos(json);
-            
-            for (ServerPlayer player : source.getServer().getPlayerList().getPlayers()) {
-                Networking.INSTANCE.send(PacketDistributor.PLAYER.with(() -> player), packet);
-            }
+            for (ServerPlayer player : source.getServer().getPlayerList().getPlayers()) PacketSyncVideos.send(player, json);
             
             source.sendSuccess(() -> Component.literal("Successfully reloaded videos.json with " + 
                     newConfig.getCategories().size() + " categories"), true);

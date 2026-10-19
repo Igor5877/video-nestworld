@@ -198,7 +198,7 @@ public class CinemaMod {
 
             // Відправляємо пакет з конфігурацією конкретному гравцю
             String json = new Gson().toJson(videoConfig);
-            Networking.INSTANCE.send(PacketDistributor.PLAYER.with(() -> player), new PacketSyncVideos(json));
+            PacketSyncVideos.send(player, json);
         }
     }
 }
