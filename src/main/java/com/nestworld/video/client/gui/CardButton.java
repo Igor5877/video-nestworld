@@ -57,8 +57,9 @@ final class CardButton extends Button {
         int textX = compact ? getX() + 12 : px + slotW + 8, maxWidth = getX() + width - 8 - textX;
         int titleColor = active ? 0xFFE8EDF2 : 0xFF85919C;
         List<FormattedCharSequence> lines = font.split(Component.literal(title), maxWidth);
-        int shown = Math.min(2, lines.size());
-        int y = getY() + 7;
+        boolean slim = compact && height < 36;
+        int shown = Math.min(slim ? 1 : 2, lines.size());
+        int y = getY() + (slim ? (height - 8) / 2 - (ratio >= 0f ? 1 : 0) : 7);
         for (int i = 0; i < shown; i++) {
             if (i == 1 && lines.size() > 2) {
                 String text = font.plainSubstrByWidth(title, maxWidth * 2);
@@ -67,9 +68,9 @@ final class CardButton extends Button {
             } else g.drawString(font, lines.get(i), textX, y, titleColor, false);
             y += 10;
         }
-        if (!meta.isBlank()) g.drawString(font, font.plainSubstrByWidth(meta, maxWidth), textX, getY() + (compact ? 19 : height - 14), 0xFF9AA9B8, false);
+        if (!meta.isBlank() && !slim) g.drawString(font, font.plainSubstrByWidth(meta, maxWidth), textX, getY() + (compact ? 19 : ratio >= 0f ? height - 22 : height - 14), 0xFF9AA9B8, false);
         if (ratio >= 0f) {
-            int barX = getX() + 12, barW = width - 24, barY = getY() + height - 8;
+            int barX = compact ? getX() + 12 : textX, barW = compact ? width - 24 : getX() + width - 8 - textX, barY = getY() + height - (compact ? 8 : 10);
             StarMenuPaint.round(g, barX, barY, barW, 3, 1, 0xFF22303D);
             int filled = Math.round(barW * Math.max(0f, Math.min(1f, ratio)));
             if (filled > 0) StarMenuPaint.round(g, barX, barY, Math.max(2, filled), 3, 1, !active ? 0xFF5A6672 : ratio >= 0.999f ? 0xFF7FBF7F : GOLD);

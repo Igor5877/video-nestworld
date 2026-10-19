@@ -36,6 +36,7 @@ public class GuiSelfTest {
     static volatile Throwable failure;
     static final boolean PLAY = Boolean.getBoolean("nestworldvideo.guiplay");
     static final String PLAY_URL = "file:///tmp/claude-0/spike/media/smpte.m3u8";
+    static final boolean HISTORY = Boolean.getBoolean("nestworldvideo.guihistory");
     static String shotPrefix = System.getProperty("nestworldvideo.guishots", "gui");
 
     static Category catalogue() {
@@ -98,6 +99,8 @@ public class GuiSelfTest {
         return img;
     }
 
+    static void pause() { try { Thread.sleep(3); } catch (InterruptedException ignored) { } }
+
     static void click(String text) {
         var mc = Minecraft.getInstance();
         var b = mc.screen.children().stream().filter(e -> e instanceof Button bt && (bt.getMessage().getString().equals(text) || bt.getMessage().getString().trim().endsWith(text))).map(e -> (Button) e).findFirst().orElseThrow(() -> new AssertionError("no button " + text));
@@ -115,7 +118,8 @@ public class GuiSelfTest {
             launched = true;
             mc.options.renderDistance().set(4); mc.options.simulationDistance().set(5);
             mc.options.guiScale().set(2);
-            mc.getWindow().setWindowed(1280, 800);
+            boolean small = Integer.getInteger("nestworldvideo.guiscale", 2) > 2;
+            mc.getWindow().setWindowed(small ? 870 : 1280, small ? 530 : 800);
             mc.createWorldOpenFlows().createFreshLevel("Gui-Test-" + System.currentTimeMillis(),
                 new LevelSettings("gui test", GameType.CREATIVE, false, Difficulty.PEACEFUL, true, new GameRules(), WorldDataConfiguration.DEFAULT),
                 new WorldOptions(7L, false, false),
@@ -139,9 +143,26 @@ public class GuiSelfTest {
         if (!ready) return;
         try {
             ticks++;
+            if (ticks == 30) mc.resizeDisplay();
             if (ticks == 40) {
                 for (int i = 0; i < 6; i++) com.nestworld.video.client.gui.PosterCache.put("https://cdn.hikka.io/test/" + i + ".jpg", poster(i));
-                ClientData.setVideoConfig(new VideoConfig(library()));
+                var lib = library();
+                ClientData.setVideoConfig(new VideoConfig(lib));
+                if (HISTORY) {
+                    
+                    com.nestworld.video.client.WatchHistory.useMemory();
+                    var dxd = lib.get(0);
+                    var firstDub = dxd.getVideos().get(0).getDub();
+                    var dubVideos = dxd.getVideos().stream().filter(v -> v.getDub().equals(firstDub)).toList();
+                    for (int i = 0; i < 3; i++) { com.nestworld.video.client.WatchHistory.record(dxd, dubVideos.get(i), 1_400_000, 1_440_000, 1080, true); pause(); }
+                    com.nestworld.video.client.WatchHistory.record(dxd, dubVideos.get(3), 612_000, 1_440_000, 1080, false); pause();
+                    var killer = lib.get(2);   // watched a whole episode: shelf offers the next one
+                    com.nestworld.video.client.WatchHistory.record(killer, killer.getVideos().get(0), 1_400_000, 1_440_000, 720, true); pause();
+                    var city = lib.get(3);     // barely started + favourite
+                    com.nestworld.video.client.WatchHistory.record(city, city.getVideos().get(1), 300_000, 1_380_000, 720, false);
+                    com.nestworld.video.client.WatchHistory.toggleFavorite(lib.get(1));
+                    com.nestworld.video.client.WatchHistory.toggleFavorite(city);
+                }
                 var be = (VideoScreenBlockEntity) mc.level.getBlockEntity(ORIGIN);
                 mc.setScreen(new VideoScreenScreen(new VideoScreenMenu(0, mc.player.getInventory(), be), mc.player.getInventory(), Component.literal("Керування екраном")));
             }
@@ -152,6 +173,24 @@ public class GuiSelfTest {
                 if (shots == 1 && ticks == waitUntil) { click("Пауза"); waitUntil = ticks + 40; shots = 2; }
                 if (shots == 2 && ticks == waitUntil) { capture = 2; waitUntil = ticks + 20; shots = 3; }                                   // paused
                 if (shots == 3 && ticks == waitUntil) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
+                return;
+            }
+            if (HISTORY) {
+                if (ticks == 70) capture = 1;                   // episode list with marks
+                if (ticks == 90) click("Бібліотека");
+                if (ticks == 110) capture = 2;                  // library with the resume shelf
+                if (ticks == 120) click("Сорт.: Останні");
+                if (ticks == 125) click("Сорт.: А–Я");
+                if (ticks == 140) capture = 3;                  // A-Z
+                if (ticks == 150) click("Сорт.: Не дивився");
+                if (ticks == 170) capture = 4;                  // unwatched only
+                if (ticks == 180) click("Сорт.: Останні");
+                if (ticks == 185) click("☆");
+                if (ticks == 205) capture = 5;                  // favourites only
+                if (ticks == 215) click("★");
+                if (ticks == 225) click("Старша школа DxD");     // opens the resume card (first) -> episodes
+                if (ticks == 260) capture = 6;
+                if (ticks == 270) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
                 return;
             }
             if (ticks == 70) capture = 1;                       // episode list
