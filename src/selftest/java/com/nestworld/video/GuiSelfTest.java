@@ -36,6 +36,7 @@ public class GuiSelfTest {
     static volatile Throwable failure;
     static final boolean PLAY = Boolean.getBoolean("nestworldvideo.guiplay");
     static final String PLAY_URL = "file:///tmp/claude-0/spike/media/smpte.m3u8";
+    static int restartAt;
     static final boolean HISTORY = Boolean.getBoolean("nestworldvideo.guihistory");
     static String shotPrefix = System.getProperty("nestworldvideo.guishots", "gui");
 
@@ -169,6 +170,18 @@ public class GuiSelfTest {
             if (PLAY) {
                 if (ticks == 45) mc.getSingleplayerServer().execute(() -> ((VideoScreenBlockEntity) mc.getSingleplayerServer().overworld().getBlockEntity(ORIGIN)).play());
                 var display = com.nestworld.video.client.ClientVideoManager.getInstance().getDisplay(ORIGIN);
+                if (Boolean.getBoolean("nestworldvideo.guirestart")) {
+                    var mgr = com.nestworld.video.client.ClientVideoManager.getInstance();
+                    if (restartAt == 0 && display != null && display.getPlaybackTime() > 12000) restartAt = ticks;
+                    if (restartAt > 0) {
+                        int dt = ticks - restartAt;
+                        if (dt < 50 && dt % 10 == 0) { System.out.println("RESTART #" + (dt / 10) + " at media " + (display == null ? -1 : display.getPlaybackTime())); mgr.restartAll(); }
+                        if (dt % 20 == 0 && dt < 400) System.out.println("T+" + dt + " display=" + (display == null ? "none" : display.getPlaybackTime() + " playing=" + display.isPlaying() + " buf=" + display.isBuffering())
+                                + " screen=" + ((VideoScreenBlockEntity) mc.level.getBlockEntity(ORIGIN)).getPlaybackPositionMs());
+                        if (dt == 400) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
+                    }
+                    return;
+                }
                 if (shots == 0 && display != null && display.getPlaybackTime() > 6000) { shots = 1; capture = 1; waitUntil = ticks + 10; }   // playing
                 if (shots == 1 && ticks == waitUntil) { click("Пауза"); waitUntil = ticks + 40; shots = 2; }
                 if (shots == 2 && ticks == waitUntil) { capture = 2; waitUntil = ticks + 20; shots = 3; }                                   // paused

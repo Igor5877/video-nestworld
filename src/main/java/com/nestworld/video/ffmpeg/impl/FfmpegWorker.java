@@ -135,9 +135,14 @@ public final class FfmpegWorker implements VideoDecoder {
                         applyColorMatrix(grabber, matrixHeight);
                         if (!firstImageHandled) {
                             // The converter only exists once the first frame has been converted with the default
-                            // matrix: go back to the start so that frame is converted correctly too.
+                            // matrix: re-read this very frame so it is converted correctly too. (Going back to 0 here
+                            // undid a seek that had already been applied, e.g. right after a quality change.)
                             firstImageHandled = true;
-                            try { grabber.setTimestamp(0); continue; } catch (Exception ignored) { /* e.g. live stream */ }
+                            try {
+                                long start = grabber.getFormatContext().start_time();
+                                if (start == avutil.AV_NOPTS_VALUE) start = 0;
+                                grabber.setTimestamp(Math.max(0, frame.timestamp - start)); continue;
+                            } catch (Exception ignored) { /* e.g. live stream */ }
                         }
                     }
                     ByteBuffer pixels = (ByteBuffer) frame.image[0];
