@@ -614,6 +614,13 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
             lines.add("Відео зараз: " + size.width + "×" + size.height + " · ≈" + Math.round(Math.max(size.width / (double) cols, size.height / (double) rows)) + " пікс. на блок");
         else lines.add("Відео зараз не грає");
         lines.add("Глядачі: " + (viewerCount < 0 ? "…" : viewerCount));
+        // Comfortable viewing: the picture fills about 40° of the view (the cinema guideline), from 50° (close) to 30° (far).
+        double aspect = size != null && size.width > 0 && size.height > 0 ? size.width / (double) size.height : 16.0 / 9.0;
+        double picture = Math.min(cols, rows * aspect);
+        long best = Math.round(picture / (2 * Math.tan(Math.toRadians(20)))), near = Math.round(picture / (2 * Math.tan(Math.toRadians(25)))),
+                far = Math.round(picture / (2 * Math.tan(Math.toRadians(15))));
+        lines.add("Рекомендована відстань: ≈" + best + " бл. (від " + near + " до " + far + ")"
+                + (best > com.nestworld.video.NestworldConfig.MAX_STREAM_DISTANCE.get() ? " — більше за дальність дії" : ""));
         lines.add("Працює на відстані до " + com.nestworld.video.NestworldConfig.MAX_STREAM_DISTANCE.get() + " блоків");
         g.drawString(font, "Про екран", x, y, GOLD, false);
         int row = y + 14;
