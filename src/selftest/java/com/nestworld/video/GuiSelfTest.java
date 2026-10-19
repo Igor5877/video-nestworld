@@ -215,14 +215,6 @@ public class GuiSelfTest {
             if (ticks == 40) {
                 for (int i = 0; i < 6; i++) com.nestworld.video.client.gui.PosterCache.put("https://cdn.hikka.io/test/" + i + ".jpg", poster(i));
                 var lib = library();
-                if (Boolean.getBoolean("nestworldvideo.guifilms"))
-                    for (int i = 0; i < 4; i++) {
-                        var fv = new Video("Інтерстеллар " + i, "Фільм", "https://example.invalid/film" + i + ".m3u8", "", "");
-                        fv.setEpisodeInfo("1", "Дубляж", "Інтерстеллар " + i, "film");
-                        var fc = new Category("Фільм: Інтерстеллар " + i + " (2014)", new ArrayList<>(List.of(fv)));
-                        fc.setDetails("Інтерстеллар " + i, "https://cdn.hikka.io/test/" + i + ".jpg", "Фільм");
-                        lib.add(fc);
-                    }
                 ClientData.setVideoConfig(new VideoConfig(lib));
                 if (HISTORY) {
                     
@@ -357,16 +349,6 @@ public class GuiSelfTest {
                 if (ticks == 75) mc.screen.mouseScrolled(100, 100, -5);
                 if (ticks == 95) capture = 2;
                 if (ticks == 100) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
-                return;
-            }
-            if (Boolean.getBoolean("nestworldvideo.guifilms")) {
-                if (ticks == 70) click("Фільми");
-                if (ticks == 90) capture = 1;
-                if (ticks == 100) click("Інтерстеллар 1");
-                if (ticks == 125) capture = 2;
-                if (ticks == 135) click("Бібліотека");
-                if (ticks == 155) capture = 3;
-                if (ticks == 165) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
                 return;
             }
             if (HISTORY) {

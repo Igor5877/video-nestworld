@@ -52,11 +52,7 @@ public final class VideoSourceResolver {
     public static CompletableFuture<String> resolveAsync(JsonObject episode, Map<String, String> overrides) {
         String direct = resolveDirectOrOverride(episode, overrides);
         if (!direct.isBlank()) return CompletableFuture.completedFuture(direct);
-        return resolvePage(value(episode, "video_url"));
-    }
-
-    /** Read the media address out of a supported (Ashdi) player page; "" when unsupported or not found. */
-    public static CompletableFuture<String> resolvePage(String page) {
+        String page = value(episode, "video_url");
         if (!isAshdiPage(page)) return CompletableFuture.completedFuture("");
         HttpRequest request;
         try {
@@ -102,9 +98,7 @@ public final class VideoSourceResolver {
         return AniuaApiClient.isSupportedMediaUrl(configured) ? configured : "";
     }
 
-    public static boolean isDirectMedia(String address) { return AniuaApiClient.isSupportedMediaUrl(address); }
-
-    public static boolean isAshdiPage(String address) {
+    private static boolean isAshdiPage(String address) {
         try {
             URI uri = URI.create(address);
             String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT);

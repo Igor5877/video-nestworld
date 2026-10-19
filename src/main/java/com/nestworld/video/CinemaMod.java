@@ -184,7 +184,6 @@ public class CinemaMod {
     public static void onRegisterCommands(RegisterCommandsEvent event) {
         ReloadVideosCommand.register(event.getDispatcher());
         AniuaCommand.register(event.getDispatcher());
-        com.nestworld.video.command.FilmsCommand.register(event.getDispatcher());
         com.nestworld.video.command.AdultCommand.register(event.getDispatcher());
         LOGGER.info("NESTWORLD_VIDEO: Registered reload command");
     }

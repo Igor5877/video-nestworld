@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> {
     private static final int TEXT=0xE8EDF2, MUTED=0xAAB8C7, GOLD=0xE7BE70;
     private static final AtomicInteger REQUESTS = new AtomicInteger();
-    private enum View { SEARCH, LIBRARY, FILMS, VOICES, EPISODES, SOURCES }
+    private enum View { SEARCH, LIBRARY, VOICES, EPISODES, SOURCES }
     private record Row(String label, String hint, boolean enabled, Runnable action, String url, String poster, String meta, float ratio) {
         Row(String label, String hint, boolean enabled, Runnable action) { this(label, hint, enabled, action, "", "", "", -1f); }
         Row(String label, String hint, boolean enabled, Runnable action, String url) { this(label, hint, enabled, action, url, "", "", -1f); }
@@ -66,7 +66,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         for(Category c:categories()) {
             if(c.getVideos()==null) continue;
             for(Video v:c.getVideos()) if(v!=null && root.getCurrentVideoUrl().equals(v.getUrl())) {
-                selected=c; origin=homeOf(c); voice=v.getDub(); view=View.EPISODES; status=""; return;
+                selected=c; origin=View.LIBRARY; voice=v.getDub(); view=View.EPISODES; status=""; return;
             }
         }
     }
@@ -123,12 +123,11 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         if(menu.getBlockEntity()==null) { onClose(); return; }
         resume=detail() ? resumePoint() : null;
         entries.clear(); search=null; searchButton=null; qualityButton=null; sortButton=null; favButton=null; favToggle=null; volumeSlider=null; skipIntro=null;
-        int tab=(imageWidth-36)/4;
+        int tab=(imageWidth-32)/3;
         View tabView=detail() ? origin : view;
         ((CinemaButton)button("Пошук AniUA",12,30,tab,b->switchView(View.SEARCH))).selected=!construction && tabView==View.SEARCH;
         ((CinemaButton)button("Бібліотека",16+tab,30,tab,b->switchView(View.LIBRARY))).selected=!construction && tabView==View.LIBRARY;
-        ((CinemaButton)button("Фільми",20+tab*2,30,tab,b->switchView(View.FILMS))).selected=!construction && tabView==View.FILMS;
-        ((CinemaButton)button(tr("screen"),24+tab*3,30,tab,b->{construction=true; rebuildWidgets();})).selected=construction;
+        ((CinemaButton)button(tr("screen"),20+tab*2,30,tab,b->{construction=true; rebuildWidgets();})).selected=construction;
         button("×",imageWidth-30,7,18,b->onClose()).setTooltip(Tooltip.create(tr("close")));
         button("⚙",imageWidth-54,7,20,b->minecraft.setScreen(new NestworldSettingsScreen(this)))
                 .setTooltip(Tooltip.create(Component.literal("Налаштування відео мода: декодер, якість, звук")));
@@ -137,11 +136,9 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
     }
     private void switchView(View next) {
         construction=false; view=next; page=0; status=next==View.SEARCH ?
-                (results.isEmpty() ? "Введи частину назви українською або англійською." : "Вибери аніме та сезон зі списку.") : next==View.FILMS ? "Фільми каталогу" : "Збережені аніме та відео";
+                (results.isEmpty() ? "Введи частину назви українською або англійською." : "Вибери аніме та сезон зі списку.") : "Збережені аніме та відео";
         rebuildWidgets();
     }
-    private static boolean isFilm(Category c) { return c.getName()!=null && c.getName().startsWith("Фільм:"); }
-    private static View homeOf(Category c) { return isFilm(c) ? View.FILMS : View.LIBRARY; }
     private List<Category> categories() {
         var config=ClientData.getVideoConfig();
         return config==null || config.getCategories()==null ? List.of() : config.getCategories().stream().filter(Objects::nonNull).toList();
@@ -154,7 +151,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         if (!detail()) {
             boolean remote=view==View.SEARCH;
             search=new CinemaEditBox(font,leftPos+13,topPos+58,imageWidth-(remote?108:26+110+26),20,Component.literal("Пошук"));
-            search.setMaxLength(120); search.setHint(Component.literal(remote ? "Назва або частина назви…" : view==View.FILMS ? "Пошук фільмів…" : "Пошук у бібліотеці…"));
+            search.setMaxLength(120); search.setHint(Component.literal(remote ? "Назва або частина назви…" : "Пошук у бібліотеці…"));
             search.setValue(remote ? query : libraryQuery);
             search.setResponder(value->{ if(remote) query=value; else {libraryQuery=value;page=0;refreshEntries();} });
             addRenderableWidget(search);
@@ -203,7 +200,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
             }
             }
         }
-        boolean cards=!detail() && (view==View.SEARCH || view==View.LIBRARY || view==View.FILMS), voiceCards=view==View.VOICES;
+        boolean cards=!detail() && (view==View.SEARCH || view==View.LIBRARY), voiceCards=view==View.VOICES;
         int columns=cards || view==View.EPISODES ? 2 : 1;
         int start=100, available=imageHeight-114-start;
         // Cards stretch so the list fills the space: about three rows, never tiny and never taller than a poster needs.
@@ -311,10 +308,9 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
                     searchPage=page; status="Завантажую серії: "+title.title()+"…";request("load",title.slug());
                 },"",title.poster(),metaOf(title)));
             }
-            case LIBRARY, FILMS -> {
+            case LIBRARY -> {
                 var all=new ArrayList<Category>();
                 for(Category c:categories()) {
-                    if(isFilm(c)!=(view==View.FILMS)) continue;
                     if(!CatalogueOrder.matches(c.getDisplayTitle(),libraryQuery)) continue;
                     if(favoritesOnly && !WatchHistory.isFavorite(c)) continue;
                     if(sort==Sort.UNWATCHED && WatchHistory.touched(c)) continue;
@@ -325,9 +321,9 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
                 // "Continue watching": where you stopped, one click away (only on the plain, unfiltered shelf).
                 if(libraryQuery.isBlank() && !favoritesOnly && sort==Sort.RECENT) addResumeRows(all);
                 for(Category c:all)
-                    rows.add(new Row((WatchHistory.isFavorite(c)?"★ ":"")+c.getDisplayTitle(),c.getDisplayTitle(),true,()->{origin=view;open(c);},"",c.getPoster(),metaOf(c)));
+                    rows.add(new Row((WatchHistory.isFavorite(c)?"★ ":"")+c.getDisplayTitle(),c.getDisplayTitle(),true,()->{origin=View.LIBRARY;open(c);},"",c.getPoster(),metaOf(c)));
                 // Also find individual videos by a partial title in non-anime categories.
-                if(view==View.LIBRARY && !libraryQuery.isBlank()) for(Category c:categories()) if(c.getVideos()!=null && !isFilm(c) && (c.getName()==null || !c.getName().startsWith("AniUA:")))
+                if(!libraryQuery.isBlank()) for(Category c:categories()) if(c.getVideos()!=null && (c.getName()==null || !c.getName().startsWith("AniUA:")))
                     for(Video v:c.getVideos()) if(v!=null && CatalogueOrder.matches(v.getTitle(),libraryQuery))
                         rows.add(new Row(v.getTitle(),v.getTitle(),playable(v),()->select(v),url(v)));
             }
@@ -416,7 +412,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         }
     }
     private void resume(Category category,Video video,long positionMs) {
-        origin=homeOf(category); selected=category; voice=video.getDub(); view=View.EPISODES; page=0; status=""; construction=false;
+        origin=View.LIBRARY; selected=category; voice=video.getDub(); view=View.EPISODES; page=0; status=""; construction=false;
         select(video); send("play");
         if(positionMs>=WatchHistory.MIN_RESUME_MS) seek(positionMs);
         rebuildWidgets();
@@ -587,7 +583,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         construction=false;
         selected=category;
         voice=video[0].getDub();
-        if(origin==View.SEARCH && results.isEmpty()) origin=homeOf(category);
+        if(origin==View.SEARCH && results.isEmpty()) origin=View.LIBRARY;
         view=View.EPISODES;
         page=0;
         status="";
@@ -696,8 +692,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
                 String empty=loading?"Завантаження…":detail() && "Фільм".equals(selected.getSeason())
                         ? "Це фільм. AniUA не передав доступного відеопотоку для цього релізу."
                         : detail()?"У цьому релізі немає серій.":
-                        view==View.LIBRARY?"Нічого не знайдено. Знайди аніме у вкладці AniUA.":
-                        view==View.FILMS?"Фільмів немає. Адмін додає їх у config/nestworld-films.json і виконує /films reload.":status;
+                        view==View.LIBRARY?"Нічого не знайдено. Знайди аніме у вкладці AniUA.":status;
                 if(!empty.equals(line)) g.drawWordWrap(font,Component.literal(empty),leftPos+listLeft(),topPos+103,imageWidth-listLeft()-12,MUTED);
             }
             int pages=Math.max(1,(rows.size()+visibleRows-1)/visibleRows);

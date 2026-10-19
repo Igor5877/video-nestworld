@@ -13,7 +13,6 @@ public class Category {
         this.displayTitle = title; this.poster = poster; this.season = season;
     }
     public void setRating(String rating) { this.rating = rating; }
-    public void setAdult(boolean adult) { this.adult = adult; }
     public String getRating() { return rating == null ? "" : rating; }
     /** True when marked 18+ by hand or when its rating is one of {@code adultRatings}. */
     public boolean isAdult(java.util.List<String> adultRatings) {
