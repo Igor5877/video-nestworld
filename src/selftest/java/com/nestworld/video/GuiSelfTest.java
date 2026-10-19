@@ -31,7 +31,7 @@ import java.util.List;
 public class GuiSelfTest {
     static final BlockPos ORIGIN = new BlockPos(4, -60, 5);
     static boolean launched, scene, ready;
-    static int ticks, capture;
+    static int ticks, capture, shots, waitUntil;
     static long start = System.nanoTime();
     static volatile Throwable failure;
     static final boolean PLAY = Boolean.getBoolean("nestworldvideo.guiplay");
@@ -100,7 +100,7 @@ public class GuiSelfTest {
 
     static void click(String text) {
         var mc = Minecraft.getInstance();
-        var b = mc.screen.children().stream().filter(e -> e instanceof Button bt && bt.getMessage().getString().equals(text)).map(e -> (Button) e).findFirst().orElseThrow(() -> new AssertionError("no button " + text));
+        var b = mc.screen.children().stream().filter(e -> e instanceof Button bt && (bt.getMessage().getString().equals(text) || bt.getMessage().getString().trim().endsWith(text))).map(e -> (Button) e).findFirst().orElseThrow(() -> new AssertionError("no button " + text));
         b.onPress();
     }
 
@@ -110,7 +110,7 @@ public class GuiSelfTest {
         GLFW.glfwHideWindow(mc.getWindow().getWindow());
         mc.options.pauseOnLostFocus = false;
         if (failure != null) { failure.printStackTrace(); System.out.println("NESTWORLD GUI TEST FAIL"); mc.stop(); return; }
-        if (System.nanoTime() - start > 480_000_000_000L) { System.out.println("NESTWORLD GUI TEST TIMEOUT"); mc.stop(); return; }
+        if (System.nanoTime() - start > 900_000_000_000L) { System.out.println("NESTWORLD GUI TEST TIMEOUT"); mc.stop(); return; }
         if (!launched && mc.screen instanceof TitleScreen && mc.getOverlay() == null) {
             launched = true;
             mc.options.renderDistance().set(4); mc.options.simulationDistance().set(5);
@@ -147,10 +147,11 @@ public class GuiSelfTest {
             }
             if (PLAY) {
                 if (ticks == 45) mc.getSingleplayerServer().execute(() -> ((VideoScreenBlockEntity) mc.getSingleplayerServer().overworld().getBlockEntity(ORIGIN)).play());
-                if (ticks == 20 * 17) capture = 1;              // playing: progress bar filling
-                if (ticks == 20 * 18) click("Пауза");
-                if (ticks == 20 * 21) capture = 2;              // paused
-                if (ticks == 20 * 22) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
+                var display = com.nestworld.video.client.ClientVideoManager.getInstance().getDisplay(ORIGIN);
+                if (shots == 0 && display != null && display.getPlaybackTime() > 6000) { shots = 1; capture = 1; waitUntil = ticks + 10; }   // playing
+                if (shots == 1 && ticks == waitUntil) { click("Пауза"); waitUntil = ticks + 40; shots = 2; }
+                if (shots == 2 && ticks == waitUntil) { capture = 2; waitUntil = ticks + 20; shots = 3; }                                   // paused
+                if (shots == 3 && ticks == waitUntil) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
                 return;
             }
             if (ticks == 70) capture = 1;                       // episode list

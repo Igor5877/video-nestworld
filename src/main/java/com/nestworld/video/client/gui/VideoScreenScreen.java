@@ -82,6 +82,10 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
     }
     private Button button(String label,int x,int y,int w,Button.OnPress action) { return button(Component.literal(label),x,y,w,action); }
     private VideoScreenBlockEntity screen() { return menu.getBlockEntity()==null ? null : menu.getBlockEntity().controller(); }
+    /** The release poster gets a proper column of its own; the list and the quick action sit around it. */
+    private int posterWidth() { return detail() ? Math.max(56,Math.min(92,imageWidth/5)) : 0; }
+    private int posterHeight() { return Math.min(posterWidth()*3/2,imageHeight-114-100-28); }
+    private int listLeft() { return detail() ? 12+posterWidth()+8 : 12; }
     private boolean detail() { return view==View.VOICES || view==View.EPISODES || view==View.SOURCES; }
     @Override protected void init() {
         imageWidth=Math.min(500,width-12); imageHeight=Math.min(430,height-12);
@@ -131,6 +135,11 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
                 rebuildWidgets();request("seasons",selected.getName().substring(6).trim());
             }).setTooltip(Tooltip.create(Component.literal("Усі сезони та пов’язані фільми")));
             poster.load(selected.getPoster());
+            int actionWidth=posterHeight()*2/3;
+            var watch=button("▶ Дивитись",12,100+posterHeight()+6,Math.max(actionWidth,76),b->playFromStart());
+            ((CinemaButton)watch).primary=true; ((CinemaButton)watch).centered=true;
+            watch.active=bestStart()!=null;
+            watch.setTooltip(Tooltip.create(Component.literal("Почати з першої доступної серії в найкращій озвучці")));
         }
         boolean cards=!detail() && (view==View.SEARCH || view==View.LIBRARY), voiceCards=view==View.VOICES;
         int columns=cards || view==View.EPISODES ? 2 : 1;
@@ -138,7 +147,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         // Cards stretch so the list fills the space: about three rows, never tiny and never taller than a poster needs.
         int cardRows=Math.max(1,Math.round(available/62f));
         int cardHeight=Math.max(46,Math.min(66,available/cardRows-4)), pitch=cards?cardHeight+4:voiceCards?46:24;
-        int left=detail()?76:12;
+        int left=listLeft();
         visibleRows=Math.max(1,(imageHeight-114-start)/pitch)*columns;
         int rowWidth=(imageWidth-left-12-(columns-1)*6)/columns;
         for(int i=0;i<visibleRows;i++) {
@@ -317,6 +326,24 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
     }
     private static String url(Video v) {return v.getUrl()==null?"":v.getUrl();}
     private static boolean playable(Video v) {return v.getUrl()!=null && !v.getUrl().isBlank();}
+    /** First playable episode of the chosen voice, or of the voice with the most playable episodes. */
+    private Video bestStart() {
+        var all=videos();
+        String chosen=voice;
+        if(chosen.isEmpty()) {
+            var counts=new LinkedHashMap<String,Long>();
+            for(Video v:all) if(playable(v)) counts.merge(v.getDub(),1L,Long::sum);
+            chosen=counts.entrySet().stream().max(Map.Entry.comparingByValue()).map(Map.Entry::getKey).orElse("");
+        }
+        final String dub=chosen;
+        return all.stream().filter(VideoScreenScreen::playable).filter(v->dub.isEmpty() || v.getDub().equals(dub)).findFirst().orElse(null);
+    }
+    private void playFromStart() {
+        Video start=bestStart();
+        if(start==null) return;
+        select(start);
+        send("play");
+    }
     private void select(Video video) {
         Networking.INSTANCE.sendToServer(new PacketControlVideo(menu.getBlockEntity().getBlockPos(),"select",video.getUrl(),""));
     }
@@ -496,10 +523,10 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
                     && !rows.isEmpty() && rows.stream().noneMatch(Row::enabled);
             String line=detail() ? selected.getSeason()+" · "+(view==View.VOICES?"Вибери озвучку":voice)
                     +(noPlayableVoice?" · немає доступних потоків":"") : status;
-            text(g,Component.literal(line),detail()?76:12,84,MUTED,imageWidth-(detail()?88:24));
+            text(g,Component.literal(line),listLeft(),84,MUTED,imageWidth-listLeft()-12);
             if(detail()) {
-                int h=Math.min(84,imageHeight-192),w=Math.min(56,h*2/3);
-                g.fill(leftPos+12,topPos+100,leftPos+12+w,topPos+100+h,0xFF304456);
+                int h=posterHeight(),w=h*2/3;
+                StarMenuPaint.round(g,leftPos+12,topPos+100,w,h,4,0xFF1E2B37);
                 if(poster.texture()!=null) {
                     float scale=Math.min(w/(float)poster.width(),h/(float)poster.height());
                     int pw=(int)(poster.width()*scale),ph=(int)(poster.height()*scale);
@@ -508,9 +535,9 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
                     String title=selected.getDisplayTitle();
                     String initial=title==null||title.isBlank()?"?":title.substring(0,1).toUpperCase();
                     g.pose().pushPose();
-                    g.pose().translate(leftPos+12+w/2f,topPos+100+h/2f-8,0);
-                    g.pose().scale(2f,2f,1f);
-                    g.drawCenteredString(font,initial,0,0,MUTED);
+                    g.pose().translate(leftPos+12+w/2f,topPos+100+h/2f-12,0);
+                    g.pose().scale(3f,3f,1f);
+                    g.drawCenteredString(font,initial,0,0,0xFF6F8294);
                     g.pose().popPose();
                 }
             }
@@ -519,7 +546,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
                         ? "Це фільм. AniUA не передав доступного відеопотоку для цього релізу."
                         : detail()?"У цьому релізі немає серій.":
                         view==View.LIBRARY?"Нічого не знайдено. Знайди аніме у вкладці AniUA.":status;
-                if(!empty.equals(line)) g.drawWordWrap(font,Component.literal(empty),leftPos+(detail()?76:12),topPos+103,imageWidth-(detail()?88:24),MUTED);
+                if(!empty.equals(line)) g.drawWordWrap(font,Component.literal(empty),leftPos+listLeft(),topPos+103,imageWidth-listLeft()-12,MUTED);
             }
             int pages=Math.max(1,(rows.size()+visibleRows-1)/visibleRows);
             g.drawCenteredString(font,(page+1)+" / "+pages+"  ·  "+rows.size()+" "+(view==View.EPISODES?"серій":"записів"),
@@ -606,7 +633,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
             g.renderTooltip(font,Component.literal("Перейти до списку серій цього відео"),mx,my);
         if(!construction && !detail() && my>=topPos+80 && my<=topPos+96 && mx>=leftPos+12 && mx<leftPos+imageWidth-12)
             g.renderTooltip(font,font.split(Component.literal(status),imageWidth-30),mx,my);
-        if(!construction && detail() && mx>=leftPos+12 && mx<leftPos+70 && my>=topPos+100 && my<topPos+imageHeight-114
+        if(!construction && detail() && mx>=leftPos+12 && mx<leftPos+12+posterHeight()*2/3 && my>=topPos+100 && my<topPos+100+posterHeight()
                 && poster.texture()==null) g.renderTooltip(font,Component.literal(poster.status()),mx,my);
         int viewersWidth=font.width("Глядачі: "+(viewerCount<0?"…":viewerCount));
         if(!construction && viewerCount>=0 && mx>=leftPos+imageWidth-36-viewersWidth && mx<leftPos+imageWidth-36
