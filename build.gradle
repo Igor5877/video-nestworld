@@ -63,6 +63,7 @@ minecraft {
             if (project.hasProperty('selftest')) property 'nestworldvideo.selftest', 'true'
             if (project.hasProperty('ffmpegtest')) property 'nestworldvideo.ffmpegtest', 'true'
             if (project.hasProperty('guitest')) property 'nestworldvideo.guitest', 'true'
+            if (project.hasProperty('guiplay')) property 'nestworldvideo.guiplay', 'true'
             if (project.hasProperty('guishots')) property 'nestworldvideo.guishots', project.property('guishots')
             if (project.hasProperty('shadertest')) {
                 // Production mods (Oculus/Embeddium) use SRG-named mixins: let Mixin remap them in the dev environment.

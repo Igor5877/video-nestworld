@@ -34,6 +34,8 @@ public class GuiSelfTest {
     static int ticks, capture;
     static long start = System.nanoTime();
     static volatile Throwable failure;
+    static final boolean PLAY = Boolean.getBoolean("nestworldvideo.guiplay");
+    static final String PLAY_URL = "file:///tmp/claude-0/spike/media/smpte.m3u8";
     static String shotPrefix = System.getProperty("nestworldvideo.guishots", "gui");
 
     static Category catalogue() {
@@ -44,6 +46,7 @@ public class GuiSelfTest {
                 v.setEpisodeInfo(String.valueOf(i), dub, "Старша школа DxD", "ashdi");
                 videos.add(v);
             }
+        if (PLAY) videos.set(0, withUrl(videos.get(0), PLAY_URL));
         var c = new Category("AniUA:high-school-dxd", videos);
         c.setDetails("Старша школа DxD", "", "Окремий реліз");
         return c;
@@ -54,6 +57,12 @@ public class GuiSelfTest {
             try { var f = c.getDeclaredField(name); f.setAccessible(true); return f.getInt(screen); } catch (NoSuchFieldException ignored) { }
         }
         throw new NoSuchFieldException(name);
+    }
+
+    static Video withUrl(Video v, String url) {
+        var copy = new Video(v.getTitle(), "", url, "", "");
+        copy.setEpisodeInfo(v.getEpisode(), v.getDub(), "Старша школа DxD", "ashdi");
+        return copy;
     }
 
     static List<Category> library() {
@@ -135,6 +144,14 @@ public class GuiSelfTest {
                 ClientData.setVideoConfig(new VideoConfig(library()));
                 var be = (VideoScreenBlockEntity) mc.level.getBlockEntity(ORIGIN);
                 mc.setScreen(new VideoScreenScreen(new VideoScreenMenu(0, mc.player.getInventory(), be), mc.player.getInventory(), Component.literal("Керування екраном")));
+            }
+            if (PLAY) {
+                if (ticks == 45) mc.getSingleplayerServer().execute(() -> ((VideoScreenBlockEntity) mc.getSingleplayerServer().overworld().getBlockEntity(ORIGIN)).play());
+                if (ticks == 20 * 17) capture = 1;              // playing: progress bar filling
+                if (ticks == 20 * 18) click("Пауза");
+                if (ticks == 20 * 21) capture = 2;              // paused
+                if (ticks == 20 * 22) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
+                return;
             }
             if (ticks == 70) capture = 1;                       // episode list
             if (ticks == 90) click("Пошук AniUA");
