@@ -14,6 +14,8 @@ public final class NestworldConfig {
     public static final ForgeConfigSpec.BooleanValue MIPMAPS;
     public static final ForgeConfigSpec.BooleanValue AUTO_VSYNC, DEBUG_STATS;
     public static final ForgeConfigSpec.IntValue SPATIAL_SOFTNESS;
+    public static final ForgeConfigSpec.BooleanValue ACOUSTICS;
+    public static final ForgeConfigSpec.IntValue ACOUSTICS_REVERB, ACOUSTICS_QUALITY;
     public static final ForgeConfigSpec.IntValue SHARPNESS;
     public static final ForgeConfigSpec.IntValue SHADER_TINT_RED, SHADER_TINT_GREEN, SHADER_TINT_BLUE;
     public static final ForgeConfigSpec.ConfigValue<String> UPSCALER;
@@ -49,6 +51,16 @@ public final class NestworldConfig {
                 .comment("How gentle the stereo image of the screen is, 0 (wide, strongly panned) to 100 (almost mono).",
                         "Softer values blend the left and right speaker and keep the panning angle small when you stand close.")
                 .defineInRange("spatial_softness", 60, 0, 100);
+        ACOUSTICS = builder
+                .comment("Room acoustics for the screen sound (needs the FFmpeg decoder with spatial audio): walls muffle the sound,",
+                        "doors and openings let it through, and halls add reverb. Uses OpenAL EFX; switches itself off if unavailable.")
+                .define("acoustics", true);
+        ACOUSTICS_REVERB = builder
+                .comment("Strength of the room reverb in percent (0 = only muffling by walls). The soundtrack may carry its own reverb.")
+                .defineInRange("acoustics_reverb", 60, 0, 100);
+        ACOUSTICS_QUALITY = builder
+                .comment("Acoustic ray quality: 1 fast, 2 balanced, 3 detailed (more rays and bounces).")
+                .defineInRange("acoustics_quality", 2, 1, 3);
         AUTO_VSYNC = builder
                 .comment("Temporarily enable VSync while a video screen is playing in front of you, to avoid horizontal tearing",
                         "bands at a high frame rate. Your own VSync setting is restored afterwards and never overwritten.")

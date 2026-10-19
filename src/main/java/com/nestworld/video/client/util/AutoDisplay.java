@@ -72,6 +72,7 @@ final class AutoDisplay extends Display {
     @Override public void setSoundPlacement(double cx, double cy, double cz, double rx, double ry, double rz) {
         delegate.setSoundPlacement(cx, cy, cz, rx, ry, rz);
     }
+    @Override public void setAcoustics(com.nestworld.video.client.acoustics.AcousticResult result) { delegate.setAcoustics(result); }
     @Override public float[] uvScale() { return delegate.uvScale(); }
     @Override public boolean managesTextureFilter() { return delegate.managesTextureFilter(); }
     @Override public boolean hasMipmaps() { return delegate.hasMipmaps(); }

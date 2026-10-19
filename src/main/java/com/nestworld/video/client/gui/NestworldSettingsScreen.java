@@ -68,6 +68,13 @@ public final class NestworldSettingsScreen extends Screen {
                 "Звук іде з екрана в 3D (лише для FFmpeg). Діє для потоків, запущених після зміни.");
         slider("М’якість звуку", cellW, 100, 0, NestworldConfig.SPATIAL_SOFTNESS::get, NestworldConfig.SPATIAL_SOFTNESS::set,
                 "0 — широка панорама, 100 — майже моно.");
+        toggle("Акустика приміщення", cellW, NestworldConfig.ACOUSTICS,
+                "Стіни приглушують звук екрана, двері й отвори пропускають його, у залах з’являється луна (лише FFmpeg і просторовий звук).");
+        slider("Луна приміщення", cellW, 100, 0, NestworldConfig.ACOUSTICS_REVERB::get, NestworldConfig.ACOUSTICS_REVERB::set,
+                "0 — лише приглушення стінами. Звукова доріжка вже може містити власну луну.");
+        choice("Якість акустики", cellW, () -> switch (NestworldConfig.ACOUSTICS_QUALITY.get()) { case 1 -> "Швидка"; case 3 -> "Детальна"; default -> "Збалансована"; },
+                () -> NestworldConfig.ACOUSTICS_QUALITY.set(NestworldConfig.ACOUSTICS_QUALITY.get() % 3 + 1),
+                "Кількість променів і відбиттів. Детальна точніша, але важча для процесора.");
         toggle("Авто-VSync біля екрана", cellW, NestworldConfig.AUTO_VSYNC,
                 "Вмикає вертикальну синхронізацію, лише коли ви дивитеся на екран, щоб не було смуг. Ваше налаштування не змінюється.");
         choice("Макс. відстань потоку", cellW, () -> NestworldConfig.MAX_STREAM_DISTANCE.get() + " бл.",

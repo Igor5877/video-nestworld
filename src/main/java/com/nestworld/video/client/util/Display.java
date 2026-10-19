@@ -62,5 +62,7 @@ public abstract class Display {
     /** True when the current texture has a full mipmap chain. */
     public boolean hasMipmaps() { return false; }
     public void setSoundPlacement(double cx, double cy, double cz, double rx, double ry, double rz) {}
+    /** Room acoustics for this screen's sound (null = none); only the FFmpeg audio path uses it. */
+    public void setAcoustics(com.nestworld.video.client.acoustics.AcousticResult result) {}
     public abstract void release();
 }

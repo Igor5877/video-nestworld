@@ -550,6 +550,11 @@ public final class FfmpegDisplay extends Display {
         if (output != null && output.isSpatial()) output.setPlacement(cx, cy, cz, rx, ry, rz);
     }
 
+    @Override public void setAcoustics(com.nestworld.video.client.acoustics.AcousticResult result) {
+        AlAudio output = audio;
+        if (output != null) output.setAcoustics(result);
+    }
+
     @Override public void release() {
         if (closed) return;
         closed = true;

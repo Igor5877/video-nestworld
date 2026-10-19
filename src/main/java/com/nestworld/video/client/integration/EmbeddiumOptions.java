@@ -105,6 +105,9 @@ public final class EmbeddiumOptions {
 
         var spatial = tick(storage, "Просторовий звук", "Звук іде з екрана в 3D (лише для FFmpeg). Діє для потоків, запущених після зміни.", NestworldConfig.SPATIAL_AUDIO);
         var soft = slider(storage, "М’якість звуку", "0 — широка панорама, 100 — майже моно.", NestworldConfig.SPATIAL_SOFTNESS, 0, 100, 5, ControlValueFormatter.percentage());
+        var acoustics = tick(storage, "Акустика приміщення", "Стіни приглушують звук екрана, двері й отвори пропускають його, у залах з’являється луна (лише FFmpeg і просторовий звук).", NestworldConfig.ACOUSTICS);
+        var reverb = slider(storage, "Луна приміщення", "0 — лише приглушення стінами. Звукова доріжка вже може містити власну луну.", NestworldConfig.ACOUSTICS_REVERB, 0, 100, 5, ControlValueFormatter.percentage());
+        var acousticQuality = slider(storage, "Якість акустики", "1 швидка, 2 збалансована, 3 детальна (більше променів і відбиттів).", NestworldConfig.ACOUSTICS_QUALITY, 1, 3, 1, ControlValueFormatter.number());
         var vsync = tick(storage, "Авто-VSync біля екрана", "Вмикає вертикальну синхронізацію, лише коли ви дивитеся на екран, щоб не було смуг. Ваше налаштування VSync не змінюється.", NestworldConfig.AUTO_VSYNC);
 
         var distance = slider(storage, "Макс. відстань потоку", "Далі за цю відстань відео не завантажується.", NestworldConfig.MAX_STREAM_DISTANCE, 16, 512, 16, ControlValueFormatter.number());
@@ -114,7 +117,8 @@ public final class EmbeddiumOptions {
         return new OptionPage(Component.literal("Nestworld Video"), ImmutableList.<OptionGroup>of(
                 playbackGroup(decoder, quality, mode),
                 OptionGroup.createBuilder().add(smooth).add(upscaler).add(sharp).add(mips).build(),
-                OptionGroup.createBuilder().add(spatial).add(soft).add(vsync).build(),
+                OptionGroup.createBuilder().add(spatial).add(soft).add(acoustics).add(reverb).add(acousticQuality).build(),
+                OptionGroup.createBuilder().add(vsync).build(),
                 OptionGroup.createBuilder().add(distance).add(streams).add(debug).build()));
     }
 

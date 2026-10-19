@@ -51,6 +51,11 @@ public class GuiSelfTest {
             } catch (Exception e) { throw new RuntimeException(e); }
         }
     }
+    static String[] hall(String block) {   // four walls, a back wall and a ceiling; the ground is the floor, the screen stays untouched
+        return new String[]{"fill -6 -60 -4 -6 -54 6 " + block, "fill 10 -60 -4 10 -54 6 " + block, "fill -6 -60 -4 10 -54 -4 " + block,
+                "fill -6 -60 6 10 -54 6 " + block, "fill -6 -54 -4 10 -54 6 " + block};
+    }
+    static String[] concat(String[] a, String[] b) { var all = new String[a.length + b.length]; System.arraycopy(a, 0, all, 0, a.length); System.arraycopy(b, 0, all, a.length, b.length); return all; }
     static int restartAt, stopStage, stopTick, relayAt, leakStart;
     static long stopTime;
     static final boolean STUB = Boolean.getBoolean("nestworldvideo.guistub");
@@ -178,7 +183,9 @@ public class GuiSelfTest {
                             level.setBlock(ORIGIN.relative(Direction.NORTH.getCounterClockWise(), c).above(r),
                                     ModBlocks.VIDEO_SCREEN_BLOCK.get().defaultBlockState().setValue(VideoScreenBlock.FACING, Direction.NORTH), 2);
                         be.assemble();
-                        be.setVideo(new Video("toon", "", "file:///tmp/claude-0/toon/toon.m3u8", "", ""));
+                        boolean longVideo = Boolean.getBoolean("nestworldvideo.guiacoustics");   // the acoustics test must keep playing for a while
+                        be.setVideo(new Video("toon", "", longVideo ? "file:///tmp/claude-0/spike/media/long.m3u8" : "file:///tmp/claude-0/toon/toon.m3u8", "", ""));
+                        if (longVideo) be.setRepeat(true);
                         be.play();
                         var source = mc.getSingleplayerServer().createCommandSourceStack().withSuppressedOutput();
                         for (String cmd : new String[]{"time set day", "weather clear", ANIME ? (Boolean.getBoolean("nestworldvideo.guifar") ? "tp @a 1.5 -60 -3 0 -3" : "tp @a 1.5 -60 3.2 0 -4") : "tp @a 1.5 -60 -2 0 -3"})
@@ -192,6 +199,32 @@ public class GuiSelfTest {
         try {
             ticks++;
             if (ticks == 30) mc.resizeDisplay();
+            if (Boolean.getBoolean("nestworldvideo.guiacoustics")) {   // needs -Pguianime for the 6x3 screen; real world, real rays
+                var acoustics = com.nestworld.video.client.ClientVideoManager.getInstance().getAcoustics();
+                if (ticks == 20) mc.options.hideGui = true;
+                // Stages every 100 ticks starting at 120: report, then change the world for the next stage.
+                if (ticks >= 120 && (ticks - 120) % 100 == 60) {
+                    var r = acoustics.lastResult(ORIGIN);
+                    System.out.println("ACOUSTICS-TEST stage " + ((ticks - 120) / 100) + " -> " + r);
+                }
+                if (ticks >= 120 && (ticks - 120) % 100 == 99) {
+                    int next = (ticks - 120) / 100 + 1;
+                    var server = mc.getSingleplayerServer();
+                    server.execute(() -> {
+                        var src = server.createCommandSourceStack().withSuppressedOutput();
+                        String[] cmds = switch (next) {
+                            case 1 -> new String[]{"fill -3 -60 4 8 -57 4 minecraft:stone"};                                   // a stone wall in front of the screen
+                            case 2 -> new String[]{"fill -1 -60 4 1 -58 4 minecraft:air"};                                      // an opening in front of the right half
+                            case 3 -> concat(new String[]{"fill -3 -60 4 8 -57 4 minecraft:air"}, hall("minecraft:stone"));      // a stone hall around the viewer and the screen
+                            case 4 -> hall("minecraft:white_wool");                                                              // the same hall in wool
+                            default -> new String[0];
+                        };
+                        for (String cmd : cmds) server.getCommands().performPrefixedCommand(src, cmd);
+                    });
+                }
+                if (ticks == 120 + 100 * 5 + 70) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
+                return;
+            }
             if (STUB) {
                 mc.options.hideGui = true;
                 if (ticks == 150) { shotPrefix = "stub"; capture = 1; }

@@ -66,10 +66,15 @@ public class ClientVideoManager {
         }
     }
 
+    private final com.nestworld.video.client.acoustics.ScreenAcoustics acoustics = new com.nestworld.video.client.acoustics.ScreenAcoustics();
+
+    public com.nestworld.video.client.acoustics.ScreenAcoustics getAcoustics() { return acoustics; }
+
     public void stopPlaying(BlockPos pos) {
         reportViewer(pos, false);
         lastEndReports.remove(pos);
         driftState.remove(pos);
+        acoustics.forget(pos);
         Display display = activeDisplays.remove(pos);
         if (display != null) {
             display.release();
@@ -287,6 +292,11 @@ public class ClientVideoManager {
                 double cx = (bounds.minX + bounds.maxX) / 2 - px, cy = (bounds.minY + bounds.maxY) / 2 - py, cz = (bounds.minZ + bounds.maxZ) / 2 - pz;
                 double length = Math.sqrt(cx * cx + cy * cy + cz * cz);
                 if (length < 1e-3 || (look.x * cx + look.y * cy + look.z * cz) / length > 0.3) watching = true;
+            }
+            // Room acoustics only matter while the screen is audible, which is also when it is close enough to compute them.
+            if (current != null) {
+                if (current.isPlaying() && dist < 48) acoustics.update(mc.level, pos, screen, current, mc.level.getGameTime());
+                else { current.setAcoustics(null); acoustics.forget(pos); }
             }
             if (current != null) {
                 double diagonal = Math.hypot(screen.getScreenCols(), screen.getScreenRows());

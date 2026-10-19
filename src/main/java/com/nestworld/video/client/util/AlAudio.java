@@ -43,6 +43,8 @@ final class AlAudio implements Runnable {
     private volatile long dropBeforeUs = Long.MIN_VALUE;
     /** Speaker positions in world space: {leftX, leftY, leftZ, rightX, rightY, rightZ} (right = left for mono). */
     private volatile float[] speakers = {0, 0, 0, 0, 0, 0};
+    /** Room acoustics from the client thread (null = none); applied through OpenAL EFX by the audio thread. */
+    private volatile com.nestworld.video.client.acoustics.AcousticResult acoustics;
 
     // Published by the audio thread.
     private volatile long clockUs = -1;
@@ -83,6 +85,7 @@ final class AlAudio implements Runnable {
     private boolean wasDry;
     void setGain(float value) { gain = Math.max(0f, Math.min(1f, value)); }
     void setPlaying(boolean value) { playing = value; }
+    void setAcoustics(com.nestworld.video.client.acoustics.AcousticResult value) { acoustics = value; }
 
     boolean isSpatial() { return spatial; }
 
@@ -148,6 +151,7 @@ final class AlAudio implements Runnable {
         int[][] buffers = new int[sourceCount][BUFFER_COUNT];
         long[] bufferFrames = new long[BUFFER_COUNT];
         List<Integer> free = new ArrayList<>();
+        AlEfx efx = null;
         try {
             for (int s = 0; s < sourceCount; s++) {
                 sources[s] = AL10.alGenSources();
@@ -162,6 +166,8 @@ final class AlAudio implements Runnable {
             }
             for (int i = 0; i < BUFFER_COUNT; i++) free.add(i);
             check("init");
+            efx = com.nestworld.video.NestworldConfig.ACOUSTICS.get() ? AlEfx.create(context, sources) : null;
+            long lastNanos = System.nanoTime();
             long unqueuedFrames = 0, baseUs = -1;
             int queued = 0;
             float smoothGain = -1f, sentGain = -1f;
@@ -225,6 +231,11 @@ final class AlAudio implements Runnable {
                     for (int s = 0; s < sourceCount; s++)
                         AL10.alSource3f(sources[s], AL10.AL_POSITION, smoothSpeakers[3 * s], smoothSpeakers[3 * s + 1], smoothSpeakers[3 * s + 2]);
                 }
+                if (efx != null) {
+                    long nowNanos = System.nanoTime();
+                    efx.update(acoustics, (nowNanos - lastNanos) / 1e9f);
+                    lastNanos = nowNanos;
+                }
                 state = AL10.alGetSourcei(sources[0], AL10.AL_SOURCE_STATE);
                 alPlaying = state == AL10.AL_PLAYING;
                 boolean dry = playing && baseUs >= 0 && queued == 0 && !alPlaying;
@@ -245,6 +256,7 @@ final class AlAudio implements Runnable {
             alPlaying = false;
             try {
                 if (ALC10.alcGetCurrentContext() == context) {
+                    if (efx != null) efx.close();
                     for (int s = 0; s < sourceCount; s++) {
                         if (sources[s] == 0) continue;
                         AL10.alSourceStop(sources[s]);
