@@ -33,6 +33,9 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
     private boolean autoNext = true, repeat;
     /** Someone cancelled the announced auto-advance for the current video; cleared when the video changes. */
     private boolean nextCancelled;
+    /** Server: viewers should read this screen's video through the server's relay. Clients only see {@link #relayUrl}. */
+    private boolean relayActive;
+    private String relayUrl = "";
     /** Media position in milliseconds at the last server tick/sync. */
     private long playbackPositionMs;
     /** Server game tick at which playbackPositionMs was measured for a playing screen. */
@@ -54,6 +57,7 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         tag.putString("video_title", currentVideoTitle);
         tag.putBoolean("is_playing", isPlaying);
         tag.putBoolean("stopped", stopped);
+        tag.putString("relay_url", currentRelayUrl());
         tag.putBoolean("auto_next", autoNext); tag.putBoolean("repeat", repeat); tag.putBoolean("next_cancelled", nextCancelled);
         refreshPlaybackPosition();
         tag.putLong("playback_position_ms", playbackPositionMs);
@@ -70,6 +74,7 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         stopped = tag.contains("stopped") ? tag.getBoolean("stopped") : !isPlaying;
         autoNext = !tag.contains("auto_next") || tag.getBoolean("auto_next");
         repeat = tag.getBoolean("repeat"); nextCancelled = tag.getBoolean("next_cancelled");
+        relayUrl = tag.getString("relay_url");
         playbackPositionMs = Math.max(0, tag.getLong("playback_position_ms"));
         playbackStartedTick = Long.MIN_VALUE;
         playbackStartedNanos = Long.MIN_VALUE;
@@ -213,6 +218,13 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
     public void setRepeat(boolean value) { repeat = value; syncToClient(); }
     /** Cancel the announced auto-advance of the video that is playing now. */
     public void cancelNext() { if (!nextCancelled) { nextCancelled = true; syncToClient(); } }
+    /** Server side: the address viewers should open instead of the video host, or "" for direct streaming. */
+    private String currentRelayUrl() {
+        return level == null || level.isClientSide || !relayActive ? "" : com.nestworld.video.relay.RelayManager.clientUrl(currentVideoUrl);
+    }
+    public void setRelay(boolean active) { if (relayActive != active) { relayActive = active; syncToClient(); } }
+    /** Client side: where to read the video from while the server relays it ("" = the video's own URL; may hold {host}). */
+    public String getRelayUrl() { return relayUrl; }
     public boolean isAutoNext() { return autoNext; }
     public boolean isRepeat() { return repeat; }
     public boolean isNextCancelled() { return nextCancelled; }
@@ -283,7 +295,7 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         if (level == null || level.isClientSide) return;
         updateBlock();
         var packet = new PacketUpdateVideoScreen(worldPosition, currentVideoUrl, currentVideoTitle, isPlaying, stopped,
-                getPlaybackPositionMs(), level.getGameTime(), autoNext, repeat, nextCancelled);
+                getPlaybackPositionMs(), level.getGameTime(), autoNext, repeat, nextCancelled, currentRelayUrl());
         boolean sentToExtra = false;
         for (Player player : level.players()) if (player instanceof ServerPlayer serverPlayer
                 && serverPlayer.distanceToSqr(worldPosition.getX() + .5, worldPosition.getY() + .5,
@@ -299,7 +311,8 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
     public boolean isPlaying() { return isPlaying; }
     public boolean isStopped() { return stopped; }
     public void updatePlayback(String url, String title, boolean playing, boolean stopped, long positionMs,
-                               boolean autoNext, boolean repeat, boolean nextCancelled) {
+                               boolean autoNext, boolean repeat, boolean nextCancelled, String relayUrl) {
+        this.relayUrl = relayUrl == null ? "" : relayUrl;
         this.autoNext = autoNext; this.repeat = repeat; this.nextCancelled = nextCancelled;
         currentVideoUrl = url; currentVideoTitle = title; isPlaying = playing; this.stopped = stopped;
         playbackPositionMs = Math.max(0, positionMs);

@@ -45,7 +45,7 @@ public final class FfmpegDisplay extends Display {
         ByteBuffer data; int width, height, generation; long ptsUs;
     }
 
-    private final String url;
+    private final String url, source;
     private final long createdNanos = System.nanoTime();
     private volatile VideoDecoder decoder;
     private volatile StreamInfo info;
@@ -81,8 +81,10 @@ public final class FfmpegDisplay extends Display {
     private int baseVolume = 100;
     private double spatial = 1.0;
 
-    public FfmpegDisplay(String url) {
-        this.url = url;
+    public FfmpegDisplay(String url) { this(url, url); }
+
+    public FfmpegDisplay(String url, String source) {
+        this.url = url; this.source = source;
         Thread opener = new Thread(this::open, "nestworld-ffmpeg-open");
         opener.setDaemon(true);
         opener.start();
@@ -98,8 +100,8 @@ public final class FfmpegDisplay extends Display {
                 Thread.sleep(100);
             }
             if (closed) return;
-            String referer = origin(url);
-            String target = HlsVariants.pick(url, NestworldConfig.MAX_VIDEO_HEIGHT.get(), USER_AGENT, referer);
+            String referer = origin(source);
+            String target = HlsVariants.pick(source, NestworldConfig.MAX_VIDEO_HEIGHT.get(), USER_AGENT, referer);
             VideoDecoder created = FfmpegLibs.newDecoder();
             decoder = created;
             openedNanos = System.nanoTime();
@@ -214,6 +216,7 @@ public final class FfmpegDisplay extends Display {
     // ---- Display API --------------------------------------------------------------------------------------
 
     @Override public String getUrl() { return url; }
+    @Override public String getSourceUrl() { return source; }
 
     @Override public int getTextureId() {
         StreamInfo streamInfo = info;

@@ -23,6 +23,9 @@ public class ClientVideoManager {
     /** Screens for which an end-of-video report was already sent for the url they are playing. */
     /** Per screen: when the decoder was last found out of step, and when it was last pulled back. */
     private final Map<BlockPos, long[]> driftState = new ConcurrentHashMap<>();
+    /** Screens whose relay did not work for this client: they read the video host directly until the given time (ms). */
+    private final Map<BlockPos, Long> relayFailedUntil = new ConcurrentHashMap<>();
+    private final Map<BlockPos, Long> relayStartedNanos = new ConcurrentHashMap<>();
     private final Map<BlockPos, String> lastEndReports = new ConcurrentHashMap<>();
     /** Announcement of the next episode, shown a few seconds before the current one ends. */
     public record NextUp(BlockPos pos, int seconds, String title) {}
@@ -46,7 +49,12 @@ public class ClientVideoManager {
         }
 
         try {
-            Display display = Display.create(url);
+            String source = sourceFor(pos, url);
+            if (!source.equals(url)) {
+                com.mojang.logging.LogUtils.getLogger().info("Nestworld Video: reading the stream of the screen at {} through the server relay", pos);
+                relayStartedNanos.put(pos, System.nanoTime());
+            } else relayStartedNanos.remove(pos);
+            Display display = Display.create(url, source);
             display.syncPosition(screenPosition(pos));
             activeDisplays.put(pos, display);
         } catch (RuntimeException exception) {
@@ -110,6 +118,26 @@ public class ClientVideoManager {
         }
     }
 
+    /** What to actually open for the video of the screen at {@code pos}: the server's relay when it offers one, else the video's own URL. */
+    private String sourceFor(BlockPos pos, String url) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null || !(mc.level.getBlockEntity(pos) instanceof VideoScreenBlockEntity screen)) return url;
+        String relay = screen.getRelayUrl();
+        Long failedUntil = relayFailedUntil.get(pos);
+        if (relay == null || relay.isBlank() || (failedUntil != null && System.currentTimeMillis() < failedUntil)) return url;
+        return relay.replace(com.nestworld.video.relay.RelayManager.HOST_PLACEHOLDER, serverHost());
+    }
+
+    /** Host the player joined the server through (the relay listens on the same machine unless public_host says otherwise). */
+    private static String serverHost() {
+        var connection = Minecraft.getInstance().getConnection();
+        if (connection != null && connection.getConnection().getRemoteAddress() instanceof java.net.InetSocketAddress address) {
+            String host = address.getHostString();
+            return host.contains(":") ? "[" + host + "]" : host;
+        }
+        return "127.0.0.1";
+    }
+
     private long screenPosition(BlockPos pos) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level != null && mc.level.getBlockEntity(pos) instanceof VideoScreenBlockEntity screen)
@@ -126,8 +154,9 @@ public class ClientVideoManager {
             return;
         }
         desiredScreens.put(pos, screen.getCurrentVideoUrl());
-        if (existing != null && !existing.getUrl().equals(screen.getCurrentVideoUrl())) {
-            stopPlaying(pos); existing = null;
+        if (existing != null && (!existing.getUrl().equals(screen.getCurrentVideoUrl())
+                || !existing.getSourceUrl().equals(sourceFor(pos, screen.getCurrentVideoUrl())))) {
+            stopPlaying(pos); existing = null;      // another video, or the server switched the screen to/from its relay
         }
         if (existing == null && screen.isPlaying() && streamSlotAvailable(screen)) {
             startPlaying(pos, screen.getCurrentVideoUrl());
@@ -186,6 +215,17 @@ public class ClientVideoManager {
             reconcile(screen);
             if (!activeDisplays.containsKey(pos)) continue;
             Display current = activeDisplays.get(pos);
+            // The relay is an optimisation: if it cannot be reached (or is too slow to start), fall back to the video host.
+            if (current != null && !current.getSourceUrl().equals(current.getUrl())) {
+                Long startedAt = relayStartedNanos.get(pos);
+                boolean slow = startedAt != null && current.isLoading() && System.nanoTime() - startedAt > 25_000_000_000L;
+                if (current.isBroken() || slow) {
+                    com.mojang.logging.LogUtils.getLogger().warn("Nestworld Video: the server relay did not work for the screen at {}; using the video host directly", pos);
+                    relayFailedUntil.put(pos, System.currentTimeMillis() + 300_000L);
+                    stopPlaying(pos);
+                    continue;
+                }
+            }
             if (current != null) current.tick();
             // The server's timeline ran past the end of the stream (e.g. the decoder only just started or lagged): report it
             // anyway, otherwise nobody tells the server and auto-next never happens.

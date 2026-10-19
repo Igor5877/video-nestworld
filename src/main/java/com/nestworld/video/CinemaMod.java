@@ -51,6 +51,7 @@ public class CinemaMod {
         // Реєструємо блоки, предмети тощо
         ModBlocks.register(modEventBus);
         ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, NestworldConfig.CLIENT_SPEC);
+        ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, com.nestworld.video.relay.RelayConfig.SPEC);
         
         // Ініціалізуємо нашу мережу
         Networking.registerMessages();
@@ -112,6 +113,15 @@ public class CinemaMod {
     public static void onServerTick(TickEvent.ServerTickEvent event) {
         if (event.phase != TickEvent.Phase.END || event.getServer().getTickCount() % 100 != 0) return;
         long now = System.currentTimeMillis();
+        if (com.nestworld.video.relay.RelayManager.running()) {
+            Map<ResourceKey<Level>, Map<BlockPos, Integer>> counts = new java.util.HashMap<>();
+            for (ScreenKey key : SCREEN_VIEWERS.keySet()) {
+                var level = event.getServer().getLevel(key.dimension());
+                if (level == null) continue;
+                counts.computeIfAbsent(key.dimension(), d -> new java.util.HashMap<>()).put(key.pos(), viewerSnapshot(level, key.pos()).count());
+            }
+            com.nestworld.video.relay.RelayManager.update(event.getServer(), counts);
+        }
         SCREEN_VIEWERS.entrySet().removeIf(entry -> {
             entry.getValue().entrySet().removeIf(viewer -> now - viewer.getValue().lastSeenMs() > VIEWER_TIMEOUT_MS);
             return entry.getValue().isEmpty();
@@ -121,6 +131,7 @@ public class CinemaMod {
     @SubscribeEvent
     public static void onServerStopping(ServerStoppingEvent event) {
         SCREEN_VIEWERS.clear();
+        com.nestworld.video.relay.RelayManager.stop();
     }
 
     @SubscribeEvent
@@ -130,6 +141,7 @@ public class CinemaMod {
 
     @SubscribeEvent
     public static void onServerStarting(ServerStartingEvent event) {
+        com.nestworld.video.relay.RelayManager.start();
         LOGGER.info("NESTWORLD_VIDEO: Server is starting, attempting to load videos.json...");
         File configFile = new File(event.getServer().getServerDirectory(), "config/videos.json");
         if (!configFile.exists()) {

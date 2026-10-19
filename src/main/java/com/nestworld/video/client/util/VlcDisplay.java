@@ -20,7 +20,7 @@ public class VlcDisplay extends Display {
 
     private DiagnosticVideoPlayer player;
     private FrameStats frameStats = new FrameStats();
-    private final String url;
+    private final String url, source;
     private boolean isPlaying = false;
     private Boolean appliedPlaying;
     private long pendingPositionMs = -1;
@@ -66,8 +66,10 @@ public class VlcDisplay extends Display {
     // Correct only larger drift and wait until the decoder has left buffering.
     private static final long SEEK_DRIFT_THRESHOLD_MS = 2_000;
 
-    public VlcDisplay(String url) {
-        this.url = url;
+    public VlcDisplay(String url) { this(url, url); }
+
+    public VlcDisplay(String url, String source) {
+        this.url = url; this.source = source;
         this.player = new DiagnosticVideoPlayer(Minecraft.getInstance(), frameStats);
 
         try {
@@ -75,7 +77,7 @@ public class VlcDisplay extends Display {
             // can then be applied before playback begins, avoiding a visible start
             // from 0 ms followed by a jump to the synchronized position.
             this.player.setRepeatMode(false);
-            this.player.startPaused(new URI(url), vlcOptions());
+            this.player.startPaused(new URI(source), vlcOptions());
             this.setPlaying(true);
         } catch (Exception e) {
             this.player.release();
@@ -85,6 +87,7 @@ public class VlcDisplay extends Display {
 
     @Override
     public String getUrl() { return url; }
+    @Override public String getSourceUrl() { return source; }
 
     @Override
     public int getTextureId() {
@@ -127,7 +130,7 @@ public class VlcDisplay extends Display {
                 && (player.isEnded() || player.isBroken());
         if (failedBeforeFrame && !probeStarted) {
             probeStarted = true;
-            StreamProbe.probeAsync(url);
+            StreamProbe.probeAsync(source);
         }
         if (!startupRetried && isPlaying && failedBeforeFrame && !isStartupTimedOut()) {
             long now = System.nanoTime();
@@ -149,7 +152,7 @@ public class VlcDisplay extends Display {
                 lastMediaProgressNanos = 0;
                 lastLoggedDecodedFrames = lastLoggedUploadedFrames = 0;
                 player.setRepeatMode(false);
-                player.startPaused(URI.create(url), vlcOptions());
+                player.startPaused(URI.create(source), vlcOptions());
             }
         } else {
             retryAfterNanos = 0;

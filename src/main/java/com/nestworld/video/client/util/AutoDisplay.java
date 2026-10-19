@@ -10,17 +10,19 @@ final class AutoDisplay extends Display {
     private static final Logger LOGGER = LogUtils.getLogger();
 
     private Display delegate;
-    private final String url;
+    private final String url, source;
     private boolean fellBack;
     private boolean playing = true;
     private int volume = 100;
     private double spatial = 1.0;
 
-    AutoDisplay(String url) {
-        this.url = url;
+    AutoDisplay(String url) { this(url, url); }
+
+    AutoDisplay(String url, String source) {
+        this.url = url; this.source = source;
         Display first;
         try {
-            first = new VlcDisplay(url);
+            first = new VlcDisplay(url, source);
             this.delegate = first;
         } catch (RuntimeException e) {
             LOGGER.warn("Nestworld Video: VLC could not start ({}), using FFmpeg", e.toString());
@@ -31,7 +33,7 @@ final class AutoDisplay extends Display {
     private void fallBack() {
         Display old = delegate;
         fellBack = true;
-        delegate = new FfmpegDisplay(url);
+        delegate = new FfmpegDisplay(url, source);
         delegate.setVolume(volume);
         delegate.applySpatialVolume(spatial);
         delegate.setPlaying(playing);
@@ -49,6 +51,7 @@ final class AutoDisplay extends Display {
     }
 
     @Override public String getUrl() { return url; }
+    @Override public String getSourceUrl() { return source; }
     @Override public int getTextureId() { return delegate.getTextureId(); }
     @Override public void setPlaying(boolean value) { playing = value; delegate.setPlaying(value); }
     @Override public boolean isPlaying() { return delegate.isPlaying(); }

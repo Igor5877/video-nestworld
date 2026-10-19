@@ -11,15 +11,21 @@ import java.awt.Dimension;
  */
 public abstract class Display {
 
-    public static Display create(String url) {
+    public static Display create(String url) { return create(url, url); }
+
+    /** {@code url} identifies the video; {@code source} is the address actually opened (the server's relay, or the same URL). */
+    public static Display create(String url, String source) {
         // WaterMedia is optional: without it the FFmpeg decoder is the only choice.
-        if (!ModList.get().isLoaded("watermedia")) return new FfmpegDisplay(url);
+        if (!ModList.get().isLoaded("watermedia")) return new FfmpegDisplay(url, source);
         return switch (NestworldConfig.DECODER.get()) {
-            case "ffmpeg" -> new FfmpegDisplay(url);
-            case "watermedia" -> new VlcDisplay(url);
-            default -> new AutoDisplay(url);
+            case "ffmpeg" -> new FfmpegDisplay(url, source);
+            case "watermedia" -> new VlcDisplay(url, source);
+            default -> new AutoDisplay(url, source);
         };
     }
+
+    /** The address this display really reads from; differs from {@link #getUrl()} while the relay is used. */
+    public String getSourceUrl() { return getUrl(); }
 
     public abstract String getUrl();
     /** GL texture id of the current frame, or -1 while nothing can be drawn yet. */

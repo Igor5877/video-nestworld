@@ -35,8 +35,25 @@ public class GuiSelfTest {
     static long start = System.nanoTime();
     static volatile Throwable failure;
     static final boolean PLAY = Boolean.getBoolean("nestworldvideo.guiplay");
-    static final String PLAY_URL = "file:///tmp/claude-0/spike/media/smpte.m3u8";
-    static int restartAt, stopStage, stopTick;
+    static final boolean RELAY = Boolean.getBoolean("nestworldvideo.guirelay");
+    static final String PLAY_URL = RELAY ? "http://127.0.0.1:18080/smpte.m3u8" : "file:///tmp/claude-0/spike/media/smpte.m3u8";
+    static {
+        if (RELAY) {
+            try {   // a tiny "video host" for the relay test
+                var origin = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 18080), 0);
+                origin.createContext("/", ex -> {
+                    var f = Path.of("/tmp/claude-0/spike/media").resolve(ex.getRequestURI().getPath().substring(1));
+                    if (!Files.exists(f)) { ex.sendResponseHeaders(404, -1); ex.close(); return; }
+                    byte[] b = Files.readAllBytes(f);
+                    ex.sendResponseHeaders(200, b.length); ex.getResponseBody().write(b); ex.close();
+                });
+                origin.start();
+                com.nestworld.video.relay.RelayConfig.ENABLED.set(true);
+                com.nestworld.video.relay.RelayConfig.MIN_VIEWERS.set(1);
+            } catch (Exception e) { throw new RuntimeException(e); }
+        }
+    }
+    static int restartAt, stopStage, stopTick, relayAt;
     static long stopTime;
     static final boolean HISTORY = Boolean.getBoolean("nestworldvideo.guihistory");
     static String shotPrefix = System.getProperty("nestworldvideo.guishots", "gui");
@@ -171,6 +188,17 @@ public class GuiSelfTest {
             if (PLAY) {
                 if (ticks == 45) mc.getSingleplayerServer().execute(() -> ((VideoScreenBlockEntity) mc.getSingleplayerServer().overworld().getBlockEntity(ORIGIN)).play());
                 var display = com.nestworld.video.client.ClientVideoManager.getInstance().getDisplay(ORIGIN);
+                if (RELAY) {
+                    if (display != null && ticks % 100 == 0) System.out.println("RELAY-TEST t=" + ticks + " source=" + display.getSourceUrl() + " media=" + display.getPlaybackTime() + " playing=" + display.isPlaying());
+                    if (display != null && display.getSourceUrl().contains(":25580/r/") && relayAt == 0) { relayAt = ticks; System.out.println("RELAY-TEST now on the relay at media " + display.getPlaybackTime()); }
+                    if (relayAt > 0 && ticks == relayAt + 300) {
+                        System.out.println("RELAY-TEST after 15 s on the relay: media=" + display.getPlaybackTime() + " source=" + display.getSourceUrl());
+                        System.out.println(display.getPlaybackTime() > 12000 ? "NESTWORLD GUI TEST PASS" : "NESTWORLD GUI TEST FAIL");
+                        mc.stop();
+                    }
+                    if (ticks > 1800 && relayAt == 0) { System.out.println("RELAY-TEST never switched to the relay"); System.out.println("NESTWORLD GUI TEST FAIL"); mc.stop(); }
+                    return;
+                }
                 if (Boolean.getBoolean("nestworldvideo.guistop")) {
                     // The test menu is not opened through the server, so control packets would be refused: drive the block entity directly.
                     if (ticks == 120) mc.getSingleplayerServer().execute(() -> {
