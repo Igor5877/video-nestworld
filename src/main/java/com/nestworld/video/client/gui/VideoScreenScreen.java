@@ -83,7 +83,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
     private VideoScreenBlockEntity screen() { return menu.getBlockEntity()==null ? null : menu.getBlockEntity().controller(); }
     private boolean detail() { return view==View.VOICES || view==View.EPISODES || view==View.SOURCES; }
     @Override protected void init() {
-        imageWidth=Math.min(500,width-12); imageHeight=Math.min(372,height-12);
+        imageWidth=Math.min(500,width-12); imageHeight=Math.min(430,height-12);
         super.init();
         if(menu.getBlockEntity()==null) { onClose(); return; }
         entries.clear(); search=null; searchButton=null; qualityButton=null;
@@ -133,7 +133,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         }
         boolean cards=!detail() && (view==View.SEARCH || view==View.LIBRARY);
         int columns=cards || view==View.EPISODES ? 2 : 1;
-        int start=100, cardHeight=48, pitch=cards?cardHeight+4:24;
+        int start=100, cardHeight=58, pitch=cards?cardHeight+4:24;
         int left=detail()?76:12;
         visibleRows=Math.max(1,(imageHeight-114-start)/pitch)*columns;
         int rowWidth=(imageWidth-left-12-(columns-1)*6)/columns;
@@ -288,13 +288,20 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         if(title.type()!=null && !title.type().isBlank()) parts.add(title.type().toUpperCase());
         return String.join(" · ",parts);
     }
+    /** Ukrainian plural: 1 серія, 2–4 серії, 5–20 серій, 21 серія ... */
+    private static String plural(long n,String one,String few,String many) {
+        long mod100=n%100, mod10=n%10;
+        String word=mod100>=11 && mod100<=14 ? many : mod10==1 ? one : mod10>=2 && mod10<=4 ? few : many;
+        return n+" "+word;
+    }
     private static String metaOf(Category category) {
         var parts=new ArrayList<String>();
         if(category.getSeason()!=null && !category.getSeason().isBlank()) parts.add(category.getSeason());
         var videos=category.getVideos();
         if(videos!=null) {
             long episodes=videos.stream().filter(Objects::nonNull).map(Video::getEpisode).filter(e->!e.isBlank()).distinct().count();
-            parts.add(episodes>0 ? episodes+" серій" : videos.size()+" відео");
+            boolean film="Фільм".equals(category.getSeason()) && episodes<=1;
+            if(!film) parts.add(episodes>0 ? plural(episodes,"серія","серії","серій") : plural(videos.size(),"відео","відео","відео"));
         }
         return String.join(" · ",parts);
     }
