@@ -211,11 +211,19 @@ void main() {
     } else {
         color = catmullRom(Sampler0, texCoord0);
     }
-    if (Sharpness > 0.0 && magnification < 1.0 && Upscaler < 1.5) {
-        // Unsharp mask against the four neighbouring texels.
-        vec2 px = 1.0 / size;
-        vec3 blur = (texture(Sampler0, texCoord0 + vec2(px.x, 0.0)).rgb + texture(Sampler0, texCoord0 - vec2(px.x, 0.0)).rgb
-                   + texture(Sampler0, texCoord0 + vec2(0.0, px.y)).rgb + texture(Sampler0, texCoord0 - vec2(0.0, px.y)).rgb) * 0.25;
+    if (Sharpness > 0.0 && Upscaler < 1.5) {
+        // Unsharp mask. Enlarging: against the four neighbouring texels. Shrinking: against what one screen pixel
+        // covers, so the slider also sharpens a video that is shown smaller than it is.
+        vec3 blur;
+        if (magnification < 1.0) {
+            vec2 px = 1.0 / size;
+            blur = (texture(Sampler0, texCoord0 + vec2(px.x, 0.0)).rgb + texture(Sampler0, texCoord0 - vec2(px.x, 0.0)).rgb
+                  + texture(Sampler0, texCoord0 + vec2(0.0, px.y)).rgb + texture(Sampler0, texCoord0 - vec2(0.0, px.y)).rgb) * 0.25;
+        } else {
+            vec2 hi = (UvMax * size - 0.5) / size, lo = vec2(0.5) / size;
+            blur = (textureGrad(Sampler0, clamp(texCoord0 + dx, lo, hi), dx, dy).rgb + textureGrad(Sampler0, clamp(texCoord0 - dx, lo, hi), dx, dy).rgb
+                  + textureGrad(Sampler0, clamp(texCoord0 + dy, lo, hi), dx, dy).rgb + textureGrad(Sampler0, clamp(texCoord0 - dy, lo, hi), dx, dy).rgb) * 0.25;
+        }
         color = clamp(color + (color - blur) * Sharpness * 1.5, 0.0, 1.0);
     }
     fragColor = vec4(color, 1.0) * ColorModulator;

@@ -56,7 +56,8 @@ public class GuiSelfTest {
     static final boolean STUB = Boolean.getBoolean("nestworldvideo.guistub");
     static final boolean ANIME = Boolean.getBoolean("nestworldvideo.guianime");
     static int animeStage, animeTick;
-    static final String[] ANIME_MODES = {"bicubic", "edge", "anime4k"};
+    static final boolean SHARP = Boolean.getBoolean("nestworldvideo.guisharp");
+    static final String[] ANIME_MODES = SHARP ? new String[]{"0", "60", "100"} : new String[]{"bicubic", "edge", "anime4k"};
     static final boolean HISTORY = Boolean.getBoolean("nestworldvideo.guihistory");
     static String shotPrefix = System.getProperty("nestworldvideo.guishots", "gui");
 
@@ -176,7 +177,7 @@ public class GuiSelfTest {
                         be.setVideo(new Video("toon", "", "file:///tmp/claude-0/toon/toon.m3u8", "", ""));
                         be.play();
                         var source = mc.getSingleplayerServer().createCommandSourceStack().withSuppressedOutput();
-                        for (String cmd : new String[]{"time set day", "weather clear", ANIME ? "tp @a 1.5 -60 3.2 0 -4" : "tp @a 1.5 -60 -2 0 -3"})
+                        for (String cmd : new String[]{"time set day", "weather clear", ANIME ? (Boolean.getBoolean("nestworldvideo.guifar") ? "tp @a 1.5 -60 -3 0 -3" : "tp @a 1.5 -60 3.2 0 -4") : "tp @a 1.5 -60 -2 0 -3"})
                             mc.getSingleplayerServer().getCommands().performPrefixedCommand(source, cmd);
                     }
                     ready = true;
@@ -204,8 +205,8 @@ public class GuiSelfTest {
                 if (animeStage == 0 && display != null && display.getPlaybackTime() > 3000) { animeStage = 1; animeTick = ticks; }
                 if (animeStage >= 1 && animeStage <= ANIME_MODES.length) {
                     int i = animeStage - 1;
-                    if (ticks == animeTick) { com.nestworld.video.NestworldConfig.UPSCALER.set(ANIME_MODES[i]); }
-                    if (ticks == animeTick + 20) { shotPrefix = "anime-" + ANIME_MODES[i]; capture = 1; }
+                    if (ticks == animeTick) { if (SHARP) { com.nestworld.video.NestworldConfig.UPSCALER.set("edge"); com.nestworld.video.NestworldConfig.SHARPNESS.set(Integer.parseInt(ANIME_MODES[i])); } else com.nestworld.video.NestworldConfig.UPSCALER.set(ANIME_MODES[i]); }
+                    if (ticks == animeTick + 20) { shotPrefix = (SHARP ? "sharp-" : "anime-") + ANIME_MODES[i]; capture = 1; }
                     if (ticks == animeTick + 30) { animeStage++; animeTick = ticks; }
                 }
                 if (animeStage > ANIME_MODES.length) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
