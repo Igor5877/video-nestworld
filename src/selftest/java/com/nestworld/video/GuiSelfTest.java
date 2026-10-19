@@ -197,6 +197,18 @@ public class GuiSelfTest {
                 if (shots == 3 && ticks == waitUntil) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
                 return;
             }
+            if (Boolean.getBoolean("nestworldvideo.guivanilla")) {
+                if (ticks == 45) mc.setScreen(new net.minecraft.client.gui.screens.PauseScreen(true));
+                if (ticks == 50) mc.setScreen(new net.minecraft.client.gui.screens.VideoSettingsScreen(mc.screen, mc.options));
+                if (ticks == 80) capture = 1;
+                if (ticks == 85) {
+                    var open = mc.screen.children().stream().filter(e -> e instanceof Button b && b.getMessage().getString().contains("Nestworld")).findFirst().orElseThrow(() -> new AssertionError("no Nestworld button"));
+                    ((Button) open).onPress();
+                }
+                if (ticks == 110) capture = 2;
+                if (ticks == 115) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
+                return;
+            }
             if (Boolean.getBoolean("nestworldvideo.guisodium")) {
                 if (ticks == 50) {
                     try {
