@@ -71,7 +71,7 @@ public final class PosterCache {
             // Only the image hosts used by the catalogue; no arbitrary local URLs.
             String host = uri.getHost();
             if (!"https".equals(uri.getScheme()) || host == null || uri.getUserInfo() != null
-                    || !(host.equals("cdn.hikka.io") || host.endsWith(".hikka.io") || host.equals("cdn.myanimelist.net"))) return null;
+                    || !(host.equals("cdn.hikka.io") || host.endsWith(".hikka.io") || host.equals("cdn.myanimelist.net") || host.equals("image.tmdb.org"))) return null;
             var response = HTTP.send(HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(15)).GET().build(),
                     HttpResponse.BodyHandlers.ofInputStream());
             try (var body = response.body()) {

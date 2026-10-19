@@ -59,6 +59,33 @@ public final class FilmCatalogue {
         return films;
     }
 
+    /** Add (or replace by title+year) one film in the file, atomically. */
+    public static void append(Path serverDirectory, Film film) throws IOException {
+        Path path = file(serverDirectory);
+        var array = new JsonArray();
+        if (Files.isRegularFile(path)) {
+            JsonElement existing = JsonParser.parseString(Files.readString(path, StandardCharsets.UTF_8));
+            if (!existing.isJsonArray()) throw new IOException("nestworld-films.json: очікувався масив");
+            for (JsonElement e : existing.getAsJsonArray()) {
+                if (e.isJsonObject() && text(e.getAsJsonObject(), "title").equals(film.title()) && text(e.getAsJsonObject(), "year").equals(film.year())) continue;
+                array.add(e);
+            }
+        }
+        JsonObject o = new JsonObject();
+        o.addProperty("title", film.title()); o.addProperty("year", film.year()); o.addProperty("poster", film.poster());
+        o.addProperty("description", film.description()); o.addProperty("dub", film.dub()); o.addProperty("rating", film.rating());
+        if (film.adult() != null) o.addProperty("adult", film.adult());
+        var sources = new JsonArray(); film.sources().forEach(sources::add); o.add("sources", sources);
+        array.add(o);
+        Files.createDirectories(path.getParent());
+        Path temp = Files.createTempFile(path.getParent(), "films-", ".tmp");
+        try {
+            Files.writeString(temp, new com.google.gson.GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create().toJson(array), StandardCharsets.UTF_8);
+            try { Files.move(temp, path, java.nio.file.StandardCopyOption.ATOMIC_MOVE, java.nio.file.StandardCopyOption.REPLACE_EXISTING); }
+            catch (java.nio.file.AtomicMoveNotSupportedException e) { Files.move(temp, path, java.nio.file.StandardCopyOption.REPLACE_EXISTING); }
+        } finally { Files.deleteIfExists(temp); }
+    }
+
     /** Resolve one film; null when none of its sources works right now. */
     public static CompletableFuture<Category> build(Film film) {
         return SourceChain.DEFAULT.resolve(film.sources()).thenApply(url -> {
