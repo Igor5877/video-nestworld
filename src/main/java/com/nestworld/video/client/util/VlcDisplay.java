@@ -31,6 +31,7 @@ public class VlcDisplay extends Display {
     private int cachedTextureId = -1;
     private final long createdAtNanos = System.nanoTime();
     private volatile boolean firstTextureReady;
+    private volatile long lastTextureRequestNanos;
     private boolean startupTimeoutLogged;
     private boolean startupRetried;
     private long retryAfterNanos;
@@ -87,6 +88,7 @@ public class VlcDisplay extends Display {
 
     @Override
     public int getTextureId() {
+        lastTextureRequestNanos = System.nanoTime();
         applyPendingSeek();
         applyPendingPause();
         // isReady() means libvlc_media_player_will_play(), including OPENING.
@@ -321,7 +323,19 @@ public class VlcDisplay extends Display {
         // startup timeout expires; only inspect its error state once raw exists.
         return (player.raw() != null && player.isBroken() && (firstTextureReady || startupRetried))
                 || (startupRetried && frameStats.decoded.get() == 0 && player.isEnded())
+                || noPicture()
                 || isStartupTimedOut();
+    }
+    /**
+     * VLC is "playing" but never produced a picture: it decoded no frames at all, or decoded them without one reaching
+     * a texture while the screen is being drawn (black screen). Do not wait the full startup timeout for that.
+     */
+    private boolean noPicture() {
+        if (!isPlaying || firstTextureReady) return false;
+        long now = System.nanoTime();
+        if (now - createdAtNanos < 20_000_000_000L) return false;
+        if (frameStats.decoded.get() == 0) return true;
+        return frameStats.uploaded.get() == 0 && now - lastTextureRequestNanos < 2_000_000_000L;
     }
     private boolean isStartupTimedOut() {
         return !firstTextureReady && System.nanoTime() - createdAtNanos >= STARTUP_TIMEOUT_NANOS;
