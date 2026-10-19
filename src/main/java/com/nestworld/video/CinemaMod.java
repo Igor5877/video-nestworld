@@ -139,6 +139,11 @@ public class CinemaMod {
     /** What each client was last told about 18+ access, so permission changes (e.g. in LuckPerms) reach it within seconds. */
     private static final Map<UUID, Boolean> ADULT_ACCESS_SENT = new ConcurrentHashMap<>();
 
+    /** Re-evaluate 18+ access of everybody now (e.g. after the default was changed by a command). */
+    public static void refreshAdultAccess(net.minecraft.server.MinecraftServer server) {
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) sendAdultAccess(player, false);
+    }
+
     private static void sendAdultAccess(ServerPlayer player, boolean force) {
         boolean allowed = com.nestworld.video.content.AdultAccess.canView(player);
         Boolean previous = ADULT_ACCESS_SENT.put(player.getUUID(), allowed);
@@ -179,6 +184,7 @@ public class CinemaMod {
     public static void onRegisterCommands(RegisterCommandsEvent event) {
         ReloadVideosCommand.register(event.getDispatcher());
         AniuaCommand.register(event.getDispatcher());
+        com.nestworld.video.command.AdultCommand.register(event.getDispatcher());
         LOGGER.info("NESTWORLD_VIDEO: Registered reload command");
     }
 
