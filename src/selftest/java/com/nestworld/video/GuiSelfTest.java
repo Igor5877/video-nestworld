@@ -170,6 +170,14 @@ public class GuiSelfTest {
             if (PLAY) {
                 if (ticks == 45) mc.getSingleplayerServer().execute(() -> ((VideoScreenBlockEntity) mc.getSingleplayerServer().overworld().getBlockEntity(ORIGIN)).play());
                 var display = com.nestworld.video.client.ClientVideoManager.getInstance().getDisplay(ORIGIN);
+                if (Boolean.getBoolean("nestworldvideo.guiend")) {
+                    var be = (VideoScreenBlockEntity) mc.level.getBlockEntity(ORIGIN);
+                    if (ticks % 200 == 0) System.out.println("END-TEST t=" + ticks + " url=" + be.getCurrentVideoUrl().substring(Math.max(0, be.getCurrentVideoUrl().length() - 14)) + " playing=" + be.isPlaying() + " stopped=" + be.isStopped()
+                            + " display=" + (display == null ? "none" : display.getPlaybackTime() + "/" + display.getDuration()));
+                    if (!be.getCurrentVideoUrl().equals(PLAY_URL)) { System.out.println("END HANDLED: moved to " + be.getCurrentVideoUrl() + " after " + ticks + " ticks"); System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
+                    else if (be.isStopped() && ticks > 100) { System.out.println("END HANDLED: stopped after " + ticks + " ticks"); System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
+                    return;
+                }
                 if (Boolean.getBoolean("nestworldvideo.guirestart")) {
                     var mgr = com.nestworld.video.client.ClientVideoManager.getInstance();
                     if (restartAt == 0 && display != null && display.getPlaybackTime() > 12000) restartAt = ticks;
