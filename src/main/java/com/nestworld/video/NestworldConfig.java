@@ -57,7 +57,8 @@ public final class NestworldConfig {
                 .defineInRange("sharpness", 0, 0, 100);
         builder.comment("Colour correction for the picture while a shader pack is active, in percent per channel.",
                 "Shader packs grade the whole image and may tint it (for example BSL makes pure white slightly cream).",
-                "Lower red and green to cancel a warm tint, e.g. 91 / 94 / 100 for BSL's default look. 100 / 100 / 100 = off.");
+                "Lower red and green to cancel a warm tint. Measured with BSL v10.1.1 on its default settings: 75 / 82 / 100",
+                "makes white neutral (about 8% darker). Too low turns white blue. 100 / 100 / 100 = off.");
         SHADER_TINT_RED = builder.defineInRange("shaderpack_red", 100, 50, 100);
         SHADER_TINT_GREEN = builder.defineInRange("shaderpack_green", 100, 50, 100);
         SHADER_TINT_BLUE = builder.defineInRange("shaderpack_blue", 100, 50, 100);
