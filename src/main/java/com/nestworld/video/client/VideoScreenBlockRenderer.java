@@ -175,10 +175,10 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
             double a0 = i * Math.PI * 2.0 / segments, a1 = (i + 1) * Math.PI * 2.0 / segments;
             float inner = radius - thickness, outer = radius + thickness;
             // Same winding as drawColorQuad, otherwise the ring is culled.
-            builder.vertex(matrix, cx + (float) Math.cos(a1) * inner, cy + (float) Math.sin(a1) * inner, 0).color(0.906f, 0.745f, 0.439f, 1f).endVertex();
-            builder.vertex(matrix, cx + (float) Math.cos(a1) * outer, cy + (float) Math.sin(a1) * outer, 0).color(0.906f, 0.745f, 0.439f, 1f).endVertex();
-            builder.vertex(matrix, cx + (float) Math.cos(a0) * outer, cy + (float) Math.sin(a0) * outer, 0).color(0.906f, 0.745f, 0.439f, 1f).endVertex();
-            builder.vertex(matrix, cx + (float) Math.cos(a0) * inner, cy + (float) Math.sin(a0) * inner, 0).color(0.906f, 0.745f, 0.439f, 1f).endVertex();
+            builder.vertex(matrix, cx + (float) Math.cos(a1) * inner, cy + (float) Math.sin(a1) * inner, 0.003f).color(0.906f, 0.745f, 0.439f, 1f).endVertex();
+            builder.vertex(matrix, cx + (float) Math.cos(a1) * outer, cy + (float) Math.sin(a1) * outer, 0.003f).color(0.906f, 0.745f, 0.439f, 1f).endVertex();
+            builder.vertex(matrix, cx + (float) Math.cos(a0) * outer, cy + (float) Math.sin(a0) * outer, 0.003f).color(0.906f, 0.745f, 0.439f, 1f).endVertex();
+            builder.vertex(matrix, cx + (float) Math.cos(a0) * inner, cy + (float) Math.sin(a0) * inner, 0.003f).color(0.906f, 0.745f, 0.439f, 1f).endVertex();
         }
         tesselator.end();
         RenderSystem.polygonOffset(0.0F, 0.0F);
@@ -186,7 +186,7 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
         RenderSystem.disableBlend();
         var font = net.minecraft.client.Minecraft.getInstance().font;
         float maxWidth = cols * 0.9f;
-        centeredText(poseStack, buffer, font, "18+", cx, cy, unit * 0.032f, 0xFFE7BE70, maxWidth);
+        centeredText(poseStack, buffer, font, "18+", cx, cy, unit * 0.022f, 0xFFE7BE70, maxWidth);
         centeredText(poseStack, buffer, font, "Контент 18+", cx, cy + radius + unit * 0.11f, unit * 0.0135f, 0xFFE8EDF2, maxWidth);
         centeredText(poseStack, buffer, font, "У вас немає доступу до цього відео", cx, cy + radius + unit * 0.21f, unit * 0.0085f, 0xFFAAB8C7, maxWidth);
     }
