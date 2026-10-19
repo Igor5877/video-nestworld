@@ -149,16 +149,14 @@ public final class FfmpegDisplay extends Display {
                     // Streams often carry the audio a second or more behind the video. If we stop reading while the
                     // video queue is full, the sound runs dry, its clock stops, nothing consumes the frames and the
                     // picture and sound stutter or freeze (until a seek). So when the sound is starving, let the queue
-                    // grow (up to a cap) so the decoder reads far enough ahead; only at the cap sacrifice a frame.
+                    // grow (up to a cap) so the decoder reads far enough ahead. (Dropping frames instead throttled the decoder to a
+                    // few frames a second and made the sound stutter; a real deadlock is caught by the watchdog.)
                     AlAudio output = audio;
                     if (output != null && output.isAvailable() && started && output.bufferedUs() < 250_000L && (waited += 50) >= 150) {
                         waited = 0;
                         if (frameLimit < frameCap) {
                             frameLimit = Math.min(frameCap, frameLimit + 6);
                             LOGGER.info("Nestworld Video: audio runs behind the video in this stream, buffering up to {} frames", frameLimit);
-                        } else {
-                            VFrame oldest = frames.poll();
-                            if (oldest != null) pool.add(oldest);
                         }
                     }
                 }
