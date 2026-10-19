@@ -276,8 +276,10 @@ public class ClientVideoManager {
             double dz = Math.max(bounds.minZ - pz, Math.max(0, pz - bounds.maxZ));
             double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
             current = activeDisplays.get(pos);
-            // Is this screen playing close to the player and roughly in front of them? Then tearing would be visible.
-            if (current != null && current.isPlaying() && dist < 48) {
+            // Is this screen playing in front of the player and big enough in their view? Then tearing would be visible.
+            // A huge wall is large on screen from far away, so the distance limit grows with its size.
+            if (current != null && current.isPlaying()
+                    && dist < Math.max(48.0, Math.hypot(screen.getScreenCols(), screen.getScreenRows()) * 4.0)) {
                 var look = mc.player.getViewVector(1.0F);
                 double cx = (bounds.minX + bounds.maxX) / 2 - px, cy = (bounds.minY + bounds.maxY) / 2 - py, cz = (bounds.minZ + bounds.maxZ) / 2 - pz;
                 double length = Math.sqrt(cx * cx + cy * cy + cz * cz);
