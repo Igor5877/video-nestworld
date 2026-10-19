@@ -9,11 +9,11 @@ import net.minecraft.network.chat.Component;
  * Flat, left-aligned rows keep long release names and episode numbers easy to scan.
  * {@code selected} marks the current tab/episode (gold accent), {@code primary} the main action (warm fill).
  */
-final class CinemaButton extends Button {
+public final class CinemaButton extends Button {
     private static final int GOLD = 0xFFE7BE70;
-    boolean selected, primary, centered;
+    public boolean selected, primary, centered;
 
-    CinemaButton(Component label, int x, int y, int w, OnPress action) {
+    public CinemaButton(Component label, int x, int y, int w, OnPress action) {
         super(x,y,w,20,label,action,DEFAULT_NARRATION);
     }
     @Override public void renderWidget(GuiGraphics g, int mx, int my, float partial) {

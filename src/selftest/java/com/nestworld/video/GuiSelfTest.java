@@ -197,6 +197,14 @@ public class GuiSelfTest {
                 if (shots == 3 && ticks == waitUntil) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
                 return;
             }
+            if (Boolean.getBoolean("nestworldvideo.guisettings")) {
+                if (ticks == 50) mc.setScreen(new com.nestworld.video.client.gui.NestworldSettingsScreen(null));
+                if (ticks == 70) capture = 1;
+                if (ticks == 75) mc.screen.mouseScrolled(100, 100, -5);
+                if (ticks == 95) capture = 2;
+                if (ticks == 100) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
+                return;
+            }
             if (HISTORY) {
                 if (ticks == 70) capture = 1;                   // episode list with marks
                 if (ticks == 90) click("Бібліотека");

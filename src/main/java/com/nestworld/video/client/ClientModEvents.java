@@ -28,6 +28,11 @@ public class ClientModEvents {
         // This is a good place to enqueue client-specific tasks
         event.enqueueWork(() -> {
             MenuScreens.register(ModBlocks.VIDEO_SCREEN_MENU.get(), VideoScreenScreen::new);
+            // Mods list -> Nestworld Video -> Config opens the same settings screen.
+            net.minecraftforge.fml.ModLoadingContext.get().registerExtensionPoint(
+                    net.minecraftforge.client.ConfigScreenHandler.ConfigScreenFactory.class,
+                    () -> new net.minecraftforge.client.ConfigScreenHandler.ConfigScreenFactory(
+                            (minecraft, parent) -> new com.nestworld.video.client.gui.NestworldSettingsScreen(parent)));
 
                 Runtime.getRuntime().addShutdownHook(new Thread(() -> ClientVideoManager.getInstance().shutdown()));
 

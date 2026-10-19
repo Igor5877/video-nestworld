@@ -107,6 +107,8 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         ((CinemaButton)button("Бібліотека",16+tab,30,tab,b->switchView(View.LIBRARY))).selected=!construction && tabView==View.LIBRARY;
         ((CinemaButton)button(tr("screen"),20+tab*2,30,tab,b->{construction=true; rebuildWidgets();})).selected=construction;
         button("×",imageWidth-30,7,18,b->onClose()).setTooltip(Tooltip.create(tr("close")));
+        button("⚙",imageWidth-54,7,20,b->minecraft.setScreen(new NestworldSettingsScreen(this)))
+                .setTooltip(Tooltip.create(Component.literal("Налаштування відео мода: декодер, якість, звук")));
         if(construction) initConstruction(); else initBrowser();
         updateControls();
     }
@@ -709,7 +711,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
                 if(hoverRight) g.fill(cardX+cardW-10-rightWidth,cardY+29,cardX+cardW-10,cardY+30,0xFFF7DE9D);
             }
             String viewers="Глядачі: "+(viewerCount<0?"…":viewerCount);
-            g.drawString(font,viewers,leftPos+imageWidth-36-font.width(viewers),topPos+13,MUTED,false);
+            g.drawString(font,viewers,leftPos+imageWidth-60-font.width(viewers),topPos+13,MUTED,false);
         }
     }
     @Override public boolean keyPressed(int key,int scan,int modifiers) {
@@ -770,7 +772,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         if(!construction && posterWidth()>0 && mx>=leftPos+12 && mx<leftPos+12+posterHeight()*2/3 && my>=topPos+100 && my<topPos+100+posterHeight()
                 && poster.texture()==null) g.renderTooltip(font,Component.literal(poster.status()),mx,my);
         int viewersWidth=font.width("Глядачі: "+(viewerCount<0?"…":viewerCount));
-        if(!construction && viewerCount>=0 && mx>=leftPos+imageWidth-36-viewersWidth && mx<leftPos+imageWidth-36
+        if(!construction && viewerCount>=0 && mx>=leftPos+imageWidth-60-viewersWidth && mx<leftPos+imageWidth-60
                 && my>=topPos+9 && my<topPos+23) {
             String names=viewerNames.isEmpty()?"Ніхто не дивиться зараз.":String.join(", ",viewerNames);
             g.renderTooltip(font,font.split(Component.literal(names),240),mx,my);

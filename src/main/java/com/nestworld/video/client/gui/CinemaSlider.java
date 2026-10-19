@@ -9,14 +9,14 @@ import java.util.function.IntConsumer;
 import java.util.function.IntSupplier;
 
 /** Horizontal drag slider in the cinema style: percentage above a gold-filled track. */
-final class CinemaSlider extends AbstractWidget {
+public final class CinemaSlider extends AbstractWidget {
     private final int max;
     private final IntSupplier value;
     private final IntConsumer onChange;
     /** Value that is drawn as a small tick on the track (e.g. 100% = original loudness). */
     private final int mark;
 
-    CinemaSlider(int x, int y, int width, int max, int mark, IntSupplier value, IntConsumer onChange) {
+    public CinemaSlider(int x, int y, int width, int max, int mark, IntSupplier value, IntConsumer onChange) {
         super(x, y, width, 20, Component.empty());
         this.max = max; this.mark = mark; this.value = value; this.onChange = onChange;
     }
