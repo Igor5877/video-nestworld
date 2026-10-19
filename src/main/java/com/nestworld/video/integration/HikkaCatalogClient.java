@@ -18,7 +18,8 @@ public final class HikkaCatalogClient {
     private record CachedJson(long expiresAt, JsonObject body) {}
     private static final ConcurrentHashMap<String, CachedJson> CACHE = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, CompletableFuture<JsonObject>> IN_FLIGHT = new ConcurrentHashMap<>();
-    public record Title(String slug, String title, String year, String type, String poster) {
+    public record Title(String slug, String title, String year, String type, String poster, String rating) {
+        public Title(String slug, String title, String year, String type, String poster) { this(slug, title, year, type, poster, ""); }
         public String label() { return title + (year.isBlank() ? "" : " (" + year + ")"); }
         public String seasonLabel() {
             var matcher = java.util.regex.Pattern.compile("(?iu)(\\d+)\\s*(?:сезон|season)|(?:сезон|season)[ -]*(\\d+)").matcher(title + " " + slug);
@@ -113,7 +114,7 @@ public final class HikkaCatalogClient {
     }
     private static Title parseTitle(JsonObject obj) {
         return new Title(first(obj,"slug"), first(obj,"title_ua","title_en","title_ja","slug"),
-                first(obj,"year"), first(obj,"media_type"), first(obj,"image"));
+                first(obj,"year"), first(obj,"media_type"), first(obj,"image"), first(obj,"rating"));
     }
     private static String normalize(String value) { return value.toLowerCase(Locale.ROOT).replaceAll("[^\\p{L}\\p{N}]", ""); }
     private static String first(JsonObject obj, String... keys) {

@@ -36,6 +36,8 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
     /** Server: viewers should read this screen's video through the server's relay. Clients only see {@link #relayUrl}. */
     private boolean relayActive;
     private String relayUrl = "";
+    /** The video on this screen is marked 18+ (decided by the server; viewers without access get a placeholder). */
+    private boolean adult;
     /** Media position in milliseconds at the last server tick/sync. */
     private long playbackPositionMs;
     /** Server game tick at which playbackPositionMs was measured for a playing screen. */
@@ -58,6 +60,7 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         tag.putBoolean("is_playing", isPlaying);
         tag.putBoolean("stopped", stopped);
         tag.putString("relay_url", currentRelayUrl());
+        tag.putBoolean("adult", currentAdult());
         tag.putBoolean("auto_next", autoNext); tag.putBoolean("repeat", repeat); tag.putBoolean("next_cancelled", nextCancelled);
         refreshPlaybackPosition();
         tag.putLong("playback_position_ms", playbackPositionMs);
@@ -75,6 +78,7 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         autoNext = !tag.contains("auto_next") || tag.getBoolean("auto_next");
         repeat = tag.getBoolean("repeat"); nextCancelled = tag.getBoolean("next_cancelled");
         relayUrl = tag.getString("relay_url");
+        adult = tag.getBoolean("adult");
         playbackPositionMs = Math.max(0, tag.getLong("playback_position_ms"));
         playbackStartedTick = Long.MIN_VALUE;
         playbackStartedNanos = Long.MIN_VALUE;
@@ -225,6 +229,10 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
     public void setRelay(boolean active) { if (relayActive != active) { relayActive = active; syncToClient(); } }
     /** Client side: where to read the video from while the server relays it ("" = the video's own URL; may hold {host}). */
     public String getRelayUrl() { return relayUrl; }
+    private boolean currentAdult() {
+        return level != null && !level.isClientSide ? com.nestworld.video.content.AdultAccess.isAdultUrl(currentVideoUrl) : adult;
+    }
+    public boolean isAdult() { return adult; }
     public boolean isAutoNext() { return autoNext; }
     public boolean isRepeat() { return repeat; }
     public boolean isNextCancelled() { return nextCancelled; }
@@ -295,7 +303,7 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         if (level == null || level.isClientSide) return;
         updateBlock();
         var packet = new PacketUpdateVideoScreen(worldPosition, currentVideoUrl, currentVideoTitle, isPlaying, stopped,
-                getPlaybackPositionMs(), level.getGameTime(), autoNext, repeat, nextCancelled, currentRelayUrl());
+                getPlaybackPositionMs(), level.getGameTime(), autoNext, repeat, nextCancelled, currentRelayUrl(), currentAdult());
         boolean sentToExtra = false;
         for (Player player : level.players()) if (player instanceof ServerPlayer serverPlayer
                 && serverPlayer.distanceToSqr(worldPosition.getX() + .5, worldPosition.getY() + .5,
@@ -311,7 +319,8 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
     public boolean isPlaying() { return isPlaying; }
     public boolean isStopped() { return stopped; }
     public void updatePlayback(String url, String title, boolean playing, boolean stopped, long positionMs,
-                               boolean autoNext, boolean repeat, boolean nextCancelled, String relayUrl) {
+                               boolean autoNext, boolean repeat, boolean nextCancelled, String relayUrl, boolean adult) {
+        this.adult = adult;
         this.relayUrl = relayUrl == null ? "" : relayUrl;
         this.autoNext = autoNext; this.repeat = repeat; this.nextCancelled = nextCancelled;
         currentVideoUrl = url; currentVideoTitle = title; isPlaying = playing; this.stopped = stopped;

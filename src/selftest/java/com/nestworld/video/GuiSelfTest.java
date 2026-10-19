@@ -53,6 +53,7 @@ public class GuiSelfTest {
     }
     static int restartAt, stopStage, stopTick, relayAt;
     static long stopTime;
+    static final boolean STUB = Boolean.getBoolean("nestworldvideo.guistub");
     static final boolean ANIME = Boolean.getBoolean("nestworldvideo.guianime");
     static int animeStage, animeTick;
     static final String[] ANIME_MODES = {"bicubic", "edge", "anime4k"};
@@ -136,6 +137,7 @@ public class GuiSelfTest {
         if (System.nanoTime() - start > 900_000_000_000L) { System.out.println("NESTWORLD GUI TEST TIMEOUT"); mc.stop(); return; }
         if (!launched && mc.screen instanceof TitleScreen && mc.getOverlay() == null) {
             launched = true;
+            if (STUB) com.nestworld.video.content.ContentConfig.ADULT_DEFAULT.set("nobody");
             if (RELAY) {   // config values only exist once the mod's config is loaded, i.e. now
                 com.nestworld.video.relay.RelayConfig.ENABLED.set(true);
                 com.nestworld.video.relay.RelayConfig.MIN_VIEWERS.set(1);
@@ -160,7 +162,13 @@ public class GuiSelfTest {
                     level.setBlock(ORIGIN, ModBlocks.VIDEO_SCREEN_BLOCK.get().defaultBlockState().setValue(VideoScreenBlock.FACING, Direction.NORTH), 2);
                     var be = (VideoScreenBlockEntity) level.getBlockEntity(ORIGIN);
                     be.setVideo(catalogue().getVideos().get(0));
-                    if (ANIME) {   // a 6x3 wall in front of the player playing a small line-art video
+                    if (STUB) {   // an 18+ video on a wall for a player without access
+                        var adultCategory = new Category("AniUA:adult-test", new java.util.ArrayList<>(java.util.List.of(
+                                new Video("toon", "", "file:///tmp/claude-0/toon/toon.m3u8", "", ""))));
+                        adultCategory.setRating("rx");
+                        CinemaMod.videoConfig = new VideoConfig(new java.util.ArrayList<>(java.util.List.of(adultCategory)));
+                    }
+                    if (ANIME || STUB) {   // a 6x3 wall in front of the player playing a small line-art video
                         for (int r = 0; r < 3; r++) for (int c = 0; c < 6; c++)
                             level.setBlock(ORIGIN.relative(Direction.NORTH.getCounterClockWise(), c).above(r),
                                     ModBlocks.VIDEO_SCREEN_BLOCK.get().defaultBlockState().setValue(VideoScreenBlock.FACING, Direction.NORTH), 2);
@@ -179,6 +187,17 @@ public class GuiSelfTest {
         try {
             ticks++;
             if (ticks == 30) mc.resizeDisplay();
+            if (STUB) {
+                mc.options.hideGui = true;
+                if (ticks == 150) { shotPrefix = "stub"; capture = 1; }
+                if (ticks == 160) {
+                    var be = (VideoScreenBlockEntity) mc.level.getBlockEntity(ORIGIN);
+                    System.out.println("STUB-TEST adult=" + be.isAdult() + " allowed=" + com.nestworld.video.client.ClientData.isAdultAllowed()
+                            + " display=" + com.nestworld.video.client.ClientVideoManager.getInstance().getDisplay(ORIGIN));
+                    System.out.println("NESTWORLD GUI TEST PASS"); mc.stop();
+                }
+                return;
+            }
             if (ANIME) {
                 mc.options.hideGui = true;
                 var display = com.nestworld.video.client.ClientVideoManager.getInstance().getDisplay(ORIGIN);

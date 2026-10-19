@@ -20,10 +20,11 @@ public class PacketUpdateVideoScreen {
     final long serverGameTime;
     final boolean autoNext, repeat, nextCancelled;
     final String relayUrl;
+    final boolean adult;
 
     public PacketUpdateVideoScreen(BlockPos pos, String url, String title, boolean isPlaying, boolean stopped,
                                    long positionMs, long serverGameTime,
-                                   boolean autoNext, boolean repeat, boolean nextCancelled, String relayUrl) {
+                                   boolean autoNext, boolean repeat, boolean nextCancelled, String relayUrl, boolean adult) {
         this.pos = pos;
         this.url = url;
         this.title = title;
@@ -33,6 +34,7 @@ public class PacketUpdateVideoScreen {
         this.serverGameTime = serverGameTime;
         this.autoNext = autoNext; this.repeat = repeat; this.nextCancelled = nextCancelled;
         this.relayUrl = relayUrl == null ? "" : relayUrl;
+        this.adult = adult;
     }
 
     public static void encode(PacketUpdateVideoScreen packet, FriendlyByteBuf buf) {
@@ -45,11 +47,12 @@ public class PacketUpdateVideoScreen {
         buf.writeLong(packet.serverGameTime);
         buf.writeBoolean(packet.autoNext); buf.writeBoolean(packet.repeat); buf.writeBoolean(packet.nextCancelled);
         buf.writeUtf(packet.relayUrl, 2048);
+        buf.writeBoolean(packet.adult);
     }
 
     public static PacketUpdateVideoScreen decode(FriendlyByteBuf buf) {
         return new PacketUpdateVideoScreen(buf.readBlockPos(), buf.readUtf(), buf.readUtf(), buf.readBoolean(),
-                buf.readBoolean(), buf.readLong(), buf.readLong(), buf.readBoolean(), buf.readBoolean(), buf.readBoolean(), buf.readUtf(2048));
+                buf.readBoolean(), buf.readLong(), buf.readLong(), buf.readBoolean(), buf.readBoolean(), buf.readBoolean(), buf.readUtf(2048), buf.readBoolean());
     }
 
     public static void handle(PacketUpdateVideoScreen packet, Supplier<NetworkEvent.Context> contextSupplier) {
@@ -61,7 +64,7 @@ public class PacketUpdateVideoScreen {
         context.enqueueWork(() ->
             DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
                 () -> () -> ClientPacketHandler.handleUpdateVideoScreen(pos, url, title, isPlaying, packet.stopped,
-                        packet.positionMs, packet.serverGameTime, packet.autoNext, packet.repeat, packet.nextCancelled, packet.relayUrl)));
+                        packet.positionMs, packet.serverGameTime, packet.autoNext, packet.repeat, packet.nextCancelled, packet.relayUrl, packet.adult)));
         context.setPacketHandled(true);
     }
 }

@@ -41,7 +41,9 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
         // also covers the short interval before ClientVideoManager has created a
         // Display object on the render thread.
         if (display == null) {
-            if (blockEntity.isPlaying() && !blockEntity.getCurrentVideoUrl().isBlank())
+            if (blockEntity.isAdult() && !ClientData.isAdultAllowed() && !blockEntity.isStopped() && !blockEntity.getCurrentVideoUrl().isBlank())
+                drawAdultStub(poseStack, buffer, blockEntity.getScreenCols(), blockEntity.getScreenRows());
+            else if (blockEntity.isPlaying() && !blockEntity.getCurrentVideoUrl().isBlank())
                 drawLoading(poseStack, blockEntity.getScreenCols(), blockEntity.getScreenRows(), false);
             else
                 drawBackground(poseStack, blockEntity.getScreenCols(), blockEntity.getScreenRows());
@@ -149,6 +151,45 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
         int light = LightTexture.FULL_BRIGHT;
         float[] scale = display.uvScale();
         VideoRenderTypes.quad(consumer, poseStack, x, y, w, h, scale[0], scale[1], LightTexture.FULL_BRIGHT);
+    }
+
+    /** What a viewer without 18+ access sees instead of the video: a dark panel with a gold "18+" ring and a short note. */
+    private void drawAdultStub(PoseStack poseStack, MultiBufferSource buffer, int cols, int rows) {
+        RenderSystem.enableDepthTest();
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.enablePolygonOffset();
+        RenderSystem.polygonOffset(-1.0F, -4.0F);
+        RenderSystem.setShader(GameRenderer::getPositionColorShader);
+        Matrix4f matrix = poseStack.last().pose();
+        drawColorQuad(matrix, 0, 1 - rows, cols, 1, 0.045f, 0.05f, 0.065f, 1f);
+        float unit = Math.min(cols, rows);
+        float cx = cols * 0.5f, cy = 1f - rows * 0.5f - unit * 0.06f;
+        float radius = unit * 0.24f, thickness = unit * 0.022f;
+        int segments = 40;
+        for (int i = 0; i < segments; i++) {
+            double angle = i * Math.PI * 2.0 / segments;
+            float x = cx + (float) Math.cos(angle) * radius, y = cy + (float) Math.sin(angle) * radius;
+            drawColorQuad(matrix, x - thickness, y - thickness, x + thickness, y + thickness, 0.906f, 0.745f, 0.439f, 1f);
+        }
+        RenderSystem.polygonOffset(0.0F, 0.0F);
+        RenderSystem.disablePolygonOffset();
+        RenderSystem.disableBlend();
+        var font = net.minecraft.client.Minecraft.getInstance().font;
+        centeredText(poseStack, buffer, font, "18+", cx, cy, unit * 0.036f, 0xFFE7BE70);
+        centeredText(poseStack, buffer, font, "Контент 18+", cx, cy + radius + unit * 0.09f, unit * 0.017f, 0xFFE8EDF2);
+        centeredText(poseStack, buffer, font, "У вас немає доступу до цього відео", cx, cy + radius + unit * 0.16f, unit * 0.0105f, 0xFFAAB8C7);
+    }
+
+    /** Draws {@code text} centred on (x, y) in screen-local units; scale is the size of one font pixel. */
+    private void centeredText(PoseStack poseStack, MultiBufferSource buffer, net.minecraft.client.gui.Font font, String text,
+                              float x, float y, float scale, int color) {
+        poseStack.pushPose();
+        poseStack.translate(x - font.width(text) * scale / 2f, y - 4f * scale, -0.003f);
+        poseStack.scale(scale, scale, 1f);
+        font.drawInBatch(text, 0f, 0f, color, false, poseStack.last().pose(), buffer,
+                net.minecraft.client.gui.Font.DisplayMode.NORMAL, 0, LightTexture.FULL_BRIGHT);
+        poseStack.popPose();
     }
 
     private void drawBackground(PoseStack poseStack, int cols, int rows) {

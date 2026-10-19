@@ -6,8 +6,18 @@ public class Category {
     private String name;
     private List<Video> videos;
     private String displayTitle, poster, season;
+    /** Age rating from the catalogue source (Hikka: g, pg, pg_13, r, r_plus, rx) and an optional manual 18+ mark. */
+    private String rating;
+    private Boolean adult;
     public void setDetails(String title, String poster, String season) {
         this.displayTitle = title; this.poster = poster; this.season = season;
+    }
+    public void setRating(String rating) { this.rating = rating; }
+    public String getRating() { return rating == null ? "" : rating; }
+    /** True when marked 18+ by hand or when its rating is one of {@code adultRatings}. */
+    public boolean isAdult(java.util.List<String> adultRatings) {
+        if (adult != null) return adult;
+        return rating != null && adultRatings.contains(rating.toLowerCase(java.util.Locale.ROOT));
     }
     public String getDisplayTitle() {
         if (displayTitle != null && !displayTitle.isBlank()) return displayTitle;

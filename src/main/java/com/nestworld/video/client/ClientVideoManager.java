@@ -153,6 +153,12 @@ public class ClientVideoManager {
             if (existing != null) stopPlaying(pos);
             return;
         }
+        if (screen.isAdult() && !ClientData.isAdultAllowed()) {
+            // 18+ video and this player may not watch it: nothing is decoded or played, the screen shows a placeholder.
+            desiredScreens.remove(pos);
+            if (existing != null) stopPlaying(pos);
+            return;
+        }
         desiredScreens.put(pos, screen.getCurrentVideoUrl());
         if (existing != null && (!existing.getUrl().equals(screen.getCurrentVideoUrl())
                 || !existing.getSourceUrl().equals(sourceFor(pos, screen.getCurrentVideoUrl())))) {

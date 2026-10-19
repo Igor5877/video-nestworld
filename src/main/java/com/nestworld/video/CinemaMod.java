@@ -52,6 +52,7 @@ public class CinemaMod {
         ModBlocks.register(modEventBus);
         ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, NestworldConfig.CLIENT_SPEC);
         ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, com.nestworld.video.relay.RelayConfig.SPEC);
+        ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, com.nestworld.video.content.ContentConfig.SPEC, "nestworldvideo-content.toml");
         
         // Ініціалізуємо нашу мережу
         Networking.registerMessages();
@@ -113,6 +114,7 @@ public class CinemaMod {
     public static void onServerTick(TickEvent.ServerTickEvent event) {
         if (event.phase != TickEvent.Phase.END || event.getServer().getTickCount() % 100 != 0) return;
         long now = System.currentTimeMillis();
+        for (ServerPlayer player : event.getServer().getPlayerList().getPlayers()) sendAdultAccess(player, false);
         if (com.nestworld.video.relay.RelayManager.running()) {
             Map<ResourceKey<Level>, Map<BlockPos, Integer>> counts = new java.util.HashMap<>();
             for (ScreenKey key : SCREEN_VIEWERS.keySet()) {
@@ -134,8 +136,24 @@ public class CinemaMod {
         com.nestworld.video.relay.RelayManager.stop();
     }
 
+    /** What each client was last told about 18+ access, so permission changes (e.g. in LuckPerms) reach it within seconds. */
+    private static final Map<UUID, Boolean> ADULT_ACCESS_SENT = new ConcurrentHashMap<>();
+
+    private static void sendAdultAccess(ServerPlayer player, boolean force) {
+        boolean allowed = com.nestworld.video.content.AdultAccess.canView(player);
+        Boolean previous = ADULT_ACCESS_SENT.put(player.getUUID(), allowed);
+        if (force || previous == null || previous != allowed)
+            Networking.INSTANCE.send(PacketDistributor.PLAYER.with(() -> player), new com.nestworld.video.network.PacketAdultAccess(allowed));
+    }
+
+    @SubscribeEvent
+    public static void onPermissionNodes(net.minecraftforge.server.permission.events.PermissionGatherEvent.Nodes event) {
+        com.nestworld.video.content.AdultAccess.registerNodes(event);
+    }
+
     @SubscribeEvent
     public static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
+        ADULT_ACCESS_SENT.remove(event.getEntity().getUUID());
         if (event.getEntity() instanceof ServerPlayer player) removeViewerEverywhere(player);
     }
 
@@ -167,6 +185,7 @@ public class CinemaMod {
     // НОВИЙ МЕТОД: викликається, коли гравець заходить на сервер
     @SubscribeEvent
     public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
+        if (event.getEntity() instanceof ServerPlayer joined) sendAdultAccess(joined, true);
         if (videoConfig != null && event.getEntity() instanceof ServerPlayer) {
             ServerPlayer player = (ServerPlayer) event.getEntity();
             LOGGER.info("NESTWORLD_VIDEO: Player {} joined. Sending video config...", player.getName().getString());

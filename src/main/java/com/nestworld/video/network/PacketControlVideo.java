@@ -64,7 +64,15 @@ public class PacketControlVideo {
                             : Component.translatable("gui.nestworldvideo.error." + result.error()), false);
                 }
                 case "reset_layout" -> { if (player.mayBuild()) raw.resetLayout(); }
-                case "play" -> { if (screen != null) screen.play(); }
+                case "play" -> {
+                    if (screen != null) {
+                        if (com.nestworld.video.content.AdultAccess.isAdultUrl(screen.getCurrentVideoUrl()) && !com.nestworld.video.content.AdultAccess.canView(player)) {
+                            player.displayClientMessage(Component.literal("Це відео 18+: у вас немає права його запускати."), true);
+                            return;
+                        }
+                        screen.play();
+                    }
+                }
                 case "pause" -> {
                     if (screen != null) {
                         if (message.value >= 0) screen.pauseAt(message.value);
@@ -79,6 +87,10 @@ public class PacketControlVideo {
                 case "seek_by" -> { if (screen != null) screen.seekBy(message.value, remote ? player : null); }
                 case "select" -> {
                     if (message.videoUrl.isBlank()) return;
+                    if (com.nestworld.video.content.AdultAccess.isAdultUrl(message.videoUrl) && !com.nestworld.video.content.AdultAccess.canView(player)) {
+                        player.displayClientMessage(Component.literal("Це відео 18+: у вас немає права його запускати."), true);
+                        return;
+                    }
                     if (screen == null || CinemaMod.videoConfig == null || CinemaMod.videoConfig.getCategories() == null) return;
                     // Only videos from the server's catalogue can be played on other clients.
                     for (var category : CinemaMod.videoConfig.getCategories()) {

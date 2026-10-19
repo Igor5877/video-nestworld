@@ -10,10 +10,13 @@ public class Video {
     private String dub;
     private String seriesTitle;
     private String provider;
+    private Boolean adult;
 
     public void setEpisodeInfo(String episode, String dub, String seriesTitle, String provider) {
         this.episode = episode; this.dub = dub; this.seriesTitle = seriesTitle; this.provider = provider;
     }
+    /** Marked 18+ by hand in videos.json. */
+    public boolean isAdultMarked() { return adult != null && adult; }
     public String getEpisode() {
         if (episode != null && !episode.isBlank()) return episode;
         var matcher = java.util.regex.Pattern.compile("(?iu)(?:епізод|серія)\\s+([0-9]+(?:[.,][0-9]+)?)")

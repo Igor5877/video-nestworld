@@ -39,7 +39,7 @@ public record PacketBrowseRequest(int menuId, int requestId, String action, Stri
                 else if (msg.action.equals("seasons")) work = HikkaCatalogClient.seasons(msg.query);
                 else work = HikkaCatalogClient.detail(msg.query).thenCompose(title ->
                     AniuaApiClient.loadEpisodes(title.slug(), VideoSourceResolver.load(server.getServerDirectory().toPath()))
-                        .thenApply(category -> { category.setDetails(title.title(), title.poster(), title.seasonLabel()); return category; }));
+                        .thenApply(category -> { category.setDetails(title.title(), title.poster(), title.seasonLabel()); category.setRating(title.rating()); return category; }));
             } catch (RuntimeException exception) {
                 REMOTE_SLOTS.release();
                 BUSY.put(player, now + 500_000_000L);

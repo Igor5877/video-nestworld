@@ -7,7 +7,7 @@ import net.minecraftforge.network.simple.SimpleChannel;
 
 public class Networking {
 
-    private static final String PROTOCOL_VERSION = "8";
+    private static final String PROTOCOL_VERSION = "9";
     public static final SimpleChannel INSTANCE = NetworkRegistry.newSimpleChannel(
             ResourceLocation.fromNamespaceAndPath(CinemaMod.MOD_ID, "main"),
             () -> PROTOCOL_VERSION,
@@ -60,6 +60,13 @@ public class Networking {
                 PacketCancelNext::decode,
                 PacketCancelNext::handle,
                 java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_SERVER)
+        );
+        INSTANCE.registerMessage(9,
+                PacketAdultAccess.class,
+                PacketAdultAccess::encode,
+                PacketAdultAccess::decode,
+                PacketAdultAccess::handle,
+                java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_CLIENT)
         );
         INSTANCE.registerMessage(6,
                 PacketScreenViewers.class,
