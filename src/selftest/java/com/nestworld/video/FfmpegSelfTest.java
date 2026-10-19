@@ -31,7 +31,7 @@ public class FfmpegSelfTest {
     static long start = System.nanoTime(), playStart;
     static volatile Throwable failure;
     static boolean sawFrame;
-    static final String URL = System.getProperty("nestworldvideo.testurl", "http://localhost:8765/long.m3u8");
+    static final String URL = System.getProperty("nestworldvideo.testurl", "http://localhost:8765/smpte.m3u8");
 
     @SubscribeEvent public static void tick(TickEvent.ClientTickEvent event) {
         if (!Boolean.getBoolean("nestworldvideo.ffmpegtest") || event.phase != TickEvent.Phase.END) return;
@@ -85,12 +85,11 @@ public class FfmpegSelfTest {
                 d == null ? "-" : d.getDimensions(), d == null ? -1 : d.getPlaybackTime(), d == null ? -1 : d.getDuration(),
                 d != null && d.isPlaying(), d != null && d.isBuffering(), d != null && d.isBroken());
         }
-        if (ticks == 20 * 12) capture = 12;
-        if (ticks == 20 * 13) mc.setScreen(new net.minecraft.client.gui.screens.PauseScreen(true));   // game menu open
-        if (ticks == 20 * 16) capture = 16;
-        if (ticks == 20 * 17) mc.setScreen(null);
-        if (ticks == 20 * 20) capture = 20;
-        if (ticks == 20 * 26) {
+        if (ticks == 20 * 14) capture = 14;                                   // daytime
+        if (ticks == 20 * 15) mc.getSingleplayerServer().execute(() -> mc.getSingleplayerServer().getCommands()
+                .performPrefixedCommand(mc.getSingleplayerServer().createCommandSourceStack().withSuppressedOutput(), "time set midnight"));
+        if (ticks == 20 * 24) capture = 24;                                   // night
+        if (ticks == 20 * 27) {
             // The clip is short: by now it has finished and the screen has stopped, so remember earlier frames.
             boolean ok = sawFrame;
             System.out.println(ok ? "NESTWORLD FFMPEG TEST PASS: frames are being displayed" : "NESTWORLD FFMPEG TEST FAIL: no frame displayed");

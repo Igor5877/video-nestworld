@@ -59,9 +59,14 @@ minecraft {
     runs {
         // applies to all the run configs below
         configureEach {
-            workingDirectory project.file(project.hasProperty('selftest') || project.hasProperty('ffmpegtest') ? 'build/selftest-run' : 'run')
+            workingDirectory project.file(project.hasProperty('selftest') || project.hasProperty('ffmpegtest') || project.hasProperty('shadertest') ? 'build/selftest-run' : 'run')
             if (project.hasProperty('selftest')) property 'nestworldvideo.selftest', 'true'
             if (project.hasProperty('ffmpegtest')) property 'nestworldvideo.ffmpegtest', 'true'
+            if (project.hasProperty('shadertest')) {
+                // Production mods (Oculus/Embeddium) use SRG-named mixins: let Mixin remap them in the dev environment.
+                property 'mixin.env.remapRefMap', 'true'
+                property 'mixin.env.refMapRemappingFile', "${projectDir}/build/createSrgToMcp/output.srg"
+            }
 
             // Recommended logging data for a userdev environment
             // The markers can be added/remove as needed separated by commas.
@@ -120,6 +125,12 @@ minecraft {
 sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 repositories {
+    if (project.hasProperty('shadertest')) {
+        exclusiveContent {
+            forRepository { maven { url "https://api.modrinth.com/maven" } }
+            filter { includeGroup "maven.modrinth" }
+        }
+    }
     // Put repositories for dependencies here
     // ForgeGradle automatically adds the Forge maven and Maven Central for you
     maven {
@@ -135,6 +146,11 @@ repositories {
 }
 
 dependencies {
+    // Opt-in (-Pshadertest): a real shader-pack stack for testing how the screens look under Iris/Oculus.
+    if (project.hasProperty('shadertest')) {
+        runtimeOnly fg.deobf("maven.modrinth:embeddium:0.3.31+mc1.20.1")
+        runtimeOnly fg.deobf("maven.modrinth:oculus:1.20.1-1.8.0")
+    }
     // FFmpeg decoder API. compileOnly on purpose: at runtime these jars are downloaded once into the game
     // directory and loaded by an isolated class loader (see com.nestworld.video.ffmpeg.FfmpegLibs).
     compileOnly('org.bytedeco:javacv:1.5.10') { transitive = false }
@@ -226,4 +242,4 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 // Test scene is opt-in and must never be included in the release JAR.
-if (project.hasProperty('selftest') || project.hasProperty('ffmpegtest')) sourceSets.main.java.srcDir('src/selftest/java')
+if (project.hasProperty('selftest') || project.hasProperty('ffmpegtest') || project.hasProperty('shadertest')) sourceSets.main.java.srcDir('src/selftest/java')
