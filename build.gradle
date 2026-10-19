@@ -59,9 +59,11 @@ minecraft {
     runs {
         // applies to all the run configs below
         configureEach {
-            workingDirectory project.file(project.hasProperty('selftest') || project.hasProperty('ffmpegtest') || project.hasProperty('shadertest') ? 'build/selftest-run' : 'run')
+            workingDirectory project.file(project.hasProperty('selftest') || project.hasProperty('ffmpegtest') || project.hasProperty('shadertest') || project.hasProperty('guitest') ? 'build/selftest-run' : 'run')
             if (project.hasProperty('selftest')) property 'nestworldvideo.selftest', 'true'
             if (project.hasProperty('ffmpegtest')) property 'nestworldvideo.ffmpegtest', 'true'
+            if (project.hasProperty('guitest')) property 'nestworldvideo.guitest', 'true'
+            if (project.hasProperty('guishots')) property 'nestworldvideo.guishots', project.property('guishots')
             if (project.hasProperty('shadertest')) {
                 // Production mods (Oculus/Embeddium) use SRG-named mixins: let Mixin remap them in the dev environment.
                 property 'mixin.env.remapRefMap', 'true'
@@ -239,4 +241,4 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 // Test scene is opt-in and must never be included in the release JAR.
-if (project.hasProperty('selftest') || project.hasProperty('ffmpegtest') || project.hasProperty('shadertest')) sourceSets.main.java.srcDir('src/selftest/java')
+if (project.hasProperty('selftest') || project.hasProperty('ffmpegtest') || project.hasProperty('shadertest') || project.hasProperty('guitest')) sourceSets.main.java.srcDir('src/selftest/java')
