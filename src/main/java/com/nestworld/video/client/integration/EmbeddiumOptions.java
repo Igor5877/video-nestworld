@@ -64,6 +64,13 @@ public final class EmbeddiumOptions {
         }
     }
 
+    /** Without WaterMedia there is no VLC, so the decoder choice would be meaningless: FFmpeg is always used. */
+    private static OptionGroup playbackGroup(OptionImpl<Storage, Decoder> decoder, OptionImpl<Storage, Quality> quality, OptionImpl<Storage, RenderMode> mode) {
+        var group = OptionGroup.createBuilder();
+        if (net.minecraftforge.fml.ModList.get().isLoaded("watermedia")) group.add(decoder);
+        return group.add(quality).add(mode).build();
+    }
+
     private static OptionPage buildPage() {
         Storage storage = new Storage();
         var decoder = OptionImpl.createBuilder(Decoder.class, storage)
@@ -105,7 +112,7 @@ public final class EmbeddiumOptions {
         var debug = tick(storage, "Статистика в журналі", "Пише в latest.log швидкість годинника, черги й розсинхрон. Для пошуку проблем.", NestworldConfig.DEBUG_STATS);
 
         return new OptionPage(Component.literal("Nestworld Video"), ImmutableList.<OptionGroup>of(
-                OptionGroup.createBuilder().add(decoder).add(quality).add(mode).build(),
+                playbackGroup(decoder, quality, mode),
                 OptionGroup.createBuilder().add(smooth).add(upscaler).add(sharp).add(mips).build(),
                 OptionGroup.createBuilder().add(spatial).add(soft).add(vsync).build(),
                 OptionGroup.createBuilder().add(distance).add(streams).add(debug).build()));

@@ -43,7 +43,8 @@ public final class NestworldSettingsScreen extends Screen {
         viewTop = top + 36; viewBottom = top + panelH - 34;
         int cellW = (panelW - 24 - (columns - 1) * 8) / columns;
 
-        choice("Декодер відео", cellW, () -> switch (NestworldConfig.DECODER.get()) {
+        // Without WaterMedia there is no VLC and FFmpeg is always used, so the choice is hidden.
+        if (net.minecraftforge.fml.ModList.get().isLoaded("watermedia")) choice("Декодер відео", cellW, () -> switch (NestworldConfig.DECODER.get()) {
                     case "ffmpeg" -> "FFmpeg (власний)"; case "watermedia" -> "VLC (WaterMedia)"; default -> "Авто"; },
                 () -> { cycleString(NestworldConfig.DECODER, List.of("auto", "ffmpeg", "watermedia")); restartStreams = true; },
                 "Авто: спочатку VLC, а якщо він не показує картинку, FFmpeg.\nFFmpeg працює однаково на всіх системах (потрібне завантаження бібліотек один раз).");
