@@ -142,23 +142,29 @@ public final class FfmpegDisplay extends Display {
                 throws InterruptedException {
             VFrame frame;
             synchronized (lock) {
-                int waited = 0;
-                long blockedFrom = System.nanoTime();
+                long blockedFrom = System.nanoTime(), starvedSince = 0;
                 while (!closed && frames.size() >= frameLimit && generation >= expectedGeneration) {
-                    lock.wait(50);
-                    // Streams often carry the audio a second or more behind the video. If we stop reading while the
-                    // video queue is full, the sound runs dry, its clock stops, nothing consumes the frames and the
-                    // picture and sound stutter or freeze (until a seek). So when the sound is starving, let the queue
-                    // grow (up to a cap) so the decoder reads far enough ahead. (Dropping frames instead throttled the decoder to a
-                    // few frames a second and made the sound stutter; a real deadlock is caught by the watchdog.)
-                    AlAudio output = audio;
-                    if (output != null && output.isAvailable() && started && output.bufferedUs() < 250_000L && (waited += 50) >= 150) {
-                        waited = 0;
-                        if (frameLimit < frameCap) {
-                            frameLimit = Math.min(frameCap, frameLimit + 6);
-                            LOGGER.info("Nestworld Video: audio runs behind the video in this stream, buffering up to {} frames", frameLimit);
-                        }
+                    lock.wait(5);
+                    // While nobody is looking at this screen the client tick (20 Hz) is the only consumer, which
+                    // throttled the decoder (and with it the sound) to ~80% of real time. Consume due frames here.
+                    if (started && System.nanoTime() - lastRenderNanos > 150_000_000L) {
+                        long media = decoderClockUs();
+                        while (!frames.isEmpty() && frames.peek().ptsUs <= media) pool.add(frames.poll());
                     }
+                    // Streams often carry the audio behind the video. If the sound is truly running dry while the
+                    // video queue is full, let the queue grow (up to a cap) so the decoder reads further ahead.
+                    AlAudio output = audio;
+                    if (output != null && output.isAvailable() && started && output.bufferedUs() < 250_000L) {
+                        long now = System.nanoTime();
+                        if (starvedSince == 0) starvedSince = now;
+                        else if (now - starvedSince >= 150_000_000L) {
+                            starvedSince = now;
+                            if (frameLimit < frameCap) {
+                                frameLimit = Math.min(frameCap, frameLimit + 6);
+                                LOGGER.info("Nestworld Video: audio runs behind the video in this stream, buffering up to {} frames", frameLimit);
+                            }
+                        }
+                    } else starvedSince = 0;
                 }
                 statBlockedVideoNanos += System.nanoTime() - blockedFrom;
                 if (closed || generation < expectedGeneration) return;
@@ -248,6 +254,17 @@ public final class FfmpegDisplay extends Display {
     }
 
     /** Drops frames the clock has passed without uploading them, so the decoder and the audio keep flowing off-screen. */
+    /** Clock for the decoder thread: same as {@link #mediaTimeUs()} but without updating any state. */
+    private long decoderClockUs() {
+        if (!playing) return frozenUs;
+        AlAudio output = audio;
+        if (audioClock && output != null && output.isAvailable()) {
+            long clock = output.clockUs();
+            return clock >= 0 ? Math.max(lastMediaUs, clock) : lastMediaUs;
+        }
+        return mediaBaseUs + (System.nanoTime() - startedWallNanos) / 1000L;
+    }
+
     private void discardDueFrames() {
         long media = mediaTimeUs();
         synchronized (lock) {
