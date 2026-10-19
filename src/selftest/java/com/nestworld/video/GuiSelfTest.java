@@ -179,6 +179,19 @@ public class GuiSelfTest {
         try {
             ticks++;
             if (ticks == 30) mc.resizeDisplay();
+            if (ANIME) {
+                mc.options.hideGui = true;
+                var display = com.nestworld.video.client.ClientVideoManager.getInstance().getDisplay(ORIGIN);
+                if (animeStage == 0 && display != null && display.getPlaybackTime() > 3000) { animeStage = 1; animeTick = ticks; }
+                if (animeStage >= 1 && animeStage <= ANIME_MODES.length) {
+                    int i = animeStage - 1;
+                    if (ticks == animeTick) { com.nestworld.video.NestworldConfig.UPSCALER.set(ANIME_MODES[i]); }
+                    if (ticks == animeTick + 20) { shotPrefix = "anime-" + ANIME_MODES[i]; capture = 1; }
+                    if (ticks == animeTick + 30) { animeStage++; animeTick = ticks; }
+                }
+                if (animeStage > ANIME_MODES.length) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
+                return;
+            }
             if (ticks == 40) {
                 for (int i = 0; i < 6; i++) com.nestworld.video.client.gui.PosterCache.put("https://cdn.hikka.io/test/" + i + ".jpg", poster(i));
                 var lib = library();
