@@ -75,6 +75,12 @@ final class AlAudio implements Runnable {
         synchronized (lock) { return queue.isEmpty() && alQueuedBuffers == 0; }
     }
     long queuedUs() { synchronized (lock) { return queuedUs; } }
+    /** Audio the listener still has ahead of it: waiting for the audio thread plus already handed to OpenAL. */
+    long bufferedUs() { return queuedUs() + alQueuedBuffers * CHUNK_US; }
+    /** How many times the output ran completely dry while it should have been playing. */
+    int underruns() { return underruns; }
+    private volatile int underruns;
+    private boolean wasDry;
     void setGain(float value) { gain = Math.max(0f, Math.min(1f, value)); }
     void setPlaying(boolean value) { playing = value; }
 
@@ -221,6 +227,9 @@ final class AlAudio implements Runnable {
                 }
                 state = AL10.alGetSourcei(sources[0], AL10.AL_SOURCE_STATE);
                 alPlaying = state == AL10.AL_PLAYING;
+                boolean dry = playing && baseUs >= 0 && queued == 0 && !alPlaying;
+                if (dry && !wasDry) underruns++;
+                wasDry = dry;
                 if (baseUs >= 0) {
                     long played = unqueuedFrames + AL10.alGetSourcei(sources[0], AL11.AL_SAMPLE_OFFSET);
                     clockStampNanos = System.nanoTime();

@@ -151,7 +151,7 @@ public final class FfmpegDisplay extends Display {
                     // picture and sound stutter or freeze (until a seek). So when the sound is starving, let the queue
                     // grow (up to a cap) so the decoder reads far enough ahead; only at the cap sacrifice a frame.
                     AlAudio output = audio;
-                    if (output != null && output.isAvailable() && started && output.queuedUs() < 150_000L && (waited += 50) >= 150) {
+                    if (output != null && output.isAvailable() && started && output.bufferedUs() < 250_000L && (waited += 50) >= 150) {
                         waited = 0;
                         if (frameLimit < frameCap) {
                             frameLimit = Math.min(frameCap, frameLimit + 6);
@@ -366,13 +366,14 @@ public final class FfmpegDisplay extends Display {
         int queued; synchronized (lock) { queued = frames.size(); }
         AlAudio output = audio;
         LOGGER.info("Nestworld Video stats: clock x{} (media +{}ms in {}ms wall), decoded {} fps / {} audio chunks, decoder blocked on video {}ms, "
-                        + "frames {}/{} (cap {}), audio queued {}ms {}, decoder a/v pts skew {}ms (audio - video), paused={}",
+                        + "frames {}/{} (cap {}), audio buffered {}ms {} (underruns {}), decoder a/v pts skew {}ms (audio - video), paused={}",
                 String.format(java.util.Locale.ROOT, "%.2f", (media - statMediaUs) / (double) Math.max(1, wall)),
                 (media - statMediaUs) / 1000, wall / 1000,
                 String.format(java.util.Locale.ROOT, "%.1f", (statVideoFrames - statVideoFramesSeen) * 1e6 / Math.max(1, wall)),
                 statAudioChunks - statAudioChunksSeen, (statBlockedVideoNanos - statBlockedSeen) / 1_000_000L,
                 queued, frameLimit, frameCap,
-                output == null ? -1 : output.queuedUs() / 1000, output == null ? "none" : output.isPlaying() ? "playing" : "STOPPED",
+                output == null ? -1 : output.bufferedUs() / 1000, output == null ? "none" : output.isPlaying() ? "playing" : "STOPPED",
+                output == null ? 0 : output.underruns(),
                 (statLastAudioPts - statLastVideoPts) / 1000, !playing);
         long shown = statShown, skipped = statSkipped, uploadNanos = statUploadNanos;
         LOGGER.info("Nestworld Video render: game fps {}, shown {} frames, skipped (late) {}, upload avg {}ms / max {}ms, longest gap between shown frames {}ms",
