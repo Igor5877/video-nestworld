@@ -600,6 +600,28 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         long hours=totalSeconds/3600, minutes=(totalSeconds/60)%60, seconds=totalSeconds%60;
         return hours>0?String.format(Locale.ROOT,"%d:%02d:%02d",hours,minutes,seconds):String.format(Locale.ROOT,"%02d:%02d",minutes,seconds);
     }
+    /** Facts about the screen being built, so the free space of the tab is useful. */
+    private void drawScreenInfo(GuiGraphics g, int x, int y, int width, int cols, int rows) {
+        int div = java.math.BigInteger.valueOf(cols).gcd(java.math.BigInteger.valueOf(rows)).intValue();
+        boolean sixteenNine = Math.abs(cols / (double) rows - 16.0 / 9.0) < 0.03;
+        var lines = new ArrayList<String>();
+        lines.add("Розмір: " + cols + " × " + rows + " блоків (" + cols * rows + " шт.)");
+        lines.add("Пропорції: " + (cols / div) + ":" + (rows / div) + (sixteenNine ? " — як у відео 16:9" : " — відео 16:9 матиме чорні поля"));
+        var root = screen();
+        var display = root == null ? null : com.nestworld.video.client.ClientVideoManager.getInstance().getDisplay(root.getBlockPos());
+        var size = display == null ? null : display.getDimensions();
+        if (size != null && size.width > 0 && size.height > 0)
+            lines.add("Відео зараз: " + size.width + "×" + size.height + " · ≈" + Math.round(Math.max(size.width / (double) cols, size.height / (double) rows)) + " пікс. на блок");
+        else lines.add("Відео зараз не грає");
+        lines.add("Глядачі: " + (viewerCount < 0 ? "…" : viewerCount));
+        lines.add("Працює на відстані до " + com.nestworld.video.NestworldConfig.MAX_STREAM_DISTANCE.get() + " блоків");
+        g.drawString(font, "Про екран", x, y, GOLD, false);
+        int row = y + 14;
+        for (String line : lines) {
+            for (var part : font.split(Component.literal(line), width)) { g.drawString(font, part, x, row, MUTED, false); row += 11; }
+            row += 3;
+        }
+    }
     private void refreshPreview() {
         if (minecraft != null && minecraft.level != null && menu.getBlockEntity() != null)
             preview = ScreenLayout.detect(minecraft.level, menu.getBlockEntity().getBlockPos());
@@ -622,7 +644,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
     @Override protected void containerTick() {
         super.containerTick();
         if(++ticks%20==0) { if(construction) refreshPreview();else refreshEntries(); }
-        if(!construction && ticks%40==0) send("viewers");
+        if(ticks%40==0) send("viewers");
         updateControls();
     }
     private void updateControls() {
@@ -660,6 +682,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
             }
             g.drawCenteredString(font, cols + " × " + rows, leftPos + 12 + pw / 2, topPos + 63 + ph, GOLD);
             g.drawWordWrap(font, tr("build_hint", ScreenLayout.MAX_SIZE, ScreenLayout.MAX_SIZE), leftPos + pw + 24, topPos + 60, pw, TEXT);
+            drawScreenInfo(g, leftPos + pw + 24, topPos + 60 + font.split(tr("build_hint", ScreenLayout.MAX_SIZE, ScreenLayout.MAX_SIZE), pw).size() * 9 + 12, pw, cols, rows);
             Component status = preview != null && preview.valid()
                     ? assembled() ? tr("assembled", cols, rows) : tr("ready", cols * rows) : tr("error." + (preview == null ? "missing" : preview.error()));
             g.drawWordWrap(font, status, leftPos + 12, topPos + imageHeight - 63, imageWidth - 24,

@@ -125,7 +125,10 @@ public class GuiSelfTest {
 
     static void click(String text) {
         var mc = Minecraft.getInstance();
-        var b = mc.screen.children().stream().filter(e -> e instanceof Button bt && (bt.getMessage().getString().equals(text) || bt.getMessage().getString().trim().endsWith(text))).map(e -> (Button) e).findFirst().orElseThrow(() -> new AssertionError("no button " + text));
+        // The test client runs with the default (English) language: accept the English label of translated buttons too.
+        String alias = switch (text) { case "Екран" -> "Screen"; case "Пауза" -> "Pause"; default -> text; };
+        var b = mc.screen.children().stream().filter(e -> e instanceof Button bt && (bt.getMessage().getString().equals(text) || bt.getMessage().getString().trim().endsWith(text)
+                || bt.getMessage().getString().trim().endsWith(alias))).map(e -> (Button) e).findFirst().orElseThrow(() -> new AssertionError("no button " + text));
         b.onPress();
     }
 
