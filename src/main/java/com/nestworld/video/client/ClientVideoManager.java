@@ -54,6 +54,10 @@ public class ClientVideoManager {
                 com.mojang.logging.LogUtils.getLogger().info("Nestworld Video: reading the stream of the screen at {} through the server relay", pos);
                 relayStartedNanos.put(pos, System.nanoTime());
             } else relayStartedNanos.remove(pos);
+            if (!com.nestworld.video.security.UrlSafety.clientMayOpen(source, serverHost())) {
+                com.mojang.logging.LogUtils.getLogger().warn("Nestworld Video: refused to open an address that is not a public http(s) URL for the screen at {}", pos);
+                return;
+            }
             Display display = Display.create(url, source);
             display.syncPosition(screenPosition(pos));
             activeDisplays.put(pos, display);

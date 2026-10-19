@@ -140,13 +140,13 @@ public final class AniuaApiClient {
     }
 
     private static Video makeVideo(JsonObject episode, String url) {
-            String number = firstString(episode, "episode");
+            String number = com.nestworld.video.security.MediaChecks.cleanText(firstString(episode, "episode"), 12);
             if (number.isBlank()) number = "?";
-            String title = firstString(episode, "title_ua", "name_ua", "title_en", "name_en", "name_jp");
+            String title = com.nestworld.video.security.MediaChecks.cleanText(firstString(episode, "title_ua", "name_ua", "title_en", "name_en", "name_jp"), 200);
             String seriesTitle = title;
             if (title.isBlank()) title = "Епізод " + number;
             else title = "Епізод " + number + " — " + title;
-            String team = firstString(episode, "team");
+            String team = com.nestworld.video.security.MediaChecks.cleanText(firstString(episode, "team"), 80);
             if (!team.isBlank()) title += " — " + team;
             Video video = new Video(title, "AniUA • епізод " + number,
                     url, "", safePoster(firstString(episode, "poster")));

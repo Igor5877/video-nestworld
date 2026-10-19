@@ -144,6 +144,7 @@ public class GuiSelfTest {
             if (STUB) com.nestworld.video.content.ContentConfig.ADULT_DEFAULT.set("nobody");
             if (RELAY) {   // config values only exist once the mod's config is loaded, i.e. now
                 com.nestworld.video.relay.RelayConfig.ENABLED.set(true);
+                com.nestworld.video.relay.RelayConfig.ALLOW_PRIVATE_ORIGINS.set(true);   // the test origin is on 127.0.0.1
                 com.nestworld.video.relay.RelayConfig.MIN_VIEWERS.set(1);
             }
             mc.options.renderDistance().set(4); mc.options.simulationDistance().set(5);

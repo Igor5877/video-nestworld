@@ -145,8 +145,9 @@ public final class HikkaCatalogClient {
         });
     }
     private static Title parseTitle(JsonObject obj) {
-        return new Title(first(obj,"slug"), first(obj,"title_ua","title_en","title_ja","slug"),
-                first(obj,"year"), first(obj,"media_type"), first(obj,"image"), first(obj,"rating"));
+        var clean = (java.util.function.BiFunction<String, Integer, String>) com.nestworld.video.security.MediaChecks::cleanText;
+        return new Title(first(obj,"slug"), clean.apply(first(obj,"title_ua","title_en","title_ja","slug"), 200),
+                clean.apply(first(obj,"year"), 8), clean.apply(first(obj,"media_type"), 16), first(obj,"image"), clean.apply(first(obj,"rating"), 16));
     }
     private static String normalize(String value) { return value.toLowerCase(Locale.ROOT).replaceAll("[^\\p{L}\\p{N}]", ""); }
     private static String first(JsonObject obj, String... keys) {

@@ -8,6 +8,7 @@ public final class RelayConfig {
     public static final ForgeConfigSpec.BooleanValue ENABLED;
     public static final ForgeConfigSpec.ConfigValue<String> BIND_ADDRESS, PUBLIC_HOST;
     public static final ForgeConfigSpec.IntValue PORT, MIN_VIEWERS, DIRECT_AFTER_SECONDS, CACHE_MB, PREFETCH_SEGMENTS;
+    public static final ForgeConfigSpec.BooleanValue ALLOW_PRIVATE_ORIGINS;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -37,6 +38,10 @@ public final class RelayConfig {
         PREFETCH_SEGMENTS = builder
                 .comment("How many segments the relay downloads ahead of the players.")
                 .defineInRange("prefetch_segments", 4, 0, 30);
+        ALLOW_PRIVATE_ORIGINS = builder
+                .comment("Let the relay fetch from private/loopback addresses (e.g. a video host inside your own network).",
+                        "Keep false otherwise: it stops a hostile playlist from making the server call into your internal network.")
+                .define("allow_private_origins", false);
         builder.pop();
         SPEC = builder.build();
     }

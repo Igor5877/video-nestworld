@@ -30,6 +30,7 @@ import java.util.regex.Pattern;
 public final class RelayServer {
     private static final Logger LOG = Logger.getLogger("nestworldvideo.relay");
     private static final Pattern URI_ATTRIBUTE = Pattern.compile("URI=\"([^\"]+)\"");
+    private static final int MAX_URLS_PER_SOURCE = 60_000, MAX_REDIRECTS = 4, MAX_PLAYLIST_BYTES = 4_000_000, MAX_SEGMENT_BYTES = 96_000_000;
     private static final String USER_AGENT = "VLC/3.0.18 LibVLC/3.0.18";
 
     /** A video the relay knows about: its playlists and files, addressed by small integers. */
@@ -43,7 +44,11 @@ public final class RelayServer {
         volatile long lastUsed = System.currentTimeMillis();
         Source(String id, String originUrl) { this.id = id; this.originUrl = originUrl; this.referer = originOf(originUrl); }
         synchronized int register(String url) {
-            return index.computeIfAbsent(url, u -> { urls.add(u); return urls.size() - 1; });
+            Integer known = index.get(url);
+            if (known != null) return known;
+            if (urls.size() >= MAX_URLS_PER_SOURCE) throw new IllegalStateException("playlist lists too many files");
+            urls.add(url); index.put(url, urls.size() - 1);
+            return urls.size() - 1;
         }
         synchronized String url(int n) { return n >= 0 && n < urls.size() ? urls.get(n) : null; }
     }
@@ -55,7 +60,7 @@ public final class RelayServer {
     private final long maxCacheBytes;
     private final int prefetchSegments;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10))
-            .followRedirects(HttpClient.Redirect.NORMAL).build();
+            .followRedirects(HttpClient.Redirect.NEVER).build();   // redirects are followed by hand, each hop checked
     private final Map<String, Source> sourcesById = new ConcurrentHashMap<>();
     private final Map<String, Source> sourcesByUrl = new ConcurrentHashMap<>();
     private final LinkedHashMap<String, Entry> cache = new LinkedHashMap<>(256, 0.75f, true);
@@ -191,6 +196,7 @@ public final class RelayServer {
         StringBuilder out = new StringBuilder(text.length() + 256);
         List<Integer> segments = new ArrayList<>();
         for (String line : text.split("\r?\n", -1)) {
+            if (line.length() > 4096) throw new IOException("playlist line too long");
             String trimmed = line.trim();
             if (trimmed.isEmpty()) { out.append(line).append('\n'); continue; }
             if (trimmed.startsWith("#")) {
@@ -255,13 +261,35 @@ public final class RelayServer {
         if (existing != null) { hits.incrementAndGet(); return existing.get(60, TimeUnit.SECONDS); }
         misses.incrementAndGet();
         try {
-            HttpRequest request = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(45))
-                    .header("User-Agent", USER_AGENT).header("Referer", source.referer).GET().build();
-            HttpResponse<byte[]> response = http.send(request, HttpResponse.BodyHandlers.ofByteArray());
-            if (response.statusCode() / 100 != 2) throw new IOException("origin answered " + response.statusCode() + " for " + safe(url));
-            byte[] body = response.body();
+            HttpResponse<java.io.InputStream> response = null;
+            String current = url;
+            for (int hop = 0; hop <= MAX_REDIRECTS; hop++) {
+                // A playlist is data from a third party: never let it send the server into a private network.
+                if (!RelayConfig.ALLOW_PRIVATE_ORIGINS.get()) com.nestworld.video.security.UrlSafety.requirePublic(current);
+                else if (!current.startsWith("http")) throw new IOException("only http(s) is allowed");
+                HttpRequest request = HttpRequest.newBuilder(URI.create(current)).timeout(Duration.ofSeconds(45))
+                        .header("User-Agent", USER_AGENT).header("Referer", source.referer).GET().build();
+                response = http.send(request, HttpResponse.BodyHandlers.ofInputStream());
+                int code = response.statusCode();
+                if (code / 100 != 3) break;
+                String location = response.headers().firstValue("Location").orElse(null);
+                response.body().close();
+                if (location == null || hop == MAX_REDIRECTS) throw new IOException("too many or empty redirects for " + safe(url));
+                current = URI.create(current).resolve(location).toString();
+            }
+            if (response.statusCode() / 100 != 2) { response.body().close(); throw new IOException("origin answered " + response.statusCode() + " for " + safe(url)); }
+            byte[] body;
+            try (var in = response.body()) {
+                long limit = playlist ? MAX_PLAYLIST_BYTES : MAX_SEGMENT_BYTES;
+                body = in.readNBytes((int) limit + 1);
+                if (body.length > limit) throw new IOException("origin response too large for " + safe(url));
+            }
             originBytes.addAndGet(body.length);
             String type = response.headers().firstValue("Content-Type").orElse(playlist ? "application/vnd.apple.mpegurl" : "video/mp2t");
+            // What the host sends is checked before anyone downstream sees it.
+            if (playlist ? !com.nestworld.video.security.MediaChecks.looksLikePlaylist(body)
+                    : !com.nestworld.video.security.MediaChecks.looksLikeSegment(body, type))
+                throw new IOException("origin sent unexpected content (" + type + ") for " + safe(url));
             Entry entry = new Entry(body, type, System.currentTimeMillis() + (playlist ? 5_000L : 900_000L));
             cachePut(url, entry);
             mine.complete(entry);

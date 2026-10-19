@@ -89,6 +89,8 @@ public final class FfmpegWorker implements VideoDecoder {
             grabber.setOption("reconnect_streamed", "1");
             grabber.setOption("reconnect_delay_max", "5");
             grabber.setOption("allowed_extensions", "ALL");
+            // Network streams only: a playlist must not be able to pull in local files or other protocols.
+            if (url.startsWith("http")) grabber.setOption("protocol_whitelist", "http,https,tcp,tls,crypto");
             grabber.setPixelFormat(avutil.AV_PIX_FMT_RGBA);
             // Better chroma upsampling (4:2:0 -> RGB) than the bilinear default: less colour fringing on thin lines.
             // (SWS_ACCURATE_RND would be better still but made 1080p decoding ten times slower.)
