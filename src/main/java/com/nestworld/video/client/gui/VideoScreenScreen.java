@@ -133,7 +133,10 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         }
         boolean cards=!detail() && (view==View.SEARCH || view==View.LIBRARY);
         int columns=cards || view==View.EPISODES ? 2 : 1;
-        int start=100, cardHeight=58, pitch=cards?cardHeight+4:24;
+        int start=100, available=imageHeight-114-start;
+        // Cards stretch so the list fills the space: about three rows, never tiny and never taller than a poster needs.
+        int cardRows=Math.max(1,Math.round(available/62f));
+        int cardHeight=Math.max(46,Math.min(66,available/cardRows-4)), pitch=cards?cardHeight+4:24;
         int left=detail()?76:12;
         visibleRows=Math.max(1,(imageHeight-114-start)/pitch)*columns;
         int rowWidth=(imageWidth-left-12-(columns-1)*6)/columns;
