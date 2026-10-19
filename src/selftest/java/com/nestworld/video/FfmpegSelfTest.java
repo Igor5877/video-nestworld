@@ -85,11 +85,14 @@ public class FfmpegSelfTest {
                 d == null ? "-" : d.getDimensions(), d == null ? -1 : d.getPlaybackTime(), d == null ? -1 : d.getDuration(),
                 d != null && d.isPlaying(), d != null && d.isBuffering(), d != null && d.isBroken());
         }
-        // Under a shader pack: the same colour bars without and with the colour correction.
-        if (ticks == 20 * 14) capture = 1;
-        if (ticks == 20 * 15) { NestworldConfig.SHADER_TINT_RED.set(91); NestworldConfig.SHADER_TINT_GREEN.set(94); NestworldConfig.SHADER_TINT_BLUE.set(100); }
-        if (ticks == 20 * 20) capture = 2;
-        if (ticks == 20 * 24) {
+        // Under a shader pack: the same colour bars with increasingly strong colour correction.
+        int[][] tints = {{75, 82}, {65, 72}, {55, 62}};
+        for (int k = 0; k < tints.length; k++) {
+            int begin = 20 * (13 + k * 7);
+            if (ticks == begin) { NestworldConfig.SHADER_TINT_RED.set(tints[k][0]); NestworldConfig.SHADER_TINT_GREEN.set(tints[k][1]); NestworldConfig.SHADER_TINT_BLUE.set(100); }
+            if (ticks == begin + 20 * 5) capture = k + 1;
+        }
+        if (ticks == 20 * 36) {
             // The clip is short: by now it has finished and the screen has stopped, so remember earlier frames.
             boolean ok = sawFrame;
             System.out.println(ok ? "NESTWORLD FFMPEG TEST PASS: frames are being displayed" : "NESTWORLD FFMPEG TEST FAIL: no frame displayed");
