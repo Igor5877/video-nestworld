@@ -176,7 +176,9 @@ dependencies {
     compileOnly('org.bytedeco:javacv:1.5.10') { transitive = false }
     compileOnly 'org.bytedeco:javacpp:1.5.10'
     compileOnly('org.bytedeco:ffmpeg:6.1.1-1.5.10') { transitive = false }
-     implementation fg.deobf("curse.maven:watermedia-869524:${watermediaversion}")
+    // -Pnowatermedia: run the game without WaterMedia on the classpath (optional-dependency check).
+    if (project.hasProperty('nowatermedia')) compileOnly fg.deobf("curse.maven:watermedia-869524:${watermediaversion}")
+    else implementation fg.deobf("curse.maven:watermedia-869524:${watermediaversion}")
     //plementation fg.deobf("dev.watermedia:watermedia-forge:1.1.3")
     // Specify the version of Minecraft to use.
     // Any artifact can be supplied so long as it has a "userdev" classifier artifact and is a compatible patcher artifact.
