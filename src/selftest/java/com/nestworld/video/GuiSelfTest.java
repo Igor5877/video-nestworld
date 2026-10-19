@@ -56,6 +56,39 @@ public class GuiSelfTest {
         throw new NoSuchFieldException(name);
     }
 
+    static List<Category> library() {
+        List<Category> all = new ArrayList<>();
+        all.add(catalogue());
+        String[][] shows = {
+            {"Котяча вдячність", "Фільм", "1"}, {"Убивця демонів: До селища ковалів", "Сезон 3", "11"},
+            {"Місто Демонів: Шінджюку", "Окремий реліз", "13"}, {"Демоничка з нашого району — 2 сезон", "Сезон 2", "12"},
+            {"Дівчата і танки: Фінал — 4 частина", "Фільм", "1"}, {"Дуже довга назва тайтлу, яка точно не вміститься у два рядки картки", "Окремий реліз", "24"}};
+        for (int i = 0; i < shows.length; i++) {
+            List<Video> videos = new ArrayList<>();
+            for (int e = 1; e <= Integer.parseInt(shows[i][2]); e++) {
+                var v = new Video("Епізод " + e, "", "https://example.invalid/lib" + i + "/" + e + ".m3u8", "", "");
+                v.setEpisodeInfo(String.valueOf(e), "Озвучка", shows[i][0], "ashdi");
+                videos.add(v);
+            }
+            var c = new Category("AniUA:show-" + i, videos);
+            c.setDetails(shows[i][0], "https://cdn.hikka.io/test/" + i + ".jpg", shows[i][1]);
+            all.add(c);
+        }
+        return all;
+    }
+
+    static java.awt.image.BufferedImage poster(int index) {
+        var img = new java.awt.image.BufferedImage(200, 300, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        var g = img.createGraphics();
+        g.setPaint(new java.awt.GradientPaint(0, 0, new java.awt.Color(40 + index * 30, 80, 200 - index * 20), 200, 300, new java.awt.Color(20, 20, 60)));
+        g.fillRect(0, 0, 200, 300);
+        g.setColor(new java.awt.Color(255, 255, 255, 200));
+        g.setFont(new java.awt.Font("SansSerif", java.awt.Font.BOLD, 120));
+        g.drawString(String.valueOf(index + 1), 55, 190);
+        g.dispose();
+        return img;
+    }
+
     static void click(String text) {
         var mc = Minecraft.getInstance();
         var b = mc.screen.children().stream().filter(e -> e instanceof Button bt && bt.getMessage().getString().equals(text)).map(e -> (Button) e).findFirst().orElseThrow(() -> new AssertionError("no button " + text));
@@ -98,7 +131,8 @@ public class GuiSelfTest {
         try {
             ticks++;
             if (ticks == 40) {
-                ClientData.setVideoConfig(new VideoConfig(List.of(catalogue())));
+                for (int i = 0; i < 6; i++) com.nestworld.video.client.gui.PosterCache.put("https://cdn.hikka.io/test/" + i + ".jpg", poster(i));
+                ClientData.setVideoConfig(new VideoConfig(library()));
                 var be = (VideoScreenBlockEntity) mc.level.getBlockEntity(ORIGIN);
                 mc.setScreen(new VideoScreenScreen(new VideoScreenMenu(0, mc.player.getInventory(), be), mc.player.getInventory(), Component.literal("Керування екраном")));
             }
@@ -118,7 +152,9 @@ public class GuiSelfTest {
             }
             if (ticks == 160) click("Екран");
             if (ticks == 180) capture = 4;                      // build tab
-            if (ticks == 200) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
+            if (ticks == 200) click("Бібліотека");
+            if (ticks == 220) capture = 5;                      // library as cards
+            if (ticks == 240) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
         } catch (Throwable t) { failure = t; }
     }
 

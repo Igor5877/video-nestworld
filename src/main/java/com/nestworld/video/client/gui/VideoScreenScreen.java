@@ -19,8 +19,9 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
     private static final int TEXT=0xE8EDF2, MUTED=0xAAB8C7, GOLD=0xE7BE70;
     private static final AtomicInteger REQUESTS = new AtomicInteger();
     private enum View { SEARCH, LIBRARY, VOICES, EPISODES, SOURCES }
-    private record Row(String label, String hint, boolean enabled, Runnable action, String url) {
-        Row(String label, String hint, boolean enabled, Runnable action) { this(label, hint, enabled, action, ""); }
+    private record Row(String label, String hint, boolean enabled, Runnable action, String url, String poster, String meta) {
+        Row(String label, String hint, boolean enabled, Runnable action) { this(label, hint, enabled, action, "", "", ""); }
+        Row(String label, String hint, boolean enabled, Runnable action, String url) { this(label, hint, enabled, action, url, "", ""); }
     }
     private View view=View.SEARCH, origin=View.SEARCH;
     private boolean construction, loading;
@@ -130,17 +131,21 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
             }).setTooltip(Tooltip.create(Component.literal("Усі сезони та пов’язані фільми")));
             poster.load(selected.getPoster());
         }
-        int columns=view==View.EPISODES ? 2 : 1;
-        int start=100;
+        boolean cards=!detail() && (view==View.SEARCH || view==View.LIBRARY);
+        int columns=cards || view==View.EPISODES ? 2 : 1;
+        int start=100, cardHeight=48, pitch=cards?cardHeight+4:24;
         int left=detail()?76:12;
-        visibleRows=Math.max(1,(imageHeight-114-start)/24)*columns;
+        visibleRows=Math.max(1,(imageHeight-114-start)/pitch)*columns;
         int rowWidth=(imageWidth-left-12-(columns-1)*6)/columns;
         for(int i=0;i<visibleRows;i++) {
             final int index=i;
-            entries.add(button("",left+(i%columns)*(rowWidth+6),start+(i/columns)*24,rowWidth,b->{
+            Button.OnPress press=b->{
                 int n=page*visibleRows+index;
                 if(n<rows.size() && rows.get(n).enabled()) rows.get(n).action().run();
-            }));
+            };
+            int x=left+(i%columns)*(rowWidth+6), y=start+(i/columns)*pitch;
+            entries.add(cards ? addRenderableWidget(new CardButton(leftPos+x,topPos+y,rowWidth,cardHeight,press))
+                    : button("",x,y,rowWidth,press));
         }
         int W=imageWidth, H=imageHeight;
         previousPage=button("‹",12,H-110,28,b->{page--;refreshEntries();});
@@ -221,13 +226,13 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         rows.clear();
         switch(view) {
             case SEARCH -> {
-                for(Title title:results) rows.add(new Row(title.label(),title.title()+"\n"+title.seasonLabel(),!loading,()->{
+                for(Title title:results) rows.add(new Row(title.title(),title.title()+"\n"+title.seasonLabel(),!loading,()->{
                     searchPage=page; status="Завантажую серії: "+title.title()+"…";request("load",title.slug());
-                }));
+                },"",title.poster(),metaOf(title)));
             }
             case LIBRARY -> {
                 for(Category c:categories()) if(CatalogueOrder.matches(c.getDisplayTitle(),libraryQuery))
-                    rows.add(new Row(c.getDisplayTitle(),c.getDisplayTitle(),true,()->{origin=View.LIBRARY;open(c);}));
+                    rows.add(new Row(c.getDisplayTitle(),c.getDisplayTitle(),true,()->{origin=View.LIBRARY;open(c);},"",c.getPoster(),metaOf(c)));
                 // Also find individual videos by a partial title in non-anime categories.
                 if(!libraryQuery.isBlank()) for(Category c:categories()) if(c.getVideos()!=null && (c.getName()==null || !c.getName().startsWith("AniUA:")))
                     for(Video v:c.getVideos()) if(v!=null && CatalogueOrder.matches(v.getTitle(),libraryQuery))
@@ -276,6 +281,23 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
             }
         }
     }
+    private static String metaOf(Title title) {
+        var parts=new ArrayList<String>();
+        parts.add(title.seasonLabel());
+        if(title.year()!=null && !title.year().isBlank()) parts.add(title.year());
+        if(title.type()!=null && !title.type().isBlank()) parts.add(title.type().toUpperCase());
+        return String.join(" · ",parts);
+    }
+    private static String metaOf(Category category) {
+        var parts=new ArrayList<String>();
+        if(category.getSeason()!=null && !category.getSeason().isBlank()) parts.add(category.getSeason());
+        var videos=category.getVideos();
+        if(videos!=null) {
+            long episodes=videos.stream().filter(Objects::nonNull).map(Video::getEpisode).filter(e->!e.isBlank()).distinct().count();
+            parts.add(episodes>0 ? episodes+" серій" : videos.size()+" відео");
+        }
+        return String.join(" · ",parts);
+    }
     private static String url(Video v) {return v.getUrl()==null?"":v.getUrl();}
     private static boolean playable(Video v) {return v.getUrl()!=null && !v.getUrl().isBlank();}
     private void select(Video video) {
@@ -294,8 +316,9 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
             if(button.visible) {
                 var row=rows.get(n);
                 boolean current=!row.url().isBlank() && row.url().equals(currentUrl);
-                button.setMessage(Component.literal((current?"▶ ":"")+row.label()));
+                if(!(button instanceof CardButton)) button.setMessage(Component.literal((current?"▶ ":"")+row.label()));
                 if(button instanceof CinemaButton cb) cb.selected=current;
+                if(button instanceof CardButton card) card.set(row.label(),row.meta(),row.poster());
                 button.active=row.enabled();button.setTooltip(Tooltip.create(Component.literal(row.hint())));
             }
         }
