@@ -30,6 +30,8 @@ final class AlAudio implements Runnable {
 
     private final int sampleRate, channels, alFormat, bytesPerFrame;
     private final boolean spatial;
+    /** Share of the opposite channel mixed into each speaker, 0 (hard left/right) to 0.5 (mono). */
+    private final float crossfeed;
     private final int sourceCount;
     private final Object lock = new Object();
     private final ArrayDeque<Chunk> queue = new ArrayDeque<>();
@@ -48,7 +50,8 @@ final class AlAudio implements Runnable {
     private volatile boolean alPlaying;
     private volatile int alQueuedBuffers;
 
-    AlAudio(int sampleRate, int channels, boolean spatial) {
+    AlAudio(int sampleRate, int channels, boolean spatial, float crossfeed) {
+        this.crossfeed = Math.max(0f, Math.min(0.5f, crossfeed));
         this.sampleRate = sampleRate;
         this.channels = Math.max(1, Math.min(2, channels));
         this.spatial = spatial;
@@ -155,8 +158,8 @@ final class AlAudio implements Runnable {
             check("init");
             long unqueuedFrames = 0, baseUs = -1;
             int queued = 0;
-            float appliedGain = -1f;
-            float[] appliedSpeakers = null;
+            float smoothGain = -1f, sentGain = -1f;
+            float[] smoothSpeakers = null;
             while (!closed) {
                 if (ALC10.alcGetCurrentContext() != context) throw new IllegalStateException("OpenAL context changed");
                 if (flushRequested) {
@@ -201,14 +204,20 @@ final class AlAudio implements Runnable {
                 int state = AL10.alGetSourcei(sources[0], AL10.AL_SOURCE_STATE);
                 if (playing && queued > 0 && state != AL10.AL_PLAYING) AL10.alSourcePlayv(sources);
                 else if (!playing && state == AL10.AL_PLAYING) AL10.alSourcePausev(sources);
-                if (gain != appliedGain) {
-                    appliedGain = gain;
-                    for (int source : sources) AL10.alSourcef(source, AL10.AL_GAIN, appliedGain);
+                // Follow the targets gradually: the game tells us about the listener 20 times a second and applying
+                // each jump directly sounds like crackling and abrupt panning.
+                float targetGain = gain;
+                smoothGain = smoothGain < 0 ? targetGain : smoothGain + (targetGain - smoothGain) * 0.06f;
+                if (Math.abs(smoothGain - sentGain) > 0.002f || (targetGain == 0f && sentGain != 0f)) {
+                    sentGain = Math.abs(smoothGain - targetGain) < 0.002f ? targetGain : smoothGain;
+                    for (int source : sources) AL10.alSourcef(source, AL10.AL_GAIN, sentGain);
                 }
-                if (spatial && speakers != appliedSpeakers) {
-                    appliedSpeakers = speakers;
+                if (spatial) {
+                    float[] target = speakers;
+                    if (smoothSpeakers == null) smoothSpeakers = target.clone();
+                    else for (int i = 0; i < smoothSpeakers.length; i++) smoothSpeakers[i] += (target[i] - smoothSpeakers[i]) * 0.08f;
                     for (int s = 0; s < sourceCount; s++)
-                        AL10.alSource3f(sources[s], AL10.AL_POSITION, appliedSpeakers[3 * s], appliedSpeakers[3 * s + 1], appliedSpeakers[3 * s + 2]);
+                        AL10.alSource3f(sources[s], AL10.AL_POSITION, smoothSpeakers[3 * s], smoothSpeakers[3 * s + 1], smoothSpeakers[3 * s + 2]);
                 }
                 state = AL10.alGetSourcei(sources[0], AL10.AL_SOURCE_STATE);
                 alPlaying = state == AL10.AL_PLAYING;
@@ -247,7 +256,12 @@ final class AlAudio implements Runnable {
         ByteBuffer left = ByteBuffer.allocateDirect(frames * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN);
         ByteBuffer right = ByteBuffer.allocateDirect(frames * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN);
         ByteBuffer in = interleaved.duplicate().order(java.nio.ByteOrder.LITTLE_ENDIAN);
-        for (int f = 0; f < frames; f++) { left.putShort(in.getShort()); right.putShort(in.getShort()); }
+        float keep = 1f - crossfeed;
+        for (int f = 0; f < frames; f++) {
+            short l = in.getShort(), r = in.getShort();
+            left.putShort((short) Math.round(l * keep + r * crossfeed));
+            right.putShort((short) Math.round(r * keep + l * crossfeed));
+        }
         left.flip(); right.flip();
         return new ByteBuffer[]{left, right};
     }

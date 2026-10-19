@@ -12,6 +12,7 @@ public final class NestworldConfig {
     public static final ForgeConfigSpec.ConfigValue<String> DECODER;
     public static final ForgeConfigSpec.BooleanValue SPATIAL_AUDIO;
     public static final ForgeConfigSpec.BooleanValue MIPMAPS;
+    public static final ForgeConfigSpec.IntValue SPATIAL_SOFTNESS;
     public static final ForgeConfigSpec.IntValue SHARPNESS;
     public static final ForgeConfigSpec.IntValue SHADER_TINT_RED, SHADER_TINT_GREEN, SHADER_TINT_BLUE;
     public static final ForgeConfigSpec.ConfigValue<String> UPSCALER;
@@ -43,6 +44,10 @@ public final class NestworldConfig {
                 .comment("FFmpeg decoder only: play the sound from the screen in 3D (stereo is split into a left and a right",
                         "speaker at the screen's edges). Takes effect for streams started after the change.")
                 .define("spatial_audio", true);
+        SPATIAL_SOFTNESS = builder
+                .comment("How gentle the stereo image of the screen is, 0 (wide, strongly panned) to 100 (almost mono).",
+                        "Softer values blend the left and right speaker and keep the panning angle small when you stand close.")
+                .defineInRange("spatial_softness", 60, 0, 100);
         MIPMAPS = builder
                 .comment("FFmpeg decoder only: build mipmaps with anisotropic filtering so distant screens do not shimmer.")
                 .define("mipmaps", true);

@@ -121,7 +121,8 @@ public final class FfmpegDisplay extends Display {
             int bytes = Math.max(1, streamInfo.width * streamInfo.height * 4);
             maxFrames = (int) Math.max(4, Math.min(30, FRAME_BUDGET_BYTES / bytes));
             if (streamInfo.hasAudio)
-                audio = new AlAudio(streamInfo.sampleRate, streamInfo.channels, NestworldConfig.SPATIAL_AUDIO.get());
+                audio = new AlAudio(streamInfo.sampleRate, streamInfo.channels, NestworldConfig.SPATIAL_AUDIO.get(),
+                        NestworldConfig.SPATIAL_SOFTNESS.get() / 200f);
             info = streamInfo;
         }
 

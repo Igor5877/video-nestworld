@@ -192,24 +192,21 @@ public class ClientVideoManager {
             double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
             current = activeDisplays.get(pos);
             if (current != null) {
-                current.applySpatialVolume(spatialFactor(dist));
+                double diagonal = Math.hypot(screen.getScreenCols(), screen.getScreenRows());
+                current.applySpatialVolume(com.nestworld.video.client.util.SoundFalloff.factor(dist, diagonal,
+                        NestworldConfig.MAX_STREAM_DISTANCE.get()));
                 // Speakers sit at the screen's left/right edges; stay within a few blocks of the centre for wide walls.
                 var right = screen.getBlockState().getValue(com.nestworld.video.block.VideoScreenBlock.FACING).getCounterClockWise();
                 double half = Math.min(screen.getScreenCols() / 2.0, 6.0) * 0.85;
+                // Standing close, speakers at the very edges would hard-pan the sound: keep the angle gentle.
+                double toCentre = Math.sqrt(Math.pow((bounds.minX + bounds.maxX) / 2 - px, 2) + Math.pow((bounds.minY + bounds.maxY) / 2 - py, 2)
+                        + Math.pow((bounds.minZ + bounds.maxZ) / 2 - pz, 2));
+                double softness = NestworldConfig.SPATIAL_SOFTNESS.get() / 100.0;
+                half = Math.min(half, Math.max(1.0, toCentre * (0.75 - 0.5 * softness)));
                 current.setSoundPlacement((bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2,
                         (bounds.minZ + bounds.maxZ) / 2, right.getStepX() * half, 0, right.getStepZ() * half);
             }
         }
-    }
-
-    private static double spatialFactor(double dist) {
-        // Keep full volume close to the wall, then make the falloff audible over a
-        // useful outdoor distance instead of cutting off almost immediately.
-        final double FULL = 16.0, MAX = 128.0;
-        if (dist <= FULL) return 1.0;
-        if (dist >= MAX) return 0.0;
-        double t = (dist - FULL) / (MAX - FULL);
-        return Math.pow(1.0 - t, 1.35);
     }
 
     public void shutdown() {
