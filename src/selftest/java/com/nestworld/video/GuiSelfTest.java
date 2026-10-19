@@ -243,6 +243,13 @@ public class GuiSelfTest {
                     com.nestworld.video.client.WatchHistory.toggleFavorite(city);
                 }
                 var be = (VideoScreenBlockEntity) mc.level.getBlockEntity(ORIGIN);
+                if (Boolean.getBoolean("nestworldvideo.guisession")) {   // pretend the local player owns an active protected session
+                    try {
+                        var owner = VideoScreenBlockEntity.class.getDeclaredField("sessionOwner"); owner.setAccessible(true); owner.set(be, mc.player.getUUID());
+                        var name = VideoScreenBlockEntity.class.getDeclaredField("sessionOwnerName"); name.setAccessible(true); name.set(be, "Dev");
+                        var stopped = VideoScreenBlockEntity.class.getDeclaredField("stopped"); stopped.setAccessible(true); stopped.set(be, false);
+                    } catch (ReflectiveOperationException e) { throw new AssertionError(e); }
+                }
                 mc.setScreen(new VideoScreenScreen(new VideoScreenMenu(0, mc.player.getInventory(), be), mc.player.getInventory(), Component.literal("Керування екраном")));
             }
             if (PLAY) {

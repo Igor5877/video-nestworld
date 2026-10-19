@@ -41,6 +41,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
     private ScreenLayout preview;
     private Button assemble,play,pause,stop,skipBack,skipForward,skipIntro,previousPage,nextPage,searchButton,qualityButton,sortButton,favButton,favToggle;
     private CinemaSlider volumeSlider;
+    private Button protectButton,releaseButton;
     /** Recommendations shown on the search tab while nothing was searched; the last answer per section survives closing the menu. */
     private static final Map<String,List<Title>> RECOMMENDED=new HashMap<>();
     private static final String[][] SECTIONS={{"ongoing","Виходять"},{"top","Топ"},{"new","Новинки"}};
@@ -76,7 +77,26 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         }
     }
     private Component tr(String key,Object... args) { return Component.translatable("gui.nestworldvideo."+key,args); }
+    /** Session protection: another online player started this video, so its controls are theirs (operators excepted). */
+    private boolean lockedForMe() {
+        var root=screen();
+        if(root==null || minecraft==null || minecraft.player==null || !root.isSessionProtection()) return false;
+        var owner=root.getSessionOwner();
+        if(owner==null || owner.equals(minecraft.player.getUUID()) || root.isStopped() || root.getCurrentVideoUrl().isBlank()
+                || minecraft.player.hasPermissions(2)) return false;
+        var connection=minecraft.getConnection();
+        return connection!=null && connection.getPlayerInfo(owner)!=null;
+    }
+    private boolean guard() {
+        if(!lockedForMe()) return false;
+        var root=screen();
+        String name=root.getSessionOwnerName().isBlank()?"інший гравець":root.getSessionOwnerName();
+        status="Сеанс зараз веде "+name+": керувати може лише він.";
+        if(minecraft.player!=null) minecraft.player.displayClientMessage(Component.literal(status),true);
+        return true;
+    }
     private void send(String action) {
+        if(("play".equals(action) || "pause".equals(action) || "stop".equals(action)) && guard()) return;
         var root=screen();
         if(("pause".equals(action) || "stop".equals(action)) && root!=null) {
             long mediaTime=ClientVideoManager.getInstance().getPlaybackTime(root.getBlockPos());
@@ -127,7 +147,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         super.init();
         if(menu.getBlockEntity()==null) { onClose(); return; }
         resume=detail() ? resumePoint() : null;
-        entries.clear(); search=null; searchButton=null; qualityButton=null; sortButton=null; favButton=null; favToggle=null; volumeSlider=null; skipIntro=null;
+        entries.clear(); search=null; searchButton=null; protectButton=null; releaseButton=null; qualityButton=null; sortButton=null; favButton=null; favToggle=null; volumeSlider=null; skipIntro=null;
         int tab=(imageWidth-32)/3;
         View tabView=detail() ? origin : view;
         ((CinemaButton)button("Пошук AniUA",12,30,tab,b->switchView(View.SEARCH))).selected=!construction && tabView==View.SEARCH;
@@ -497,6 +517,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         send("play");
     }
     private void select(Video video) {
+        if(guard()) return;
         Networking.INSTANCE.sendToServer(new PacketControlVideo(menu.getBlockEntity().getBlockPos(),"select",video.getUrl(),""));
     }
     private void refreshEntries() {
@@ -626,6 +647,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         refreshEntries();
     }
     private void seek(long deltaMs) {
+        if(guard()) return;
         if(screen()!=null) Networking.INSTANCE.sendToServer(new PacketControlVideo(menu.getBlockEntity().getBlockPos(),"seek_by",deltaMs));
     }
     private static String formatTime(long millis) {
@@ -647,6 +669,8 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
             lines.add("Відео зараз: " + size.width + "×" + size.height + " · ≈" + Math.round(Math.max(size.width / (double) cols, size.height / (double) rows)) + " пікс. на блок");
         else lines.add("Відео зараз не грає");
         lines.add("Глядачі: " + (viewerCount < 0 ? "…" : viewerCount));
+        if (root != null) lines.add(root.getSessionOwner() == null || root.isStopped() ? "Сеанс: вільний"
+                : "Сеанс веде: " + (root.getSessionOwnerName().isBlank() ? "?" : root.getSessionOwnerName()) + (root.isSessionProtection() ? " (захищено)" : ""));
         // Comfortable viewing: the picture fills about 40° of the view (the cinema guideline), from 50° (close) to 30° (far).
         double aspect = size != null && size.width > 0 && size.height > 0 ? size.width / (double) size.height : 16.0 / 9.0;
         double picture = Math.min(cols, rows * aspect);
@@ -672,6 +696,15 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         assemble = button(tr("assemble"), 12, imageHeight - 36, bw, b -> send("assemble"));
         button(tr("separate"), 16 + bw, imageHeight - 36, bw, b -> send("reset_layout"))
                 .setTooltip(Tooltip.create(tr("separate_hint")));
+        int pw = (imageWidth - 36) / 2, rx = 24 + pw;
+        protectButton = button("Захист сеансу", rx, imageHeight - 118, pw, b -> {
+            var root = screen();
+            if (root != null) Networking.INSTANCE.sendToServer(new PacketControlVideo(menu.getBlockEntity().getBlockPos(), "session_lock", root.isSessionProtection() ? 0L : 1L));
+        });
+        protectButton.setTooltip(Tooltip.create(Component.literal("Увімкнено: поки йде відео, зупиняти й перемикати його може лише той, хто його запустив (і оператор).\nВимкнено: керувати може будь-хто поруч.")));
+        releaseButton = button("Звільнити сеанс", rx, imageHeight - 94, pw, b ->
+                Networking.INSTANCE.sendToServer(new PacketControlVideo(menu.getBlockEntity().getBlockPos(), "session_release")));
+        releaseButton.setTooltip(Tooltip.create(Component.literal("Прибрати власника сеансу: після цього відео може взяти під керування будь-хто.")));
     }
 
     private boolean assembled() {
@@ -689,15 +722,25 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         updateControls();
     }
     private void updateControls() {
-        if(construction) {if(assemble!=null) assemble.active=preview!=null && preview.valid() && !assembled();return;}
+        boolean locked=lockedForMe();
+        if(construction) {
+            if(assemble!=null) assemble.active=preview!=null && preview.valid() && !assembled();
+            var owned=screen();
+            if(protectButton!=null && owned!=null) {
+                protectButton.setMessage(Component.literal("Захист сеансу: "+(owned.isSessionProtection()?"увімкнено":"вимкнено")));
+                protectButton.active=!locked;
+            }
+            if(releaseButton!=null && owned!=null) releaseButton.active=!locked && owned.getSessionOwner()!=null;
+            return;
+        }
         var root=screen();boolean has=root!=null && !root.getCurrentVideoUrl().isBlank();
-        if(play!=null) play.active=has && !root.isPlaying();
-        if(pause!=null) pause.active=has && root.isPlaying();
-        if(stop!=null) stop.active=has && !root.isStopped();
+        if(play!=null) play.active=has && !root.isPlaying() && !locked;
+        if(pause!=null) pause.active=has && root.isPlaying() && !locked;
+        if(stop!=null) stop.active=has && !root.isStopped() && !locked;
         if(volumeSlider!=null) volumeSlider.active=display()!=null;
-        if(skipIntro!=null) skipIntro.active=has && !root.isStopped();
-        if(skipBack!=null) skipBack.active=has && !root.isStopped();
-        if(skipForward!=null) skipForward.active=has && !root.isStopped();
+        if(skipIntro!=null) skipIntro.active=has && !root.isStopped() && !locked;
+        if(skipBack!=null) skipBack.active=has && !root.isStopped() && !locked;
+        if(skipForward!=null) skipForward.active=has && !root.isStopped() && !locked;
         if(searchButton!=null) searchButton.active=!loading && query.trim().length()>=2;
     }
     @Override protected void renderLabels(GuiGraphics g,int mx,int my) {}
@@ -708,6 +751,10 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         StarMenuPaint.panel(g,leftPos,topPos,imageWidth,imageHeight,0xFA1D2A36,0xFFE7BE70);
         text(g,Component.literal("Nestworld · Кінотеатр"),12,12,TEXT,imageWidth-50);
         var screen=screen();
+        if(screen!=null && screen.isSessionProtection() && screen.getSessionOwner()!=null && !screen.isStopped() && !screen.getCurrentVideoUrl().isBlank()) {
+            boolean mine=minecraft!=null && minecraft.player!=null && screen.getSessionOwner().equals(minecraft.player.getUUID());
+            text(g,Component.literal(mine?"Ваш сеанс":"Сеанс веде "+screen.getSessionOwnerName()),12+font.width("Nestworld · Кінотеатр")+14,12,mine?GOLD:0xFF9D92,Math.max(40,imageWidth-170-font.width("Nestworld · Кінотеатр")));
+        }
         if(construction) {
             int pw = (imageWidth - 36) / 2, ph = imageHeight - 145;
             int cols = preview != null && preview.valid() ? preview.cols() : screen == null ? 1 : screen.getScreenCols();
@@ -823,6 +870,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
             }
             var root=screen();
             if(root!=null && !root.getCurrentVideoUrl().isBlank()) {
+                if((overChip(mx,my,0) || overChip(mx,my,1)) && guard()) return true;
                 if(overChip(mx,my,0)) { Networking.INSTANCE.sendToServer(new PacketControlVideo(menu.getBlockEntity().getBlockPos(),"auto_next",root.isAutoNext()?0L:1L)); return true; }
                 if(overChip(mx,my,1)) { Networking.INSTANCE.sendToServer(new PacketControlVideo(menu.getBlockEntity().getBlockPos(),"repeat",root.isRepeat()?0L:1L)); return true; }
             }

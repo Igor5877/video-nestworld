@@ -38,6 +38,10 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
     private String relayUrl = "";
     /** The video on this screen is marked 18+ (decided by the server; viewers without access get a placeholder). */
     private boolean adult;
+    /** Who started the current session and whether other players may take over its controls (kept on the controller). */
+    private java.util.UUID sessionOwner;
+    private String sessionOwnerName = "";
+    private boolean sessionProtection = true;
     /** Media position in milliseconds at the last server tick/sync. */
     private long playbackPositionMs;
     /** Server game tick at which playbackPositionMs was measured for a playing screen. */
@@ -62,6 +66,8 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         tag.putString("relay_url", currentRelayUrl());
         tag.putBoolean("adult", currentAdult());
         tag.putBoolean("auto_next", autoNext); tag.putBoolean("repeat", repeat); tag.putBoolean("next_cancelled", nextCancelled);
+        if (sessionOwner != null) { tag.putUUID("session_owner", sessionOwner); tag.putString("session_owner_name", sessionOwnerName); }
+        tag.putBoolean("session_protection", sessionProtection);
         refreshPlaybackPosition();
         tag.putLong("playback_position_ms", playbackPositionMs);
         tag.putInt("screen_cols", screenCols); tag.putInt("screen_rows", screenRows);
@@ -79,6 +85,9 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         repeat = tag.getBoolean("repeat"); nextCancelled = tag.getBoolean("next_cancelled");
         relayUrl = tag.getString("relay_url");
         adult = tag.getBoolean("adult");
+        sessionOwner = tag.hasUUID("session_owner") ? tag.getUUID("session_owner") : null;
+        sessionOwnerName = tag.getString("session_owner_name");
+        sessionProtection = !tag.contains("session_protection") || tag.getBoolean("session_protection");
         playbackPositionMs = Math.max(0, tag.getLong("playback_position_ms"));
         playbackStartedTick = Long.MIN_VALUE;
         playbackStartedNanos = Long.MIN_VALUE;
@@ -233,6 +242,16 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         return level != null && !level.isClientSide ? com.nestworld.video.content.AdultAccess.isAdultUrl(currentVideoUrl) : adult;
     }
     public boolean isAdult() { return adult; }
+    @Nullable public java.util.UUID getSessionOwner() { return sessionOwner; }
+    public String getSessionOwnerName() { return sessionOwnerName; }
+    public boolean isSessionProtection() { return sessionProtection; }
+    public void setSessionOwner(@Nullable ServerPlayer player) {
+        java.util.UUID id = player == null ? null : player.getUUID();
+        if (java.util.Objects.equals(id, sessionOwner)) return;
+        sessionOwner = id; sessionOwnerName = player == null ? "" : player.getGameProfile().getName();
+        syncToClient();
+    }
+    public void setSessionProtection(boolean value) { if (sessionProtection != value) { sessionProtection = value; syncToClient(); } }
     public boolean isAutoNext() { return autoNext; }
     public boolean isRepeat() { return repeat; }
     public boolean isNextCancelled() { return nextCancelled; }

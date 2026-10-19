@@ -133,6 +133,7 @@ public class CinemaMod {
     @SubscribeEvent
     public static void onServerStopping(ServerStoppingEvent event) {
         SCREEN_VIEWERS.clear();
+        com.nestworld.video.session.SessionGuard.clear();
         com.nestworld.video.relay.RelayManager.stop();
     }
 
@@ -159,7 +160,7 @@ public class CinemaMod {
     @SubscribeEvent
     public static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
         ADULT_ACCESS_SENT.remove(event.getEntity().getUUID());
-        if (event.getEntity() instanceof ServerPlayer player) removeViewerEverywhere(player);
+        if (event.getEntity() instanceof ServerPlayer player) { removeViewerEverywhere(player); com.nestworld.video.session.SessionGuard.onLogout(player); }
     }
 
     @SubscribeEvent
@@ -191,7 +192,7 @@ public class CinemaMod {
     // НОВИЙ МЕТОД: викликається, коли гравець заходить на сервер
     @SubscribeEvent
     public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
-        if (event.getEntity() instanceof ServerPlayer joined) sendAdultAccess(joined, true);
+        if (event.getEntity() instanceof ServerPlayer joined) { sendAdultAccess(joined, true); com.nestworld.video.session.SessionGuard.onLogin(joined); }
         if (videoConfig != null && event.getEntity() instanceof ServerPlayer) {
             ServerPlayer player = (ServerPlayer) event.getEntity();
             LOGGER.info("NESTWORLD_VIDEO: Player {} joined. Sending video config...", player.getName().getString());

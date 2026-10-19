@@ -55,7 +55,15 @@ public class PacketControlVideo {
                         new PacketScreenViewers(screen.getBlockPos(), snapshot.count(), snapshot.names()));
                 return;
             }
+            // Playback controls are protected by the session owner; building, viewers and the like stay open.
+            if (screen != null && java.util.Set.of("play", "pause", "stop", "auto_next", "repeat", "seek_by", "select", "session_lock", "session_release")
+                    .contains(message.action) && !com.nestworld.video.session.SessionGuard.canControl(player, screen)) {
+                com.nestworld.video.session.SessionGuard.deny(player, screen);
+                return;
+            }
             switch (message.action) {
+                case "session_lock" -> { if (screen != null) screen.setSessionProtection(message.value != 0); }
+                case "session_release" -> { if (screen != null) screen.setSessionOwner(null); }
                 case "assemble" -> {
                     if (!player.mayBuild()) return;
                     var result = raw.assemble();
@@ -71,6 +79,7 @@ public class PacketControlVideo {
                             return;
                         }
                         screen.play();
+                        com.nestworld.video.session.SessionGuard.claim(player, screen);
                     }
                 }
                 case "pause" -> {
@@ -97,6 +106,7 @@ public class PacketControlVideo {
                         if (category == null || category.getVideos() == null) continue;
                         for (Video video : category.getVideos()) if (video != null && message.videoUrl.equals(video.getUrl())) {
                             screen.setVideo(video);
+                            com.nestworld.video.session.SessionGuard.claim(player, screen);
                             if (remote) screen.syncToClient(player);
                             return;
                         }
