@@ -168,7 +168,7 @@ public class GuiSelfTest {
                         be.setVideo(new Video("toon", "", "file:///tmp/claude-0/toon/toon.m3u8", "", ""));
                         be.play();
                         var source = mc.getSingleplayerServer().createCommandSourceStack().withSuppressedOutput();
-                        for (String cmd : new String[]{"time set day", "weather clear", "tp @a 1.5 -60 -1 0 -3"})
+                        for (String cmd : new String[]{"time set day", "weather clear", "tp @a 1.5 -60 3.2 0 -4"})
                             mc.getSingleplayerServer().getCommands().performPrefixedCommand(source, cmd);
                     }
                     ready = true;
