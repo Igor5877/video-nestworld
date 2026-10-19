@@ -19,9 +19,10 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
     private static final int TEXT=0xE8EDF2, MUTED=0xAAB8C7, GOLD=0xE7BE70;
     private static final AtomicInteger REQUESTS = new AtomicInteger();
     private enum View { SEARCH, LIBRARY, VOICES, EPISODES, SOURCES }
-    private record Row(String label, String hint, boolean enabled, Runnable action, String url, String poster, String meta) {
-        Row(String label, String hint, boolean enabled, Runnable action) { this(label, hint, enabled, action, "", "", ""); }
-        Row(String label, String hint, boolean enabled, Runnable action, String url) { this(label, hint, enabled, action, url, "", ""); }
+    private record Row(String label, String hint, boolean enabled, Runnable action, String url, String poster, String meta, float ratio) {
+        Row(String label, String hint, boolean enabled, Runnable action) { this(label, hint, enabled, action, "", "", "", -1f); }
+        Row(String label, String hint, boolean enabled, Runnable action, String url) { this(label, hint, enabled, action, url, "", "", -1f); }
+        Row(String label, String hint, boolean enabled, Runnable action, String url, String poster, String meta) { this(label, hint, enabled, action, url, poster, meta, -1f); }
     }
     private View view=View.SEARCH, origin=View.SEARCH;
     private boolean construction, loading;
@@ -131,12 +132,12 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
             }).setTooltip(Tooltip.create(Component.literal("Усі сезони та пов’язані фільми")));
             poster.load(selected.getPoster());
         }
-        boolean cards=!detail() && (view==View.SEARCH || view==View.LIBRARY);
+        boolean cards=!detail() && (view==View.SEARCH || view==View.LIBRARY), voiceCards=view==View.VOICES;
         int columns=cards || view==View.EPISODES ? 2 : 1;
         int start=100, available=imageHeight-114-start;
         // Cards stretch so the list fills the space: about three rows, never tiny and never taller than a poster needs.
         int cardRows=Math.max(1,Math.round(available/62f));
-        int cardHeight=Math.max(46,Math.min(66,available/cardRows-4)), pitch=cards?cardHeight+4:24;
+        int cardHeight=Math.max(46,Math.min(66,available/cardRows-4)), pitch=cards?cardHeight+4:voiceCards?46:24;
         int left=detail()?76:12;
         visibleRows=Math.max(1,(imageHeight-114-start)/pitch)*columns;
         int rowWidth=(imageWidth-left-12-(columns-1)*6)/columns;
@@ -147,7 +148,11 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
                 if(n<rows.size() && rows.get(n).enabled()) rows.get(n).action().run();
             };
             int x=left+(i%columns)*(rowWidth+6), y=start+(i/columns)*pitch;
-            entries.add(cards ? addRenderableWidget(new CardButton(leftPos+x,topPos+y,rowWidth,cardHeight,press))
+            if(voiceCards) {
+                var card=addRenderableWidget(new CardButton(leftPos+x,topPos+y,rowWidth,42,press));
+                card.compact=true;
+                entries.add(card);
+            } else entries.add(cards ? addRenderableWidget(new CardButton(leftPos+x,topPos+y,rowWidth,cardHeight,press))
                     : button("",x,y,rowWidth,press));
         }
         int W=imageWidth, H=imageHeight;
@@ -248,11 +253,13 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
                     var dubVideos=videos().stream().filter(v->v.getDub().equals(dub)).toList();
                     long available=dubVideos.stream().filter(VideoScreenScreen::playable).map(Video::getEpisode).distinct().count();
                     boolean enabled=available>0;
-                    String label=dub+"  ("+available+"/"+episodes.size()+" сер.)";
+                    String label=dub;
+                    String voiceMeta=enabled ? available+" з "+episodes.size()+" серій доступні" : "Немає доступних потоків";
                     String hint=enabled
                             ? dub+"\n"+available+" з "+episodes.size()+" серій доступні."
                             : dub+"\nУ цій озвучці зараз немає доступного відеопотоку.";
-                    rows.add(new Row(label,hint,enabled,()->{voice=dub;view=View.EPISODES;page=0;rebuildWidgets();}));
+                    rows.add(new Row(label,hint,enabled,()->{voice=dub;view=View.EPISODES;page=0;rebuildWidgets();},"","",voiceMeta,
+                            episodes.isEmpty()?0f:available/(float)episodes.size()));
                 });
             }
             case EPISODES -> {
@@ -328,7 +335,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
                 boolean current=!row.url().isBlank() && row.url().equals(currentUrl);
                 if(!(button instanceof CardButton)) button.setMessage(Component.literal((current?"▶ ":"")+row.label()));
                 if(button instanceof CinemaButton cb) cb.selected=current;
-                if(button instanceof CardButton card) card.set(row.label(),row.meta(),row.poster());
+                if(button instanceof CardButton card) card.set(row.label(),row.meta(),row.poster(),row.ratio());
                 button.active=row.enabled();button.setTooltip(Tooltip.create(Component.literal(row.hint())));
             }
         }

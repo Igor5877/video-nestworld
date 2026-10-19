@@ -12,9 +12,17 @@ import java.util.List;
 final class CardButton extends Button {
     private static final int GOLD = 0xFFE7BE70;
     private String title = "", meta = "", poster = "";
+    /** Compact cards (voices) have no poster; {@code ratio} >= 0 draws an availability bar along the bottom. */
+    boolean compact;
+    float ratio = -1f;
 
     CardButton(int x, int y, int w, int h, OnPress action) {
         super(x, y, w, h, Component.empty(), action, DEFAULT_NARRATION);
+    }
+
+    void set(String title, String meta, String poster, float ratio) {
+        this.ratio = ratio;
+        set(title, meta, poster);
     }
 
     void set(String title, String meta, String poster) {
@@ -30,21 +38,23 @@ final class CardButton extends Button {
         StarMenuPaint.round(g, getX(), getY(), width, height, 5, !active ? 0xFF25323E : focus ? 0xFF48617A : 0xFF34495C);
         StarMenuPaint.round(g, getX(), getY(), 2, height, 1, !active ? 0xFF45515B : focus ? GOLD : 0xFF6886A0);
 
-        // Poster, fitted into a 2:3 slot with a darker well behind it.
-        int slotH = height - 8, slotW = slotH * 2 / 3, px = getX() + 7, py = getY() + 4;
-        StarMenuPaint.round(g, px, py, slotW, slotH, 3, 0xFF1E2B37);
-        var image = PosterCache.get(poster);
-        if (image != null && image.width() > 0 && image.height() > 0) {
-            float scale = Math.min(slotW / (float) image.width(), slotH / (float) image.height());
-            int w = Math.max(1, Math.round(image.width() * scale)), h = Math.max(1, Math.round(image.height() * scale));
-            g.blit(image.location(), px + (slotW - w) / 2, py + (slotH - h) / 2, w, h, 0, 0,
-                    image.width(), image.height(), image.width(), image.height());
-        } else {
-            String initial = title.isBlank() ? "?" : title.substring(0, 1).toUpperCase();
-            g.drawString(font, initial, px + (slotW - font.width(initial)) / 2, py + (slotH - 8) / 2, 0xFF6F8294, false);
+        // Poster, fitted into a 2:3 slot with a darker well behind it (compact cards have none).
+        int slotH = compact ? 0 : height - 8, slotW = compact ? 0 : slotH * 2 / 3, px = getX() + (compact ? 3 : 7), py = getY() + 4;
+        if (!compact) {
+            StarMenuPaint.round(g, px, py, slotW, slotH, 3, 0xFF1E2B37);
+            var image = PosterCache.get(poster);
+            if (image != null && image.width() > 0 && image.height() > 0) {
+                float scale = Math.min(slotW / (float) image.width(), slotH / (float) image.height());
+                int w = Math.max(1, Math.round(image.width() * scale)), h = Math.max(1, Math.round(image.height() * scale));
+                g.blit(image.location(), px + (slotW - w) / 2, py + (slotH - h) / 2, w, h, 0, 0,
+                        image.width(), image.height(), image.width(), image.height());
+            } else {
+                String initial = title.isBlank() ? "?" : title.substring(0, 1).toUpperCase();
+                g.drawString(font, initial, px + (slotW - font.width(initial)) / 2, py + (slotH - 8) / 2, 0xFF6F8294, false);
+            }
         }
 
-        int textX = px + slotW + 8, maxWidth = getX() + width - 8 - textX;
+        int textX = compact ? getX() + 12 : px + slotW + 8, maxWidth = getX() + width - 8 - textX;
         int titleColor = active ? 0xFFE8EDF2 : 0xFF85919C;
         List<FormattedCharSequence> lines = font.split(Component.literal(title), maxWidth);
         int shown = Math.min(2, lines.size());
@@ -57,7 +67,13 @@ final class CardButton extends Button {
             } else g.drawString(font, lines.get(i), textX, y, titleColor, false);
             y += 10;
         }
-        if (!meta.isBlank()) g.drawString(font, font.plainSubstrByWidth(meta, maxWidth), textX, getY() + height - 14, 0xFF9AA9B8, false);
+        if (!meta.isBlank()) g.drawString(font, font.plainSubstrByWidth(meta, maxWidth), textX, getY() + (compact ? 19 : height - 14), 0xFF9AA9B8, false);
+        if (ratio >= 0f) {
+            int barX = getX() + 12, barW = width - 24, barY = getY() + height - 8;
+            StarMenuPaint.round(g, barX, barY, barW, 3, 1, 0xFF22303D);
+            int filled = Math.round(barW * Math.max(0f, Math.min(1f, ratio)));
+            if (filled > 0) StarMenuPaint.round(g, barX, barY, Math.max(2, filled), 3, 1, !active ? 0xFF5A6672 : ratio >= 0.999f ? 0xFF7FBF7F : GOLD);
+        }
     }
 
     /** Number of leading characters of {@code text} that fit on one line of the given width. */

@@ -38,9 +38,9 @@ public class GuiSelfTest {
 
     static Category catalogue() {
         List<Video> videos = new ArrayList<>();
-        for (String dub : new String[]{"Двоголосий закадровий", "Шалене чаювання"})
+        for (String dub : new String[]{"Двоголосий закадровий", "Шалене Чаювання", "Шалене чаювання"})
             for (int i = 1; i <= (dub.startsWith("Дво") ? 14 : 12); i++) {
-                var v = new Video("Епізод " + i + " — Старша школа DxD — " + dub, "Епізод " + i, "https://example.invalid/" + dub.hashCode() + "/" + i + ".m3u8", "", "");
+                var v = new Video("Епізод " + i + " — Старша школа DxD — " + dub, "Епізод " + i, dub.equals("Шалене Чаювання") ? "" : "https://example.invalid/" + dub.hashCode() + "/" + i + ".m3u8", "", "");
                 v.setEpisodeInfo(String.valueOf(i), dub, "Старша школа DxD", "ashdi");
                 videos.add(v);
             }
@@ -154,7 +154,9 @@ public class GuiSelfTest {
             if (ticks == 180) capture = 4;                      // build tab
             if (ticks == 200) click("Бібліотека");
             if (ticks == 220) capture = 5;                      // library as cards
-            if (ticks == 240) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
+            if (ticks == 230) click("Старша школа DxD");        // open the release: voices as cards
+            if (ticks == 250) capture = 6;
+            if (ticks == 270) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
         } catch (Throwable t) { failure = t; }
     }
 
