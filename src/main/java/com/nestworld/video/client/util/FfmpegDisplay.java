@@ -38,6 +38,8 @@ public final class FfmpegDisplay extends Display {
     private static final long STARTUP_TIMEOUT_NANOS = 90_000_000_000L;
     private static final long SEEK_DRIFT_US = 2_000_000L;
     private static final long FRAME_BUDGET_BYTES = 96L << 20;
+    /** Upper bound for the adaptive queue growth. */
+    private static final long FRAME_CAP_BYTES = 320L << 20;
 
     private static final class VFrame {
         ByteBuffer data; int width, height, generation; long ptsUs;
@@ -57,6 +59,8 @@ public final class FfmpegDisplay extends Display {
     private final ArrayDeque<VFrame> frames = new ArrayDeque<>();
     private final ArrayList<VFrame> pool = new ArrayList<>();
     private volatile int maxFrames = 6;
+    /** How far the queue may grow when the audio needs the decoder to read further ahead (see onVideo). */
+    private volatile int frameLimit = 6, frameCap = 6;
 
     // Client-thread state.
     private int textureId, textureWidth, textureHeight;
@@ -120,6 +124,8 @@ public final class FfmpegDisplay extends Display {
         @Override public void onInfo(StreamInfo streamInfo) {
             int bytes = Math.max(1, streamInfo.width * streamInfo.height * 4);
             maxFrames = (int) Math.max(4, Math.min(30, FRAME_BUDGET_BYTES / bytes));
+            frameLimit = maxFrames;
+            frameCap = (int) Math.max(maxFrames, Math.min(60, FRAME_CAP_BYTES / bytes));
             if (streamInfo.hasAudio)
                 audio = new AlAudio(streamInfo.sampleRate, streamInfo.channels, NestworldConfig.SPATIAL_AUDIO.get(),
                         NestworldConfig.SPATIAL_SOFTNESS.get() / 200f);
@@ -131,16 +137,22 @@ public final class FfmpegDisplay extends Display {
             VFrame frame;
             synchronized (lock) {
                 int waited = 0;
-                while (!closed && frames.size() >= maxFrames && generation >= expectedGeneration) {
+                while (!closed && frames.size() >= frameLimit && generation >= expectedGeneration) {
                     lock.wait(50);
-                    // The demuxer can deliver video well ahead of the audio. If we block here the sound runs dry, its
-                    // clock stops, nothing consumes the queued frames and the whole stream freezes until a seek.
-                    // So when the sound is starving, sacrifice the oldest queued frame to let the decoder move on.
+                    // Streams often carry the audio a second or more behind the video. If we stop reading while the
+                    // video queue is full, the sound runs dry, its clock stops, nothing consumes the frames and the
+                    // picture and sound stutter or freeze (until a seek). So when the sound is starving, let the queue
+                    // grow (up to a cap) so the decoder reads far enough ahead; only at the cap sacrifice a frame.
                     AlAudio output = audio;
-                    if (output != null && output.isAvailable() && started && output.queuedUs() < 120_000L && (waited += 50) >= 250) {
-                        VFrame oldest = frames.poll();
-                        if (oldest != null) pool.add(oldest);
+                    if (output != null && output.isAvailable() && started && output.queuedUs() < 150_000L && (waited += 50) >= 150) {
                         waited = 0;
+                        if (frameLimit < frameCap) {
+                            frameLimit = Math.min(frameCap, frameLimit + 6);
+                            LOGGER.info("Nestworld Video: audio runs behind the video in this stream, buffering up to {} frames", frameLimit);
+                        } else {
+                            VFrame oldest = frames.poll();
+                            if (oldest != null) pool.add(oldest);
+                        }
                     }
                 }
                 if (closed || generation < expectedGeneration) return;
