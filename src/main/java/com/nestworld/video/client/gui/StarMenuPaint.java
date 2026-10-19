@@ -6,7 +6,7 @@ import net.minecraft.client.gui.GuiGraphics;
  * Small adaptation of the rounded panel and shadow primitives from
  * Star Menu Standalone's MenuPaint (MIT, Copyright (c) 2026 Star Menu Standalone contributors).
  */
-final class StarMenuPaint {
+public final class StarMenuPaint {
     private StarMenuPaint() {}
 
     static void panel(GuiGraphics g, int x, int y, int w, int h, int fill, int accent) {
@@ -18,7 +18,7 @@ final class StarMenuPaint {
         if (accent != 0) round(g, x + 8, y, w - 16, 2, 1, accent);
     }
 
-    static void round(GuiGraphics g, int x, int y, int w, int h, int radius, int color) {
+    public static void round(GuiGraphics g, int x, int y, int w, int h, int radius, int color) {
         if (w <= 0 || h <= 0 || (color >>> 24) == 0) return;
         int r = Math.min(radius, Math.min(w, h) / 2);
         g.fill(x + r, y, x + w - r, y + h, color);

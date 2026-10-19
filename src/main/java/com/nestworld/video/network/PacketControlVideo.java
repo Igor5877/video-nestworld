@@ -72,6 +72,8 @@ public class PacketControlVideo {
                     }
                 }
                 case "stop" -> { if (screen != null) screen.stop(); }
+                case "auto_next" -> { if (screen != null) screen.setAutoNext(message.value != 0); }
+                case "repeat" -> { if (screen != null) screen.setRepeat(message.value != 0); }
                 case "seek_by" -> { if (screen != null) screen.seekBy(message.value, remote ? player : null); }
                 case "select" -> {
                     if (message.videoUrl.isBlank()) return;

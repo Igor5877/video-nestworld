@@ -20,6 +20,7 @@ public class ClientEvents {
     @SubscribeEvent
     public static void onKeyRegister(RegisterKeyMappingsEvent event) {
         event.register(Keybindings.OPEN_MENU_KEY);
+        event.register(Keybindings.CANCEL_NEXT_KEY);
         LOGGER.info("Registered keybindings for Nestworld Video");
     }
 
@@ -27,6 +28,7 @@ public class ClientEvents {
     public static class ForgeEvents {
         @SubscribeEvent
         public static void onKeyInput(InputEvent.Key event) {
+            while (Keybindings.CANCEL_NEXT_KEY.consumeClick()) NextUpToast.cancel();
             if (Keybindings.OPEN_MENU_KEY.consumeClick()) {
                 if (Minecraft.getInstance().screen == null) {
                     var mc = Minecraft.getInstance();

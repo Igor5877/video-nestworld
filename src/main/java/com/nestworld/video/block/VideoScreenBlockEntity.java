@@ -2,8 +2,8 @@ package com.nestworld.video.block;
 
 import com.nestworld.video.Category;
 import com.nestworld.video.CinemaMod;
+import com.nestworld.video.NextEpisode;
 import com.nestworld.video.Video;
-import com.nestworld.video.client.gui.CatalogueOrder;
 import com.nestworld.video.network.Networking;
 import com.nestworld.video.network.PacketUpdateVideoScreen;
 import net.minecraft.core.BlockPos;
@@ -29,6 +29,10 @@ import java.util.Set;
 public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider {
     private String currentVideoUrl = "", currentVideoTitle = "";
     private boolean isPlaying, stopped = true;
+    /** Per-screen playback options: continue with the next episode / replay the current one when it ends. */
+    private boolean autoNext = true, repeat;
+    /** Someone cancelled the announced auto-advance for the current video; cleared when the video changes. */
+    private boolean nextCancelled;
     /** Media position in milliseconds at the last server tick/sync. */
     private long playbackPositionMs;
     /** Server game tick at which playbackPositionMs was measured for a playing screen. */
@@ -50,6 +54,7 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         tag.putString("video_title", currentVideoTitle);
         tag.putBoolean("is_playing", isPlaying);
         tag.putBoolean("stopped", stopped);
+        tag.putBoolean("auto_next", autoNext); tag.putBoolean("repeat", repeat); tag.putBoolean("next_cancelled", nextCancelled);
         refreshPlaybackPosition();
         tag.putLong("playback_position_ms", playbackPositionMs);
         tag.putInt("screen_cols", screenCols); tag.putInt("screen_rows", screenRows);
@@ -63,6 +68,8 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         currentVideoTitle = tag.getString("video_title");
         isPlaying = tag.getBoolean("is_playing");
         stopped = tag.contains("stopped") ? tag.getBoolean("stopped") : !isPlaying;
+        autoNext = !tag.contains("auto_next") || tag.getBoolean("auto_next");
+        repeat = tag.getBoolean("repeat"); nextCancelled = tag.getBoolean("next_cancelled");
         playbackPositionMs = Math.max(0, tag.getLong("playback_position_ms"));
         playbackStartedTick = Long.MIN_VALUE;
         playbackStartedNanos = Long.MIN_VALUE;
@@ -170,7 +177,7 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 2);
     }
     public void setVideo(Video video) {
-        currentVideoUrl = video.getUrl(); currentVideoTitle = video.getTitle();
+        currentVideoUrl = video.getUrl(); currentVideoTitle = video.getTitle(); nextCancelled = false;
         playbackPositionMs = 0; playbackStartedTick = Long.MIN_VALUE;
         isPlaying = false; stopped = true; syncToClient();
     }
@@ -184,31 +191,32 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         }
     }
     /**
-     * A client reports that {@code endedUrl} finished: continue with the next playable episode of the same
-     * release and dub, or stop after the last one. Stale/duplicate reports (several clients, or the screen
-     * already moved on) are ignored.
+     * A client reports that {@code endedUrl} finished. Depending on the screen's options: replay it, continue with the
+     * next playable episode of the same release and dub, or stop (last episode, auto-next off or cancelled). Stale or
+     * duplicate reports (several clients, or the screen already moved on) are ignored.
      */
     public void playNext(String endedUrl) {
-        if (!isMaster() || !isPlaying || !currentVideoUrl.equals(endedUrl) || CinemaMod.videoConfig == null
-                || CinemaMod.videoConfig.getCategories() == null) return;
+        if (!isMaster() || !isPlaying || !currentVideoUrl.equals(endedUrl)) return;
         Video next = null;
-        outer:
-        for (Category category : CinemaMod.videoConfig.getCategories()) {
-            if (category == null || category.getVideos() == null) continue;
-            var episodes = category.getVideos().stream().filter(v -> v != null && v.getUrl() != null).toList();
-            Video ended = episodes.stream().filter(v -> endedUrl.equals(v.getUrl())).findFirst().orElse(null);
-            if (ended == null) continue;
-            var sameDub = episodes.stream().filter(v -> !v.getUrl().isBlank() && v.getDub().equals(ended.getDub()))
-                    .sorted(CatalogueOrder.EPISODES).toList();
-            int index = sameDub.indexOf(ended);
-            if (index >= 0 && index + 1 < sameDub.size()) next = sameDub.get(index + 1);
-            break outer;
+        if (repeat) {
+            playbackPositionMs = 0; playbackStartedTick = level == null ? Long.MIN_VALUE : level.getGameTime();
+            syncToClient();
+            return;
         }
+        if (autoNext && !nextCancelled && CinemaMod.videoConfig != null)
+            next = NextEpisode.find(CinemaMod.videoConfig.getCategories(), endedUrl);
         if (next == null) { stop(); return; }
-        currentVideoUrl = next.getUrl(); currentVideoTitle = next.getTitle();
+        currentVideoUrl = next.getUrl(); currentVideoTitle = next.getTitle(); nextCancelled = false;
         playbackPositionMs = 0; playbackStartedTick = level == null ? Long.MIN_VALUE : level.getGameTime();
         isPlaying = true; stopped = false; syncToClient();
     }
+    public void setAutoNext(boolean value) { autoNext = value; if (value) nextCancelled = false; syncToClient(); }
+    public void setRepeat(boolean value) { repeat = value; syncToClient(); }
+    /** Cancel the announced auto-advance of the video that is playing now. */
+    public void cancelNext() { if (!nextCancelled) { nextCancelled = true; syncToClient(); } }
+    public boolean isAutoNext() { return autoNext; }
+    public boolean isRepeat() { return repeat; }
+    public boolean isNextCancelled() { return nextCancelled; }
     public void pause() {
         refreshPlaybackPosition();
         isPlaying = false; playbackStartedTick = Long.MIN_VALUE; syncToClient();
@@ -257,7 +265,7 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         if (level == null || level.isClientSide) return;
         updateBlock();
         var packet = new PacketUpdateVideoScreen(worldPosition, currentVideoUrl, currentVideoTitle, isPlaying, stopped,
-                getPlaybackPositionMs(), level.getGameTime());
+                getPlaybackPositionMs(), level.getGameTime(), autoNext, repeat, nextCancelled);
         boolean sentToExtra = false;
         for (Player player : level.players()) if (player instanceof ServerPlayer serverPlayer
                 && serverPlayer.distanceToSqr(worldPosition.getX() + .5, worldPosition.getY() + .5,
@@ -272,7 +280,9 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
     public String getCurrentVideoTitle() { return currentVideoTitle; }
     public boolean isPlaying() { return isPlaying; }
     public boolean isStopped() { return stopped; }
-    public void updatePlayback(String url, String title, boolean playing, boolean stopped, long positionMs) {
+    public void updatePlayback(String url, String title, boolean playing, boolean stopped, long positionMs,
+                               boolean autoNext, boolean repeat, boolean nextCancelled) {
+        this.autoNext = autoNext; this.repeat = repeat; this.nextCancelled = nextCancelled;
         currentVideoUrl = url; currentVideoTitle = title; isPlaying = playing; this.stopped = stopped;
         playbackPositionMs = Math.max(0, positionMs);
         // Keep a client-side copy of the shared timeline advancing while its

@@ -41,5 +41,6 @@
   "item.nestworldvideo.screen_remote.missing": "The bound screen is no longer available.",
   "key.category.nestworldvideo": "Nestworld Video",
   "key.nestworldvideo.open_menu": "Control targeted screen",
+  "key.nestworldvideo.cancel_next": "Cancel auto-play of next episode",
   "command.nestworldvideo.aniua.ok": "AniUA: loaded %s (%s episodes)."
 }

@@ -19,6 +19,13 @@ public class ClientVideoManager {
     /** Screens that the server says should be playing, including displays outside the distance limit. */
     private final Map<BlockPos, String> desiredScreens = new ConcurrentHashMap<>();
     private final Map<BlockPos, Long> lastViewerReports = new ConcurrentHashMap<>();
+    private final Map<BlockPos, Long> lastHistoryRecords = new ConcurrentHashMap<>();
+    /** Announcement of the next episode, shown a few seconds before the current one ends. */
+    public record NextUp(BlockPos pos, int seconds, String title) {}
+    public static final long NEXT_UP_MS = 5_000;
+    private volatile NextUp nextUp;
+    public NextUp getNextUp() { return nextUp; }
+    public NextUp getNextUp(BlockPos pos) { var n = nextUp; return n != null && n.pos().equals(pos) ? n : null; }
 
     private ClientVideoManager() {}
 
@@ -156,6 +163,7 @@ public class ClientVideoManager {
         }
 
         boolean watching = false;
+        NextUp announce = null;
         for (Map.Entry<BlockPos, Display> entry : activeDisplays.entrySet()) {
             BlockPos pos = entry.getKey();
             if (!mc.level.hasChunkAt(pos) || !(mc.level.getBlockEntity(pos) instanceof VideoScreenBlockEntity screen)) {
@@ -173,13 +181,26 @@ public class ClientVideoManager {
             if (!activeDisplays.containsKey(pos)) continue;
             Display current = activeDisplays.get(pos);
             if (current != null) current.tick();
-            if (current != null && screen.isPlaying() && current.pollEnded())
+            if (current != null && screen.isPlaying() && current.pollEnded()) {
+                recordHistory(pos, current, true);
                 Networking.INSTANCE.sendToServer(new PacketVideoEnded(pos, current.getUrl()));
+            }
             if (current != null)
                 screen.setClientPlaybackAdvancing(current.isPlaying() && !current.isBuffering());
             if (current != null && current.needsInitialSync())
                 current.syncPosition(screen.getPlaybackPositionMs());
             long now = mc.level.getGameTime();
+            if (current != null && screen.isPlaying() && !current.isBuffering()) {
+                Long lastRecord = lastHistoryRecords.get(pos);
+                if (lastRecord == null || now - lastRecord >= 100) { lastHistoryRecords.put(pos, now); recordHistory(pos, current, false); }
+                long duration = current.getDuration(), time = current.getPlaybackTime();
+                if (announce == null && duration > 0 && time >= 0 && duration - time <= NEXT_UP_MS && duration - time > 0
+                        && screen.isAutoNext() && !screen.isRepeat() && !screen.isNextCancelled()
+                        && mc.player.distanceToSqr(pos.getX() + .5, pos.getY() + .5, pos.getZ() + .5) < 64 * 64) {
+                    var next = com.nestworld.video.NextEpisode.find(categories(), current.getUrl());
+                    if (next != null) announce = new NextUp(pos, (int) Math.ceil((duration - time) / 1000.0), next.getTitle());
+                }
+            }
             Long lastReport = lastViewerReports.get(pos);
             if (lastReport == null || now - lastReport >= 100) {
                 reportViewer(pos, true);
@@ -215,7 +236,30 @@ public class ClientVideoManager {
                         (bounds.minZ + bounds.maxZ) / 2, right.getStepX() * half, 0, right.getStepZ() * half);
             }
         }
+        nextUp = announce;
         AutoVsync.update(watching);
+    }
+
+    private static java.util.List<com.nestworld.video.Category> categories() {
+        var config = ClientData.getVideoConfig();
+        return config == null || config.getCategories() == null ? java.util.List.of() : config.getCategories();
+    }
+
+    /** Remember progress, "watched" and the quality of a catalogue video for the library's resume shelf and marks. */
+    private void recordHistory(BlockPos pos, Display display, boolean ended) {
+        try {
+            String url = display.getUrl();
+            for (var category : categories()) {
+                if (category == null || category.getVideos() == null) continue;
+                for (var video : category.getVideos()) if (video != null && url.equals(video.getUrl())) {
+                    var size = display.getDimensions();
+                    long time = ended ? display.getDuration() : display.getPlaybackTime();
+                    if (time < 0) return;
+                    WatchHistory.record(category, video, time, display.getDuration(), size == null ? 0 : size.height, ended);
+                    return;
+                }
+            }
+        } catch (RuntimeException ignored) { }
     }
 
     public void shutdown() {
@@ -223,9 +267,12 @@ public class ClientVideoManager {
         if (Minecraft.getInstance().getConnection() != null)
             for (BlockPos pos : lastViewerReports.keySet())
                 Networking.INSTANCE.sendToServer(new PacketScreenWatch(pos, false));
+        WatchHistory.saveNow();
         activeDisplays.values().forEach(Display::release);
         activeDisplays.clear();
         desiredScreens.clear();
         lastViewerReports.clear();
+        lastHistoryRecords.clear();
+        nextUp = null;
     }
 }

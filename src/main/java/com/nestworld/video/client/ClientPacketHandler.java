@@ -24,7 +24,8 @@ public class ClientPacketHandler {
     }
 
     public static void handleUpdateVideoScreen(BlockPos pos, String url, String title, boolean playing, boolean stopped,
-                                                long positionMs, long serverGameTime) {
+                                                long positionMs, long serverGameTime,
+                                                boolean autoNext, boolean repeat, boolean nextCancelled) {
         Level world = Minecraft.getInstance().level;
         if (world == null || !world.isLoaded(pos)) return;
         if (world.getBlockEntity(pos) instanceof VideoScreenBlockEntity screen) {
@@ -33,7 +34,7 @@ public class ClientPacketHandler {
             // a stale chunk packet into a huge seek when a world was reconnected.
             if (Math.abs(tickOffset) > 200) tickOffset = 0;
             long adjustedPosition = Math.max(0, positionMs + tickOffset * 50L);
-            screen.updatePlayback(url, title, playing, stopped, adjustedPosition);
+            screen.updatePlayback(url, title, playing, stopped, adjustedPosition, autoNext, repeat, nextCancelled);
             ClientVideoManager.getInstance().reconcile(screen);
             ClientVideoManager.getInstance().syncPosition(pos, adjustedPosition);
         }

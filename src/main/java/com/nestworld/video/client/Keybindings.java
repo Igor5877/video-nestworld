@@ -11,4 +11,11 @@ public class Keybindings {
             InputConstants.getKey(InputConstants.KEY_V, -1), // За замовчуванням - клавіша 'V'
             "key.category.nestworldvideo" // Назва категорії в налаштуваннях управління
     );
+
+    public static final KeyMapping CANCEL_NEXT_KEY = new KeyMapping(
+            "key.nestworldvideo.cancel_next",
+            KeyConflictContext.IN_GAME,
+            InputConstants.getKey(InputConstants.KEY_N, -1),
+            "key.category.nestworldvideo"
+    );
 }

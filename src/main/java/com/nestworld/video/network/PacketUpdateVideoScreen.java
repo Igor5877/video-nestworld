@@ -18,9 +18,11 @@ public class PacketUpdateVideoScreen {
     final boolean stopped;
     final long positionMs;
     final long serverGameTime;
+    final boolean autoNext, repeat, nextCancelled;
 
     public PacketUpdateVideoScreen(BlockPos pos, String url, String title, boolean isPlaying, boolean stopped,
-                                   long positionMs, long serverGameTime) {
+                                   long positionMs, long serverGameTime,
+                                   boolean autoNext, boolean repeat, boolean nextCancelled) {
         this.pos = pos;
         this.url = url;
         this.title = title;
@@ -28,6 +30,7 @@ public class PacketUpdateVideoScreen {
         this.stopped = stopped;
         this.positionMs = Math.max(0, positionMs);
         this.serverGameTime = serverGameTime;
+        this.autoNext = autoNext; this.repeat = repeat; this.nextCancelled = nextCancelled;
     }
 
     public static void encode(PacketUpdateVideoScreen packet, FriendlyByteBuf buf) {
@@ -38,11 +41,12 @@ public class PacketUpdateVideoScreen {
         buf.writeBoolean(packet.stopped);
         buf.writeLong(packet.positionMs);
         buf.writeLong(packet.serverGameTime);
+        buf.writeBoolean(packet.autoNext); buf.writeBoolean(packet.repeat); buf.writeBoolean(packet.nextCancelled);
     }
 
     public static PacketUpdateVideoScreen decode(FriendlyByteBuf buf) {
         return new PacketUpdateVideoScreen(buf.readBlockPos(), buf.readUtf(), buf.readUtf(), buf.readBoolean(),
-                buf.readBoolean(), buf.readLong(), buf.readLong());
+                buf.readBoolean(), buf.readLong(), buf.readLong(), buf.readBoolean(), buf.readBoolean(), buf.readBoolean());
     }
 
     public static void handle(PacketUpdateVideoScreen packet, Supplier<NetworkEvent.Context> contextSupplier) {
@@ -54,7 +58,7 @@ public class PacketUpdateVideoScreen {
         context.enqueueWork(() ->
             DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
                 () -> () -> ClientPacketHandler.handleUpdateVideoScreen(pos, url, title, isPlaying, packet.stopped,
-                        packet.positionMs, packet.serverGameTime)));
+                        packet.positionMs, packet.serverGameTime, packet.autoNext, packet.repeat, packet.nextCancelled)));
         context.setPacketHandled(true);
     }
 }
