@@ -174,24 +174,27 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
         for (int i = 0; i < segments; i++) {
             double a0 = i * Math.PI * 2.0 / segments, a1 = (i + 1) * Math.PI * 2.0 / segments;
             float inner = radius - thickness, outer = radius + thickness;
-            builder.vertex(matrix, cx + (float) Math.cos(a0) * inner, cy + (float) Math.sin(a0) * inner, 0).color(0.906f, 0.745f, 0.439f, 1f).endVertex();
-            builder.vertex(matrix, cx + (float) Math.cos(a0) * outer, cy + (float) Math.sin(a0) * outer, 0).color(0.906f, 0.745f, 0.439f, 1f).endVertex();
-            builder.vertex(matrix, cx + (float) Math.cos(a1) * outer, cy + (float) Math.sin(a1) * outer, 0).color(0.906f, 0.745f, 0.439f, 1f).endVertex();
+            // Same winding as drawColorQuad, otherwise the ring is culled.
             builder.vertex(matrix, cx + (float) Math.cos(a1) * inner, cy + (float) Math.sin(a1) * inner, 0).color(0.906f, 0.745f, 0.439f, 1f).endVertex();
+            builder.vertex(matrix, cx + (float) Math.cos(a1) * outer, cy + (float) Math.sin(a1) * outer, 0).color(0.906f, 0.745f, 0.439f, 1f).endVertex();
+            builder.vertex(matrix, cx + (float) Math.cos(a0) * outer, cy + (float) Math.sin(a0) * outer, 0).color(0.906f, 0.745f, 0.439f, 1f).endVertex();
+            builder.vertex(matrix, cx + (float) Math.cos(a0) * inner, cy + (float) Math.sin(a0) * inner, 0).color(0.906f, 0.745f, 0.439f, 1f).endVertex();
         }
         tesselator.end();
         RenderSystem.polygonOffset(0.0F, 0.0F);
         RenderSystem.disablePolygonOffset();
         RenderSystem.disableBlend();
         var font = net.minecraft.client.Minecraft.getInstance().font;
-        centeredText(poseStack, buffer, font, "18+", cx, cy, unit * 0.036f, 0xFFE7BE70);
-        centeredText(poseStack, buffer, font, "Контент 18+", cx, cy + radius + unit * 0.09f, unit * 0.017f, 0xFFE8EDF2);
-        centeredText(poseStack, buffer, font, "У вас немає доступу до цього відео", cx, cy + radius + unit * 0.16f, unit * 0.0105f, 0xFFAAB8C7);
+        float maxWidth = cols * 0.9f;
+        centeredText(poseStack, buffer, font, "18+", cx, cy, unit * 0.032f, 0xFFE7BE70, maxWidth);
+        centeredText(poseStack, buffer, font, "Контент 18+", cx, cy + radius + unit * 0.11f, unit * 0.0135f, 0xFFE8EDF2, maxWidth);
+        centeredText(poseStack, buffer, font, "У вас немає доступу до цього відео", cx, cy + radius + unit * 0.21f, unit * 0.0085f, 0xFFAAB8C7, maxWidth);
     }
 
     /** Draws {@code text} centred on (x, y) in screen-local units; scale is the size of one font pixel. */
     private void centeredText(PoseStack poseStack, MultiBufferSource buffer, net.minecraft.client.gui.Font font, String text,
-                              float x, float y, float scale, int color) {
+                              float x, float y, float scale, int color, float maxWidth) {
+        scale = Math.min(scale, maxWidth / Math.max(1, font.width(text)));
         poseStack.pushPose();
         poseStack.translate(x - font.width(text) * scale / 2f, y - 4f * scale, 0.006f);   // the screen surface faces +z: put the text in front of it
         poseStack.scale(scale, scale, 1f);
