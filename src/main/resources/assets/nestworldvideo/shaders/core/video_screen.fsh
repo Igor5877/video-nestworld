@@ -216,15 +216,16 @@ void main() {
         // covers, so the slider also sharpens a video that is shown smaller than it is.
         vec3 blur;
         if (magnification < 1.0) {
-            vec2 px = 1.0 / size;
-            blur = (texture(Sampler0, texCoord0 + vec2(px.x, 0.0)).rgb + texture(Sampler0, texCoord0 - vec2(px.x, 0.0)).rgb
-                  + texture(Sampler0, texCoord0 + vec2(0.0, px.y)).rgb + texture(Sampler0, texCoord0 - vec2(0.0, px.y)).rgb) * 0.25;
+            // Enlarged picture: an unsharp mask at texel scale barely shows once a texel covers many screen pixels, so
+            // sharpen by steepening the edges instead (the same push-to-extremes step as the Anime4K mode, no halos).
+            color = anime4k(Sampler0, texCoord0, color, clamp(Sharpness * 1.4, 0.0, 1.4));
+            blur = color;
         } else {
             vec2 hi = (UvMax * size - 0.5) / size, lo = vec2(0.5) / size;
             blur = (textureGrad(Sampler0, clamp(texCoord0 + dx, lo, hi), dx, dy).rgb + textureGrad(Sampler0, clamp(texCoord0 - dx, lo, hi), dx, dy).rgb
                   + textureGrad(Sampler0, clamp(texCoord0 + dy, lo, hi), dx, dy).rgb + textureGrad(Sampler0, clamp(texCoord0 - dy, lo, hi), dx, dy).rgb) * 0.25;
         }
-        color = clamp(color + (color - blur) * Sharpness * 1.5, 0.0, 1.0);
+        if (magnification >= 1.0) color = clamp(color + (color - blur) * Sharpness * 1.5, 0.0, 1.0);
     }
     fragColor = vec4(color, 1.0) * ColorModulator;
 }
