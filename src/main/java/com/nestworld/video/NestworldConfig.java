@@ -12,6 +12,7 @@ public final class NestworldConfig {
     public static final ForgeConfigSpec.ConfigValue<String> DECODER;
     public static final ForgeConfigSpec.BooleanValue SPATIAL_AUDIO;
     public static final ForgeConfigSpec.BooleanValue MIPMAPS;
+    public static final ForgeConfigSpec.BooleanValue AUTO_VSYNC;
     public static final ForgeConfigSpec.IntValue SPATIAL_SOFTNESS;
     public static final ForgeConfigSpec.IntValue SHARPNESS;
     public static final ForgeConfigSpec.IntValue SHADER_TINT_RED, SHADER_TINT_GREEN, SHADER_TINT_BLUE;
@@ -48,6 +49,10 @@ public final class NestworldConfig {
                 .comment("How gentle the stereo image of the screen is, 0 (wide, strongly panned) to 100 (almost mono).",
                         "Softer values blend the left and right speaker and keep the panning angle small when you stand close.")
                 .defineInRange("spatial_softness", 60, 0, 100);
+        AUTO_VSYNC = builder
+                .comment("Temporarily enable VSync while a video screen is playing in front of you, to avoid horizontal tearing",
+                        "bands at a high frame rate. Your own VSync setting is restored afterwards and never overwritten.")
+                .define("auto_vsync", true);
         MIPMAPS = builder
                 .comment("FFmpeg decoder only: build mipmaps with anisotropic filtering so distant screens do not shimmer.")
                 .define("mipmaps", true);

@@ -155,6 +155,7 @@ public class ClientVideoManager {
             reconcile(screen);
         }
 
+        boolean watching = false;
         for (Map.Entry<BlockPos, Display> entry : activeDisplays.entrySet()) {
             BlockPos pos = entry.getKey();
             if (!mc.level.hasChunkAt(pos) || !(mc.level.getBlockEntity(pos) instanceof VideoScreenBlockEntity screen)) {
@@ -191,6 +192,13 @@ public class ClientVideoManager {
             double dz = Math.max(bounds.minZ - pz, Math.max(0, pz - bounds.maxZ));
             double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
             current = activeDisplays.get(pos);
+            // Is this screen playing close to the player and roughly in front of them? Then tearing would be visible.
+            if (current != null && current.isPlaying() && dist < 48) {
+                var look = mc.player.getViewVector(1.0F);
+                double cx = (bounds.minX + bounds.maxX) / 2 - px, cy = (bounds.minY + bounds.maxY) / 2 - py, cz = (bounds.minZ + bounds.maxZ) / 2 - pz;
+                double length = Math.sqrt(cx * cx + cy * cy + cz * cz);
+                if (length < 1e-3 || (look.x * cx + look.y * cy + look.z * cz) / length > 0.3) watching = true;
+            }
             if (current != null) {
                 double diagonal = Math.hypot(screen.getScreenCols(), screen.getScreenRows());
                 current.applySpatialVolume(com.nestworld.video.client.util.SoundFalloff.factor(dist, diagonal,
@@ -207,9 +215,11 @@ public class ClientVideoManager {
                         (bounds.minZ + bounds.maxZ) / 2, right.getStepX() * half, 0, right.getStepZ() * half);
             }
         }
+        AutoVsync.update(watching);
     }
 
     public void shutdown() {
+        AutoVsync.release();
         if (Minecraft.getInstance().getConnection() != null)
             for (BlockPos pos : lastViewerReports.keySet())
                 Networking.INSTANCE.sendToServer(new PacketScreenWatch(pos, false));
