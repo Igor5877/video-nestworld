@@ -67,7 +67,7 @@ public final class FfmpegDisplay extends Display {
     private long previewedPtsUs = -1;
     private long pendingSyncUs = -1, seekTargetUs = -1;
     private long startedWallNanos, mediaBaseUs, frozenUs, lastMediaUs, lastShownPtsUs;
-    private long firstFrameWaitNanos, lastDiagnosticNanos;
+    private long firstFrameWaitNanos, lastDiagnosticNanos, lastRenderNanos;
     private int baseVolume = 100;
     private double spatial = 1.0;
 
@@ -180,6 +180,7 @@ public final class FfmpegDisplay extends Display {
     @Override public int getTextureId() {
         StreamInfo streamInfo = info;
         if (streamInfo == null || closed) return -1;
+        lastRenderNanos = System.nanoTime();
         maybeStart();
         if (started) {
             long media = mediaTimeUs();
@@ -206,6 +207,15 @@ public final class FfmpegDisplay extends Display {
             }
         }
         return frameShown ? textureId : -1;
+    }
+
+    /** Drops frames the clock has passed without uploading them, so the decoder and the audio keep flowing off-screen. */
+    private void discardDueFrames() {
+        long media = mediaTimeUs();
+        synchronized (lock) {
+            while (!frames.isEmpty() && frames.peek().ptsUs <= media) pool.add(frames.poll());
+            lock.notifyAll();
+        }
     }
 
     /** Waits for enough buffered media, then starts the clock at the first frame. */
@@ -295,6 +305,10 @@ public final class FfmpegDisplay extends Display {
         if (closed) return;
         StreamInfo streamInfo = info;
         if (streamInfo != null && pendingSyncUs >= 0 && decoder != null) applySync();
+        // Playback must not depend on anyone looking at the screen: start the clock (and with it the sound) from the
+        // client tick, and keep consuming frames while the renderer is not drawing this screen.
+        maybeStart();
+        if (started && System.nanoTime() - lastRenderNanos > 150_000_000L) discardDueFrames();
         diagnose();
     }
 
