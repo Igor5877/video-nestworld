@@ -51,6 +51,8 @@ final class AlAudio implements Runnable {
     private volatile long clockStampNanos;
     private volatile boolean alPlaying;
     private volatile int alQueuedBuffers;
+    /** Delay between what OpenAL has mixed and what comes out of the speakers (the output device's buffer), -1 = unknown. */
+    private volatile long outputLatencyUs = -1;
 
     AlAudio(int sampleRate, int channels, boolean spatial, float crossfeed) {
         this.crossfeed = Math.max(0f, Math.min(0.5f, crossfeed));
@@ -76,6 +78,8 @@ final class AlAudio implements Runnable {
     boolean isDrained() {
         synchronized (lock) { return queue.isEmpty() && alQueuedBuffers == 0; }
     }
+    /** Output device latency in microseconds as reported by AL_SOFT_source_latency, or -1 when it cannot be measured. */
+    long outputLatencyUs() { return outputLatencyUs; }
     long queuedUs() { synchronized (lock) { return queuedUs; } }
     /** Audio the listener still has ahead of it: waiting for the audio thread plus already handed to OpenAL. */
     long bufferedUs() { return queuedUs() + alQueuedBuffers * CHUNK_US; }
@@ -168,10 +172,12 @@ final class AlAudio implements Runnable {
             check("init");
             efx = com.nestworld.video.NestworldConfig.ACOUSTICS.get() ? AlEfx.create(context, sources) : null;
             long lastNanos = System.nanoTime();
+            boolean latencyExtension = AL10.alIsExtensionPresent("AL_SOFT_source_latency");
+            long lastLatencyNanos = 0;
             long unqueuedFrames = 0, baseUs = -1;
             int queued = 0;
             float smoothGain = -1f, sentGain = -1f;
-            float[] smoothSpeakers = null;
+            float[] smoothSpeakers = null, sentSpeakers = null;
             while (!closed) {
                 if (ALC10.alcGetCurrentContext() != context) throw new IllegalStateException("OpenAL context changed");
                 if (flushRequested) {
@@ -228,8 +234,20 @@ final class AlAudio implements Runnable {
                     float[] target = speakers;
                     if (smoothSpeakers == null) smoothSpeakers = target.clone();
                     else for (int i = 0; i < smoothSpeakers.length; i++) smoothSpeakers[i] += (target[i] - smoothSpeakers[i]) * 0.08f;
-                    for (int s = 0; s < sourceCount; s++)
-                        AL10.alSource3f(sources[s], AL10.AL_POSITION, smoothSpeakers[3 * s], smoothSpeakers[3 * s + 1], smoothSpeakers[3 * s + 2]);
+                    // Only tell OpenAL when a position really moved: every update makes its mixer recompute the source.
+                    for (int s = 0; s < sourceCount; s++) {
+                        boolean moved = sentSpeakers == null;
+                        for (int k = 0; k < 3 && !moved; k++) moved = Math.abs(smoothSpeakers[3 * s + k] - sentSpeakers[3 * s + k]) > 0.002f;
+                        if (moved) AL10.alSource3f(sources[s], AL10.AL_POSITION, smoothSpeakers[3 * s], smoothSpeakers[3 * s + 1], smoothSpeakers[3 * s + 2]);
+                    }
+                    if (sentSpeakers == null || sentSpeakers.length != smoothSpeakers.length) sentSpeakers = new float[smoothSpeakers.length];
+                    System.arraycopy(smoothSpeakers, 0, sentSpeakers, 0, smoothSpeakers.length);
+                }
+                if (latencyExtension && alPlaying && System.nanoTime() - lastLatencyNanos > 1_000_000_000L) {
+                    lastLatencyNanos = System.nanoTime();
+                    double[] offsets = new double[2];
+                    org.lwjgl.openal.SOFTSourceLatency.alGetSourcedvSOFT(sources[0], org.lwjgl.openal.SOFTSourceLatency.AL_SEC_OFFSET_LATENCY_SOFT, offsets);
+                    if (Double.isFinite(offsets[1]) && offsets[1] >= 0 && offsets[1] < 5.0) outputLatencyUs = (long) (offsets[1] * 1e6);
                 }
                 if (efx != null) {
                     long nowNanos = System.nanoTime();

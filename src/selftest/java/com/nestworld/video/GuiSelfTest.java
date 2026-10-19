@@ -147,6 +147,7 @@ public class GuiSelfTest {
         if (!launched && mc.screen instanceof TitleScreen && mc.getOverlay() == null) {
             launched = true;
             if (STUB) com.nestworld.video.content.ContentConfig.ADULT_DEFAULT.set("nobody");
+            if (PLAY) com.nestworld.video.NestworldConfig.DEBUG_STATS.set(true);   // the playback statistics include the audio output latency
             if (RELAY) {   // config values only exist once the mod's config is loaded, i.e. now
                 com.nestworld.video.relay.RelayConfig.ENABLED.set(true);
                 com.nestworld.video.relay.RelayConfig.ALLOW_PRIVATE_ORIGINS.set(!Boolean.getBoolean("nestworldvideo.guirelaydeny"));   // the test origin is on 127.0.0.1; "deny" checks the SSRF guard

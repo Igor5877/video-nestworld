@@ -385,7 +385,7 @@ public final class FfmpegDisplay extends Display {
         int queued; synchronized (lock) { queued = frames.size(); }
         AlAudio output = audio;
         LOGGER.info("Nestworld Video stats: clock x{} (media +{}ms in {}ms wall), decoded {} fps / {} audio chunks, decoder blocked on video {}ms, "
-                        + "frames {}/{} (cap {}), audio buffered {}ms {} (underruns {}), decoder a/v pts skew {}ms (audio - video), paused={}",
+                        + "frames {}/{} (cap {}), audio buffered {}ms {} (underruns {}), audio output latency {}ms, decoder a/v pts skew {}ms (audio - video), paused={}",
                 String.format(java.util.Locale.ROOT, "%.2f", (media - statMediaUs) / (double) Math.max(1, wall)),
                 (media - statMediaUs) / 1000, wall / 1000,
                 String.format(java.util.Locale.ROOT, "%.1f", (statVideoFrames - statVideoFramesSeen) * 1e6 / Math.max(1, wall)),
@@ -393,6 +393,7 @@ public final class FfmpegDisplay extends Display {
                 queued, frameLimit, frameCap,
                 output == null ? -1 : output.bufferedUs() / 1000, output == null ? "none" : output.isPlaying() ? "playing" : "STOPPED",
                 output == null ? 0 : output.underruns(),
+                output == null || output.outputLatencyUs() < 0 ? "?" : String.valueOf(output.outputLatencyUs() / 1000),
                 (statLastAudioPts - statLastVideoPts) / 1000, !playing);
         long shown = statShown, skipped = statSkipped, uploadNanos = statUploadNanos;
         LOGGER.info("Nestworld Video render: game fps {}, shown {} frames, skipped (late) {}, upload avg {}ms / max {}ms, longest gap between shown frames {}ms",
