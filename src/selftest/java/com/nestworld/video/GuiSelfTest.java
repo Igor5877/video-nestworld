@@ -172,6 +172,7 @@ public class GuiSelfTest {
                 var display = com.nestworld.video.client.ClientVideoManager.getInstance().getDisplay(ORIGIN);
                 if (Boolean.getBoolean("nestworldvideo.guiend")) {
                     var be = (VideoScreenBlockEntity) mc.level.getBlockEntity(ORIGIN);
+                    if (be == null || ticks < 60) return;
                     if (ticks % 200 == 0) System.out.println("END-TEST t=" + ticks + " url=" + be.getCurrentVideoUrl().substring(Math.max(0, be.getCurrentVideoUrl().length() - 14)) + " playing=" + be.isPlaying() + " stopped=" + be.isStopped()
                             + " display=" + (display == null ? "none" : display.getPlaybackTime() + "/" + display.getDuration()));
                     if (!be.getCurrentVideoUrl().equals(PLAY_URL)) { System.out.println("END HANDLED: moved to " + be.getCurrentVideoUrl() + " after " + ticks + " ticks"); System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
