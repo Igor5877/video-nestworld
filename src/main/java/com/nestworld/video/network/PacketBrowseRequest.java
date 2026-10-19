@@ -14,8 +14,8 @@ import java.util.function.Supplier;
 public record PacketBrowseRequest(int menuId, int requestId, String action, String query) {
     private static final Map<ServerPlayer, Long> BUSY = new WeakHashMap<>();
     private static final Semaphore REMOTE_SLOTS = new Semaphore(4);
-    public void encode(FriendlyByteBuf b) { b.writeInt(menuId); b.writeInt(requestId); b.writeUtf(action,16); b.writeUtf(query,120); }
-    public static PacketBrowseRequest decode(FriendlyByteBuf b) { return new PacketBrowseRequest(b.readInt(), b.readInt(), b.readUtf(16), b.readUtf(120)); }
+    public void encode(FriendlyByteBuf b) { b.writeInt(menuId); b.writeInt(requestId); b.writeUtf(action,16); b.writeUtf(query,300); }
+    public static PacketBrowseRequest decode(FriendlyByteBuf b) { return new PacketBrowseRequest(b.readInt(), b.readInt(), b.readUtf(16), b.readUtf(300)); }
     public static void handle(PacketBrowseRequest msg, Supplier<NetworkEvent.Context> supplier) {
         var ctx = supplier.get();
         ctx.enqueueWork(() -> {

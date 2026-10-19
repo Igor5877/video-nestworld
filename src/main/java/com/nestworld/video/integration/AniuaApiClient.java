@@ -45,7 +45,7 @@ public final class AniuaApiClient {
     }
 
     public static CompletableFuture<Category> loadEpisodes(String slug, Map<String, String> sources) {
-        if (slug == null || !slug.matches("[A-Za-z0-9][A-Za-z0-9_-]{0,120}"))
+        if (slug == null || !slug.matches("[A-Za-z0-9][A-Za-z0-9_-]{0,299}"))
             return CompletableFuture.failedFuture(new IllegalArgumentException("Некоректний slug аніме"));
         Map<String, String> safeSources = sources == null ? Map.of() : Map.copyOf(sources);
         String cacheKey = slug + "|" + safeSources.hashCode();

@@ -29,6 +29,8 @@ public final class HikkaCatalogClient {
             return "Окремий реліз";
         }
     }
+    /** Hikka answers 400 "anime:no_franchise" for a title that has no related seasons: not an error for us. */
+    private static final class NoFranchise extends IllegalStateException { NoFranchise() { super("no franchise"); } }
     private HikkaCatalogClient() {}
     public static CompletableFuture<List<Title>> searchTitles(String input) {
         String query = input == null ? "" : input.trim();
@@ -55,25 +57,29 @@ public final class HikkaCatalogClient {
         for (var entry : root.getAsJsonArray("list")) {
             if (!entry.isJsonObject()) continue;
             var item = parseTitle(entry.getAsJsonObject());
-            if (item.slug().matches("[A-Za-z0-9][A-Za-z0-9_-]{0,120}")) titles.add(item);
+            if (item.slug().matches("[A-Za-z0-9][A-Za-z0-9_-]{0,299}")) titles.add(item);
             if (titles.size() == 50) break;
         }
         return titles;
     }
     public static CompletableFuture<Title> detail(String slug) {
-        if (slug == null || !slug.matches("[A-Za-z0-9][A-Za-z0-9_-]{0,120}"))
+        if (slug == null || !slug.matches("[A-Za-z0-9][A-Za-z0-9_-]{0,299}"))
             return CompletableFuture.failedFuture(new IllegalArgumentException("Некоректна назва релізу"));
         return jsonCached("detail:" + slug, HttpRequest.newBuilder(URI.create("https://api.hikka.io/anime/" + slug))
                 .timeout(Duration.ofSeconds(20)).GET().build(), DETAIL_TTL_NANOS).thenApply(HikkaCatalogClient::parseTitle);
     }
     public static CompletableFuture<List<Title>> seasons(String slug) {
-        if (slug == null || !slug.matches("[A-Za-z0-9][A-Za-z0-9_-]{0,120}"))
+        if (slug == null || !slug.matches("[A-Za-z0-9][A-Za-z0-9_-]{0,299}"))
             return CompletableFuture.failedFuture(new IllegalArgumentException("Некоректна назва релізу"));
         return jsonCached("franchise:" + slug, HttpRequest.newBuilder(URI.create("https://api.hikka.io/anime/" + slug + "/franchise?size=50"))
-                .timeout(Duration.ofSeconds(20)).GET().build(), DETAIL_TTL_NANOS).thenApply(root -> {
+                .timeout(Duration.ofSeconds(20)).GET().build(), DETAIL_TTL_NANOS).<List<Title>>thenApply(root -> {
                     var titles = new ArrayList<>(parseSearch(root));
                     titles.sort(Comparator.comparing((Title t) -> t.year().isBlank() ? "9999" : t.year()).thenComparing(Title::title));
                     return titles;
+                }).exceptionallyCompose(error -> {
+                    Throwable cause = error instanceof java.util.concurrent.CompletionException && error.getCause() != null ? error.getCause() : error;
+                    if (!(cause instanceof NoFranchise)) return CompletableFuture.<List<Title>>failedFuture(cause);
+                    return detail(slug).thenApply(title -> List.of(title));
                 });
     }
 
@@ -107,6 +113,7 @@ public final class HikkaCatalogClient {
     }
     private static CompletableFuture<JsonObject> json(HttpRequest request) {
         return HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofString()).thenApply(response -> {
+            if (response.statusCode() == 400 && response.body().contains("no_franchise")) throw new NoFranchise();
             if (response.statusCode() != 200) throw new IllegalStateException("Hikka HTTP " + response.statusCode());
             if (response.body().length() > 2_000_000) throw new IllegalStateException("Завелика відповідь Hikka");
             return JsonParser.parseString(response.body()).getAsJsonObject();
