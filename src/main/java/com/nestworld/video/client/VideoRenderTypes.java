@@ -2,6 +2,7 @@ package com.nestworld.video.client;
 
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
+import com.nestworld.video.NestworldConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.RenderStateShard;
 import net.minecraft.client.renderer.RenderType;
@@ -21,8 +22,6 @@ import java.util.Map;
 public final class VideoRenderTypes extends RenderStateShard {
     private static final int MAX_ENTRIES = 32;
     private static final Map<Integer, Entry> CACHE = new LinkedHashMap<>();
-    /** Which vanilla render type carries the picture under a shader pack: text | eyes | emissive | beacon. */
-    public static volatile String variant = "text";
     private static long lastShaderCheck;
     private static boolean shaderPackActive;
 
@@ -40,53 +39,43 @@ public final class VideoRenderTypes extends RenderStateShard {
 
     /** Full-bright, opaque, bilinear-filtered render type for the given GL texture. */
     public static RenderType forTexture(int glId, boolean mipmapped) {
-        String kind = variant;
-        int key = (glId * 2 + (mipmapped ? 1 : 0)) * 8 + Math.abs(kind.hashCode() % 8);
+        int key = glId * 2 + (mipmapped ? 1 : 0);
         Entry entry = CACHE.get(key);
         if (entry != null) return entry.type;
         var manager = Minecraft.getInstance().getTextureManager();
         ResourceLocation location = ResourceLocation.fromNamespaceAndPath("nestworldvideo", "gl/" + glId + (mipmapped ? "_mip" : ""));
-        if (manager.getTexture(location, null) == null) manager.register(location, new GlTexture(glId));
-        TextureStateShard texture = new TextureStateShard(location, true, mipmapped);
-        RenderType.CompositeState.CompositeStateBuilder state = RenderType.CompositeState.builder()
-                .setTextureState(texture).setTransparencyState(NO_TRANSPARENCY).setCullState(NO_CULL).setLightmapState(LIGHTMAP);
-        RenderType type;
-        switch (kind) {
-            case "eyes" -> type = RenderType.create("nestworldvideo_eyes_" + glId, DefaultVertexFormat.NEW_ENTITY,
-                    VertexFormat.Mode.QUADS, 256, false, false,
-                    state.setShaderState(RENDERTYPE_EYES_SHADER).setOverlayState(OVERLAY).createCompositeState(false));
-            case "emissive" -> type = RenderType.create("nestworldvideo_emissive_" + glId, DefaultVertexFormat.NEW_ENTITY,
-                    VertexFormat.Mode.QUADS, 256, false, false,
-                    state.setShaderState(RENDERTYPE_ENTITY_TRANSLUCENT_EMISSIVE_SHADER).setOverlayState(OVERLAY).createCompositeState(false));
-            case "beacon" -> type = RenderType.create("nestworldvideo_beacon_" + glId, DefaultVertexFormat.BLOCK,
-                    VertexFormat.Mode.QUADS, 256, false, false,
-                    state.setShaderState(RENDERTYPE_BEACON_BEAM_SHADER).createCompositeState(false));
-            default -> type = RenderType.create("nestworldvideo_screen_" + glId, DefaultVertexFormat.POSITION_COLOR_TEX_LIGHTMAP,
-                    VertexFormat.Mode.QUADS, 256, false, false,
-                    state.setShaderState(RENDERTYPE_TEXT_SHADER).createCompositeState(false));
-        }
+        manager.register(location, new GlTexture(glId));
+        RenderType type = RenderType.create("nestworldvideo_screen_" + glId, DefaultVertexFormat.POSITION_COLOR_TEX_LIGHTMAP,
+                VertexFormat.Mode.QUADS, 256, false, false,
+                RenderType.CompositeState.builder()
+                        .setShaderState(RENDERTYPE_TEXT_SHADER)
+                        .setTextureState(new TextureStateShard(location, true, mipmapped))
+                        .setTransparencyState(NO_TRANSPARENCY)
+                        .setCullState(NO_CULL)
+                        .setLightmapState(LIGHTMAP)
+                        .createCompositeState(false));
         CACHE.put(key, new Entry(location, type));
         for (Iterator<Entry> it = CACHE.values().iterator(); CACHE.size() > MAX_ENTRIES && it.hasNext(); ) {
-            Entry old = it.next();
+            manager.release(it.next().location);
             it.remove();
         }
         return type;
     }
 
-    /** Emits one quad in the vertex layout of the current variant. */
+    /**
+     * Emits one quad. Shader packs apply their own colour grading to everything, which can tint the picture (BSL
+     * turns pure white cream-coloured); the configured per-channel percentages pre-compensate for it.
+     */
     public static void quad(com.mojang.blaze3d.vertex.VertexConsumer consumer, com.mojang.blaze3d.vertex.PoseStack poseStack,
                             float x, float y, float w, float h, float uMax, float vMax, int light) {
         var matrix = poseStack.last().pose();
-        var normal = poseStack.last().normal();
-        float[][] corners = {{x, y + h, 0, vMax}, {x + w, y + h, uMax, vMax}, {x + w, y, uMax, 0}, {x, y, 0, 0}};
-        for (float[] c : corners) {
-            var v = consumer.vertex(matrix, c[0], c[1], 0).color(255, 255, 255, 255).uv(c[2], c[3]);
-            switch (variant) {
-                case "eyes", "emissive" -> v.overlayCoords(net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY).uv2(light).normal(normal, 0, 0, 1).endVertex();
-                case "beacon" -> v.uv2(light).normal(normal, 0, 0, 1).endVertex();
-                default -> v.uv2(light).endVertex();
-            }
-        }
+        int r = 255 * NestworldConfig.SHADER_TINT_RED.get() / 100;
+        int g = 255 * NestworldConfig.SHADER_TINT_GREEN.get() / 100;
+        int b = 255 * NestworldConfig.SHADER_TINT_BLUE.get() / 100;
+        consumer.vertex(matrix, x, y + h, 0).color(r, g, b, 255).uv(0, vMax).uv2(light).endVertex();
+        consumer.vertex(matrix, x + w, y + h, 0).color(r, g, b, 255).uv(uMax, vMax).uv2(light).endVertex();
+        consumer.vertex(matrix, x + w, y, 0).color(r, g, b, 255).uv(uMax, 0).uv2(light).endVertex();
+        consumer.vertex(matrix, x, y, 0).color(r, g, b, 255).uv(0, 0).uv2(light).endVertex();
     }
 
     /** True while an Iris/Oculus shader pack is rendering the world. Checked at most once a second. */

@@ -13,6 +13,7 @@ public final class NestworldConfig {
     public static final ForgeConfigSpec.BooleanValue SPATIAL_AUDIO;
     public static final ForgeConfigSpec.BooleanValue MIPMAPS;
     public static final ForgeConfigSpec.IntValue SHARPNESS;
+    public static final ForgeConfigSpec.IntValue SHADER_TINT_RED, SHADER_TINT_GREEN, SHADER_TINT_BLUE;
     public static final ForgeConfigSpec.ConfigValue<String> UPSCALER;
     public static final ForgeConfigSpec.ConfigValue<String> RENDER_MODE;
 
@@ -54,6 +55,12 @@ public final class NestworldConfig {
                 .comment("Extra sharpening of the picture in the scaling shader, 0 (off) to 100.",
                         "Only applies with video.smooth_scaling and when no shader pack is active.")
                 .defineInRange("sharpness", 0, 0, 100);
+        builder.comment("Colour correction for the picture while a shader pack is active, in percent per channel.",
+                "Shader packs grade the whole image and may tint it (for example BSL makes pure white slightly cream).",
+                "Lower red and green to cancel a warm tint, e.g. 91 / 94 / 100 for BSL's default look. 100 / 100 / 100 = off.");
+        SHADER_TINT_RED = builder.defineInRange("shaderpack_red", 100, 50, 100);
+        SHADER_TINT_GREEN = builder.defineInRange("shaderpack_green", 100, 50, 100);
+        SHADER_TINT_BLUE = builder.defineInRange("shaderpack_blue", 100, 50, 100);
         RENDER_MODE = builder
                 .comment("How the picture is drawn: \"auto\" switches to Minecraft's own render pipeline when a shader pack",
                         "(Iris/Oculus) is active, \"vanilla_pipeline\" always uses it, \"direct\" never does.")
