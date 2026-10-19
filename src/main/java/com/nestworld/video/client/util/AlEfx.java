@@ -119,11 +119,11 @@ final class AlEfx {
         if (eax) {
             EXTEfx.alEffectf(effect, EXTEfx.AL_EAXREVERB_DENSITY, 1.0f);
             EXTEfx.alEffectf(effect, EXTEfx.AL_EAXREVERB_DIFFUSION, 1.0f);
-            EXTEfx.alEffectf(effect, EXTEfx.AL_EAXREVERB_GAIN, 0.32f);
+            EXTEfx.alEffectf(effect, EXTEfx.AL_EAXREVERB_GAIN, 0.5f);
             EXTEfx.alEffectf(effect, EXTEfx.AL_EAXREVERB_GAINHF, 0.89f);
             EXTEfx.alEffectf(effect, EXTEfx.AL_EAXREVERB_DECAY_TIME, time);
             EXTEfx.alEffectf(effect, EXTEfx.AL_EAXREVERB_DECAY_HFRATIO, 0.8f);
-            EXTEfx.alEffectf(effect, EXTEfx.AL_EAXREVERB_REFLECTIONS_GAIN, 0.2f);
+            EXTEfx.alEffectf(effect, EXTEfx.AL_EAXREVERB_REFLECTIONS_GAIN, 0.35f);
             EXTEfx.alEffectf(effect, EXTEfx.AL_EAXREVERB_REFLECTIONS_DELAY, 0.012f);
             EXTEfx.alEffectf(effect, EXTEfx.AL_EAXREVERB_LATE_REVERB_GAIN, 1.2f);
             EXTEfx.alEffectf(effect, EXTEfx.AL_EAXREVERB_LATE_REVERB_DELAY, 0.02f);

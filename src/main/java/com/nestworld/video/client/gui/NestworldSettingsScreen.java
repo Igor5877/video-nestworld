@@ -72,6 +72,8 @@ public final class NestworldSettingsScreen extends Screen {
                 "Стіни приглушують звук екрана, двері й отвори пропускають його, у залах з’являється луна (лише FFmpeg і просторовий звук).");
         slider("Луна приміщення", cellW, 100, 0, NestworldConfig.ACOUSTICS_REVERB::get, NestworldConfig.ACOUSTICS_REVERB::set,
                 "0 — лише приглушення стінами. Звукова доріжка вже може містити власну луну.");
+        slider("Приглушення стінами", cellW, 200, 100, NestworldConfig.ACOUSTICS_MUFFLE::get, NestworldConfig.ACOUSTICS_MUFFLE::set,
+                "Наскільки сильно стіни приглушують звук (100 % типово). Більше значення робить різницю між матеріалами виразнішою.");
         choice("Якість акустики", cellW, () -> switch (NestworldConfig.ACOUSTICS_QUALITY.get()) { case 1 -> "Швидка"; case 3 -> "Детальна"; default -> "Збалансована"; },
                 () -> safely(() -> NestworldConfig.ACOUSTICS_QUALITY.set(NestworldConfig.ACOUSTICS_QUALITY.get() % 3 + 1)),
                 "Кількість променів і відбиттів. Детальна точніша, але важча для процесора.");

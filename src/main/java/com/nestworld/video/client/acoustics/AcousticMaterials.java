@@ -14,9 +14,11 @@ final class AcousticMaterials {
 
     record Material(double occlusion, double reflectivity) {}
 
-    private static final Material HARD = new Material(1.0, 0.92), METAL = new Material(1.0, 0.95), WOOD = new Material(0.85, 0.45),
-            GLASS = new Material(0.15, 0.7), SOFT = new Material(1.4, 0.08), EARTH = new Material(0.95, 0.3),
-            FOLIAGE = new Material(0.3, 0.12), DEFAULT = new Material(0.9, 0.5);
+    // Spread wide on purpose: a block of each group should sound clearly different behind it (glass almost clear,
+    // wood light, stone heavy, wool deadening) and in a room (stone and metal ring, wool and snow swallow the echo).
+    private static final Material HARD = new Material(1.0, 0.92), METAL = new Material(1.1, 0.95), WOOD = new Material(0.55, 0.45),
+            GLASS = new Material(0.12, 0.7), SOFT = new Material(1.8, 0.05), EARTH = new Material(0.9, 0.3),
+            FOLIAGE = new Material(0.25, 0.12), DEFAULT = new Material(0.8, 0.5);
 
     static Material of(BlockState state) {
         if (state.is(BlockTags.LEAVES)) return FOLIAGE;

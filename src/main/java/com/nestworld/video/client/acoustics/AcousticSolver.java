@@ -17,25 +17,32 @@ public final class AcousticSolver {
 
     /** Largest blocking that matters: beyond it everything is already muffled. */
     public static final double MAX_OCCLUSION = 6.0;
-    public static final double ABSORPTION = 3.0;
+    /** Muffling strength per unit of blocking (1 block of stone leaves about a fifth of the high frequencies). */
+    public static final double ABSORPTION = 1.5;
+    /** How much of the loudness follows the high-frequency loss: low enough to keep speech audible behind a wall. */
+    private static final double GAIN_EXPONENT = 0.25;
 
     public record Reverb(float sendGain, float sendHf, float decayTime) {}
     public record Direct(float gainL, float hfL, float gainR, float hfR) {}
 
     /** Least blocked path from any probe to the listener, turned into a low-pass (gain, high-frequency gain). */
-    public static float[] directFilter(RayWorld world, List<V3> probes, V3 listener) {
+    public static float[] directFilter(RayWorld world, List<V3> probes, V3 listener) { return directFilter(world, probes, listener, ABSORPTION); }
+
+    public static float[] directFilter(RayWorld world, List<V3> probes, V3 listener, double absorption) {
         double occlusion = MAX_OCCLUSION;
         for (V3 probe : probes) {
             occlusion = Math.min(occlusion, world.occlusion(probe, listener, MAX_OCCLUSION));
             if (occlusion <= 0) break;
         }
-        double hf = Math.max(0.02, Math.exp(-ABSORPTION * occlusion));
-        double gain = Math.pow(hf, 0.12);
+        double hf = Math.max(0.02, Math.exp(-absorption * occlusion));
+        double gain = Math.pow(hf, GAIN_EXPONENT);
         return new float[]{(float) gain, (float) hf};
     }
 
-    public static Direct direct(RayWorld world, List<V3> left, List<V3> right, V3 listener) {
-        float[] l = directFilter(world, left, listener), r = directFilter(world, right, listener);
+    public static Direct direct(RayWorld world, List<V3> left, List<V3> right, V3 listener) { return direct(world, left, right, listener, ABSORPTION); }
+
+    public static Direct direct(RayWorld world, List<V3> left, List<V3> right, V3 listener, double absorption) {
+        float[] l = directFilter(world, left, listener, absorption), r = directFilter(world, right, listener, absorption);
         return new Direct(l[0], l[1], r[0], r[1]);
     }
 
@@ -79,7 +86,7 @@ public final class AcousticSolver {
         double enclosure = 1.0 - (double) escaped / Math.max(1, rays);
         double averageFree = segments == 0 ? maxDist : freeSum / segments;
         double averageReflect = hits == 0 ? 0.5 : reflectSum / hits;
-        float send = (float) clamp(amount * e * 0.65, 0, 1);
+        float send = (float) clamp(amount * e * 1.0, 0, 1);
         float hf = (float) clamp(0.4 + 0.55 * averageReflect, 0.3, 1.0);
         float decay = (float) clamp((0.25 + 0.1 * averageFree) * (0.4 + 0.6 * enclosure), 0.3, 4.0);
         return new Reverb(send, hf, decay);

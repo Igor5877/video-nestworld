@@ -107,6 +107,7 @@ public final class EmbeddiumOptions {
         var soft = slider(storage, "М’якість звуку", "0 — широка панорама, 100 — майже моно.", NestworldConfig.SPATIAL_SOFTNESS, 0, 100, 5, ControlValueFormatter.percentage());
         var acoustics = tick(storage, "Акустика приміщення", "Стіни приглушують звук екрана, двері й отвори пропускають його, у залах з’являється луна (лише FFmpeg і просторовий звук).", NestworldConfig.ACOUSTICS);
         var reverb = slider(storage, "Луна приміщення", "0 — лише приглушення стінами. Звукова доріжка вже може містити власну луну.", NestworldConfig.ACOUSTICS_REVERB, 0, 100, 5, ControlValueFormatter.percentage());
+        var muffle = slider(storage, "Приглушення стінами", "Наскільки сильно стіни приглушують звук (100 % типово). Більше значення робить різницю між матеріалами виразнішою.", NestworldConfig.ACOUSTICS_MUFFLE, 0, 200, 10, ControlValueFormatter.percentage());
         var acousticQuality = slider(storage, "Якість акустики", "1 швидка, 2 збалансована, 3 детальна (більше променів і відбиттів).", NestworldConfig.ACOUSTICS_QUALITY, 1, 3, 1, ControlValueFormatter.number());
         var vsync = tick(storage, "Авто-VSync біля екрана", "Вмикає вертикальну синхронізацію, лише коли ви дивитеся на екран, щоб не було смуг. Ваше налаштування VSync не змінюється.", NestworldConfig.AUTO_VSYNC);
 
@@ -117,7 +118,7 @@ public final class EmbeddiumOptions {
         return new OptionPage(Component.literal("Nestworld Video"), ImmutableList.<OptionGroup>of(
                 playbackGroup(decoder, quality, mode),
                 OptionGroup.createBuilder().add(smooth).add(upscaler).add(sharp).add(mips).build(),
-                OptionGroup.createBuilder().add(spatial).add(soft).add(acoustics).add(reverb).add(acousticQuality).build(),
+                OptionGroup.createBuilder().add(spatial).add(soft).add(acoustics).add(reverb).add(muffle).add(acousticQuality).build(),
                 OptionGroup.createBuilder().add(vsync).build(),
                 OptionGroup.createBuilder().add(distance).add(streams).add(debug).build()));
     }

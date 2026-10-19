@@ -60,8 +60,9 @@ public final class ScreenAcoustics {
             MinecraftRayWorld world = new MinecraftRayWorld(level);
             if (directDue) {
                 state.lastDirect = gameTime;
+                double absorption = AcousticSolver.ABSORPTION * NestworldConfig.ACOUSTICS_MUFFLE.get() / 100.0;
                 state.direct = AcousticSolver.direct(world, probes(centre.sub(rightV.scale(half)), rightV, front, half),
-                        probes(centre.add(rightV.scale(half)), rightV, front, half), listener);
+                        probes(centre.add(rightV.scale(half)), rightV, front, half), listener, absorption);
             }
             if (reverbDue) {
                 state.lastReverb = gameTime;

@@ -15,7 +15,7 @@ public final class NestworldConfig {
     public static final ForgeConfigSpec.BooleanValue AUTO_VSYNC, DEBUG_STATS;
     public static final ForgeConfigSpec.IntValue SPATIAL_SOFTNESS;
     public static final ForgeConfigSpec.BooleanValue ACOUSTICS;
-    public static final ForgeConfigSpec.IntValue ACOUSTICS_REVERB, ACOUSTICS_QUALITY;
+    public static final ForgeConfigSpec.IntValue ACOUSTICS_REVERB, ACOUSTICS_QUALITY, ACOUSTICS_MUFFLE;
     public static final ForgeConfigSpec.IntValue SHARPNESS;
     public static final ForgeConfigSpec.IntValue SHADER_TINT_RED, SHADER_TINT_GREEN, SHADER_TINT_BLUE;
     public static final ForgeConfigSpec.ConfigValue<String> UPSCALER;
@@ -58,6 +58,10 @@ public final class NestworldConfig {
         ACOUSTICS_REVERB = builder
                 .comment("Strength of the room reverb in percent (0 = only muffling by walls). The soundtrack may carry its own reverb.")
                 .defineInRange("acoustics_reverb", 60, 0, 100);
+        ACOUSTICS_MUFFLE = builder
+                .comment("How strongly walls muffle the screen sound, in percent (100 = default; higher makes the difference between",
+                        "materials and the effect of a wall stronger, 0 = walls do not muffle).")
+                .defineInRange("acoustics_muffle", 100, 0, 200);
         ACOUSTICS_QUALITY = builder
                 .comment("Acoustic ray quality: 1 fast, 2 balanced, 3 detailed (more rays and bounces).")
                 .defineInRange("acoustics_quality", 2, 1, 3);

@@ -85,7 +85,7 @@ public class AcousticSolverCheck {
     // 2. one stone wall between speaker and listener
     Grid wall = new Grid(); wall.box(-40, -1, -40, 40, -1, 40, 1.0, 0.3); wall.box(-20, 0, 4, 20, 10, 4, 1.0, 0.9);
     var d2 = direct(wall, origin, listener);
-    c("wall: muffled", d2.hfL() < 0.1 && d2.gainL() < 0.85 && d2.gainL() > 0.5, d2.toString());
+    c("wall: muffled", d2.hfL() < 0.3 && d2.gainL() < 0.85 && d2.gainL() > 0.4, d2.toString());
     // 3. doorway in the wall in line with the speaker
     wall.box(8, 0, 4, 9, 3, 4, 0, 0); wall.cells.keySet().removeIf(k -> false);
     for (int x = 8; x <= 9; x++) for (int y = 0; y <= 3; y++) wall.cells.remove(Grid.key(x, y, 4));
@@ -108,6 +108,19 @@ public class AcousticSolverCheck {
     Grid thick = new Grid(); thick.box(-20, 0, 2, 20, 10, 12, 1.0, 0.9);
     var d6 = direct(thick, origin, listener);
     c("thick wall: filter floor", d6.hfL() >= 0.0199 && d6.gainL() > 0.3, d6.toString());
+    // 6b. the material of the wall must be clearly audible: one block of each, same geometry
+    double[][] mats = {{0.12, 0.7}, {0.55, 0.45}, {1.0, 0.92}, {1.8, 0.05}};   // glass, wood, stone, wool
+    String[] names = {"glass", "wood", "stone", "wool"};
+    float[] gains = new float[4], hfs = new float[4];
+    for (int i = 0; i < 4; i++) {
+      Grid one = new Grid(); one.box(-40, -1, -40, 40, -1, 40, 1.0, 0.3); one.box(-20, 0, 4, 20, 10, 4, mats[i][0], mats[i][1]);
+      var d = direct(one, origin, listener); gains[i] = d.gainL(); hfs[i] = d.hfL();
+    }
+    System.out.println("     one block: " + java.util.Arrays.toString(names) + " gain " + java.util.Arrays.toString(gains) + " hf " + java.util.Arrays.toString(hfs));
+    boolean ordered = true;
+    for (int i = 0; i < 3; i++) ordered &= gains[i] - gains[i + 1] >= 0.08f && hfs[i] > hfs[i + 1];
+    c("materials: glass > wood > stone > wool, gain steps >= 0.08", ordered, "");
+    c("materials: glass is nearly clear, stone clearly muffled", hfs[0] > 0.7 && hfs[2] < 0.3 && hfs[0] / hfs[2] > 3, "");
     // 7. result record validity
     var res = new AcousticResult(d2.gainL(), d2.hfL(), d2.gainR(), d2.hfR(), rs.sendGain(), rs.sendHf(), rs.decayTime());
     c("AcousticResult valid", res.isValid() && AcousticResult.OPEN.isValid() && !new AcousticResult(Float.NaN, 1, 1, 1, 0, 1, 1).isValid(), "");
