@@ -26,11 +26,16 @@ import java.util.zip.ZipOutputStream;
  * The original pack is never modified. Any file that differs from the expected version stops the patch.
  */
 public final class BslPatch {
-    /** Block id (category 250-299 "others") given to the screen block in block.properties. */
+    /**
+     * Block id (category 250-299 "others") given to the screen block in block.properties. The screen's 125 light colours
+     * ({@code VideoScreenBlock.GLOW}) are the ids {@code BLOCK_ID * 100 + glow}, so block ids {@code BLOCK_ID} and
+     * {@code BLOCK_ID + 1} (glow 100..124) both belong to the screen.
+     */
     public static final int BLOCK_ID = 260;
+    public static final int GLOW_VALUES = 125;
     public static final String SUFFIX = "_NestworldVideo";
     public static final String MARKER = "shaders/nestworld_display.txt";
-    private static final String PATCH_VERSION = "2";
+    private static final String PATCH_VERSION = "3";
 
     /** SHA-256 of each file the patch edits, in BSL v10.1.1. */
     private static final Map<String, String> FILES = new LinkedHashMap<>();
@@ -39,6 +44,8 @@ public final class BslPatch {
         FILES.put("shaders/shaders.properties", "e36a82f25056f449610355104e960ce084a3b0713b1a319d6f799ffe513e2fb7");
         FILES.put("shaders/lib/settings.glsl", "6a40c3c05fde17e9225e83c970ef4e334774b4ffda44ae1396dd0b980fe9a947");
         FILES.put("shaders/program/gbuffers_block.glsl", "50ca6db3a79b1753415011e8b07f7f3617f22239cd754a7f43b7966bbbd67482");
+        FILES.put("shaders/program/shadow.glsl", "c0ffcfe2885f9ea9566f08236fd2d3a2d6163d7c049f8ceae2f595b5b82c9376");
+        FILES.put("shaders/lib/lighting/voxelColorFetch.glsl", "fe9f5015428acc2e258f68b512fb4cb445df6e872be5d26bfea86e0094ecd558");
         FILES.put("shaders/program/composite4.glsl", "1b68abbddc3c0e8b65da5979a0d96a7ef889b07cb1ac8047974ef5af08df84af");
         FILES.put("shaders/lang/en_US.lang", "bf10abc0143cd81b6b5ef60a6cff7fc0b87bd13b887b1660923d92fc64e07c25");
     }
@@ -106,21 +113,28 @@ public final class BslPatch {
     static Map<String, byte[]> patch(Map<String, byte[]> originals) throws PatchException {
         Map<String, byte[]> out = new LinkedHashMap<>();
 
-        edit(out, originals, "shaders/block.properties", (t, nl) -> t + nl + "# Nestworld Video: the video screen is its own material" + nl
-                + "block." + BLOCK_ID + "00=nestworldvideo:video_screen" + nl);
-
-        edit(out, originals, "shaders/shaders.properties", (t, nl) -> {
-            t = replaceOnce(t, "BLOOM_RADIUS BLOOM_STRENGTH BLOOM_CONTRAST DIRTY_LENS", "BLOOM_RADIUS BLOOM_STRENGTH BLOOM_CONTRAST DISPLAY_BRIGHTNESS DISPLAY_BLOOM DIRTY_LENS");
-            return replaceOnce(t, "BLOOM_RADIUS BLOOM_STRENGTH BLOOM_CONTRAST LENS_FLARE_STRENGTH", "BLOOM_RADIUS BLOOM_STRENGTH BLOOM_CONTRAST DISPLAY_BRIGHTNESS DISPLAY_BLOOM LENS_FLARE_STRENGTH");
+        edit(out, originals, "shaders/block.properties", (t, nl) -> {
+            StringBuilder b = new StringBuilder(t).append(nl).append("# Nestworld Video: the video screen is its own material; each light colour (glow) is its own id").append(nl);
+            for (int glow = 0; glow < GLOW_VALUES; glow++)
+                b.append("block.").append(BLOCK_ID * 100 + glow).append("=nestworldvideo:video_screen:glow=").append(glow).append(nl);
+            return b.toString();
         });
 
-        edit(out, originals, "shaders/lib/settings.glsl", (t, nl) -> replaceOnce(t,
+        edit(out, originals, "shaders/shaders.properties", (t, nl) -> {
+            t = replaceOnce(t, "BLOOM_RADIUS BLOOM_STRENGTH BLOOM_CONTRAST DIRTY_LENS", "BLOOM_RADIUS BLOOM_STRENGTH BLOOM_CONTRAST DISPLAY_BRIGHTNESS DISPLAY_BLOOM DISPLAY_LIGHT DIRTY_LENS");
+            return replaceOnce(t, "BLOOM_RADIUS BLOOM_STRENGTH BLOOM_CONTRAST LENS_FLARE_STRENGTH", "BLOOM_RADIUS BLOOM_STRENGTH BLOOM_CONTRAST DISPLAY_BRIGHTNESS DISPLAY_BLOOM DISPLAY_LIGHT LENS_FLARE_STRENGTH");
+        });
+
+        edit(out, originals, "shaders/lib/settings.glsl", (t, nl) -> replaceOnce(replaceOnce(t,
+                "//#define MULTICOLORED_BLOCKLIGHT" + nl,
+                "  #define MULTICOLORED_BLOCKLIGHT" + nl),
                 "  #define BLOOM_CONTRAST 0 //[-4 -3 -2 -1 0 1 2 3 4]" + nl,
                 "  #define BLOOM_CONTRAST 0 //[-4 -3 -2 -1 0 1 2 3 4]" + nl
                 + "  #define DISPLAY_BRIGHTNESS 100 //[25 50 60 70 80 90 100 110 120 130 140 150 200]" + nl
                 + "  #define DISPLAY_BLOOM 20 //[0 10 20 30 40 50 60 70 80 90 100 120 150]" + nl
-                + "//Nestworld Video: the screen writes a mask into colortex8 (free unless coloured blocklight is on) so its bloom can be scaled//" + nl
-                + "  #if DISPLAY_BLOOM != 100 && !defined MULTICOLORED_BLOCKLIGHT && !defined MCBL_SS" + nl
+                + "  #define DISPLAY_LIGHT 100 //[0 25 50 75 100 125 150 200 300]" + nl
+                + "//Nestworld Video: the screen writes a mask into colortex8 (free unless screen-space coloured light is on) so its bloom can be scaled//" + nl
+                + "  #if DISPLAY_BLOOM != 100 && !defined MCBL_SS" + nl
                 + "  #define NW_DISPLAY_MASK" + nl
                 + "  #endif" + nl));
 
@@ -128,7 +142,27 @@ public final class BslPatch {
                 + "option.DISPLAY_BRIGHTNESS=Video Screen Brightness (%)" + nl
                 + "option.DISPLAY_BRIGHTNESS.comment=Emitted light of Nestworld Video screens (100 = normal display brightness). BSL exposure and grading still apply." + nl
                 + "option.DISPLAY_BLOOM=Video Screen Bloom (%)" + nl
-                + "option.DISPLAY_BLOOM.comment=How much the video screens feed bloom. 20 = subtle, 100 = full, 0 = none. Requires MULTICOLORED_BLOCKLIGHT and MCBL_SS off." + nl);
+                + "option.DISPLAY_BLOOM.comment=How much the video screens feed bloom. 20 = subtle, 100 = full, 0 = none. Requires MCBL_SS off." + nl
+                + "option.DISPLAY_LIGHT=Video Screen Light (%)" + nl
+                + "option.DISPLAY_LIGHT.comment=Brightness of the coloured light the video screens give the room (needs Multicolored Blocklight). 0 = none." + nl);
+
+        // The voxel map holds 8 bits per block: BSL uses 1..99, the screen's light colours are 101..224 (100 + glow).
+        edit(out, originals, "shaders/program/shadow.glsl", (t, nl) -> replaceOnce(t,
+                "\tUpdateVoxelMap(gl_VertexID, blockData);" + nl,
+                "\t// Nestworld Video: the screen's light colour (block ids " + BLOCK_ID + "00..) goes into the voxel map as 100 + glow" + nl
+                + "\tint nwVoxelData = blockData;" + nl
+                + "\tif (blockID == " + BLOCK_ID + " || blockID == " + (BLOCK_ID + 1) + ") nwVoxelData = (blockData > 0 || blockID == " + (BLOCK_ID + 1) + ") ? 100 + (blockID - " + BLOCK_ID + ") * 100 + blockData : 0;" + nl
+                + "\tUpdateVoxelMap(gl_VertexID, nwVoxelData);" + nl));
+
+        edit(out, originals, "shaders/lib/lighting/voxelColorFetch.glsl", (t, nl) -> replaceOnce(t,
+                "\treturn emission;",
+                "\t// Nestworld Video: 5 x 5 x 5 levels of red, green and blue (100 + r * 25 + g * 5 + b), the colour of a lit screen tile" + nl
+                + "\tif (data >= 101 && data <= 224) {" + nl
+                + "\t\tuint nwIndex = data - 100;" + nl
+                + "\t\tfloat nwLevels[5] = float[5](0.0, 0.12, 0.3, 0.6, 1.0);" + nl
+                + "\t\temission = vec3(nwLevels[nwIndex / 25], nwLevels[(nwIndex / 5) % 5], nwLevels[nwIndex % 5]) * (4.0 * DISPLAY_LIGHT * 0.01);" + nl
+                + "\t}" + nl
+                + "\treturn emission;"));
 
         edit(out, originals, "shaders/program/composite4.glsl", (t, nl) -> {
             t = replaceOnce(t, "const bool colortex0MipmapEnabled = true;" + nl,
@@ -156,10 +190,10 @@ public final class BslPatch {
             t = replaceOnce(t, fragmentMain, DISPLAY_FUNCTIONS.replace("\n", nl) + nl + fragmentMain);
             // Dynamic video is not in the block atlas and has no parallax/normal maps.
             t = replaceOnce(t, "float skipParallax = float(blockID == 251);",
-                    "float skipParallax = float(blockID == 251 || blockID == " + BLOCK_ID + ");");
+                    "float skipParallax = float(blockID == 251 || NW_IS_DISPLAY(blockID));");
             t = replaceOnce(t, "\tif (endPortal < 0.5) {" + nl,
                     "\tfloat displayMask = 0.0;" + nl
-                    + "\tif (blockID == " + BLOCK_ID + ") {" + nl
+                    + "\tif (NW_IS_DISPLAY(blockID)) {" + nl
                     + "\t\t// Nestworld Video screen: self-emissive linear radiance; shared exposure and tonemap apply once." + nl
                     + "\t\tdisplayMask = 1.0;" + nl
                     + "\t\talbedo = vec4(NwDisplayColor(texture2D(texture, texCoord).rgb), 1.0);" + nl
@@ -207,6 +241,7 @@ public final class BslPatch {
      */
     private static final String DISPLAY_FUNCTIONS = """
             //Nestworld Video: self-emissive display///////////////////////////////////////////////////////////////////
+            #define NW_IS_DISPLAY(id) ((id) == 260 || (id) == 261)
             vec3 NwDisplayColor(vec3 video) {
                 vec3 linearVideo = pow(clamp(video, vec3(0.0), vec3(1.0)), vec3(2.2));
                 return linearVideo * (0.35 * DISPLAY_BRIGHTNESS * 0.01);

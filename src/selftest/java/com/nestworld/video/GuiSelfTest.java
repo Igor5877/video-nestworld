@@ -185,7 +185,7 @@ public class GuiSelfTest {
                                     ModBlocks.VIDEO_SCREEN_BLOCK.get().defaultBlockState().setValue(VideoScreenBlock.FACING, Direction.NORTH), 2);
                         be.assemble();
                         boolean longVideo = Boolean.getBoolean("nestworldvideo.guiacoustics") || Boolean.getBoolean("nestworldvideo.guiglow") || Boolean.getBoolean("nestworldvideo.guidisplay");   // the acoustics test must keep playing for a while
-                        be.setVideo(new Video("toon", "", longVideo ? (Boolean.getBoolean("nestworldvideo.guidisplay") ? "file:///tmp/claude-0/chart/chart.m3u8" : "file:///tmp/claude-0/spike/media/long.m3u8") : "file:///tmp/claude-0/toon/toon.m3u8", "", ""));
+                        be.setVideo(new Video("toon", "", longVideo ? (Boolean.getBoolean("nestworldvideo.guidisplay") || Boolean.getBoolean("nestworldvideo.guiglow") ? "file:///tmp/claude-0/chart/chart.m3u8" : "file:///tmp/claude-0/spike/media/long.m3u8") : "file:///tmp/claude-0/toon/toon.m3u8", "", ""));
                         if (longVideo) be.setRepeat(true);
                         be.play();
                         var source = mc.getSingleplayerServer().createCommandSourceStack().withSuppressedOutput();
@@ -230,7 +230,7 @@ public class GuiSelfTest {
                 if (ticks == 20) { mc.options.hideGui = true; mc.getSingleplayerServer().execute(() -> {
                     var server = mc.getSingleplayerServer();
                     var src = server.createCommandSourceStack().withSuppressedOutput();
-                    for (String cmd : concat(new String[]{"time set midnight", "weather clear", "tp @a 1.5 -60 -1 0 28"}, hall("minecraft:stone_bricks")))
+                    for (String cmd : concat(new String[]{"time set midnight", "weather clear", "tp @a 1.5 -60 -1 0 28", "setblock 2 -60 2 minecraft:soul_lantern", "setblock 0 -60 2 minecraft:redstone_torch"}, hall("minecraft:stone_bricks")))
                         server.getCommands().performPrefixedCommand(src, cmd);
                 }); }
                 if (ticks == 60) com.nestworld.video.NestworldConfig.SCREEN_GLOW.set(0);

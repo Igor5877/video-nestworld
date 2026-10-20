@@ -1,32 +1,17 @@
 {
   "variants": {
-    "facing=north,lit=false": {
+    "facing=north": {
       "model": "nestworldvideo:block/video_screen"
     },
-    "facing=north,lit=true": {
-      "model": "nestworldvideo:block/video_screen"
-    },
-    "facing=south,lit=false": {
+    "facing=south": {
       "model": "nestworldvideo:block/video_screen",
       "y": 180
     },
-    "facing=south,lit=true": {
-      "model": "nestworldvideo:block/video_screen",
-      "y": 180
-    },
-    "facing=west,lit=false": {
+    "facing=west": {
       "model": "nestworldvideo:block/video_screen",
       "y": 270
     },
-    "facing=west,lit=true": {
-      "model": "nestworldvideo:block/video_screen",
-      "y": 270
-    },
-    "facing=east,lit=false": {
-      "model": "nestworldvideo:block/video_screen",
-      "y": 90
-    },
-    "facing=east,lit=true": {
+    "facing=east": {
       "model": "nestworldvideo:block/video_screen",
       "y": 90
     }

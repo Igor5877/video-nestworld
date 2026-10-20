@@ -53,12 +53,12 @@ public final class NestworldConfig {
                         "Softer values blend the left and right speaker and keep the panning angle small when you stand close.")
                 .defineInRange("spatial_softness", 60, 0, 100);
         SCREEN_GLOW = builder
-                .comment("Colour light from a playing screen onto the surfaces around it, following the picture (lighter or darker, and its colours).",
-                        "Only drawn while a shader pack is on (Oculus/Iris): vanilla lighting has no coloured light.",
-                        "0 off, 1 low (reach 6 blocks), 2 medium (10), 3 high (15). More reach means more surfaces to draw.")
+                .comment("Colour light from a playing screen, following the picture: every lit tile of the screen carries the colour of its part of the picture",
+                        "and the shader pack (patched BSL with Multicolored Blocklight) spreads it through the room. Only under a shader pack (Oculus/Iris).",
+                        "0 off, 1..3 how finely the picture is divided into colours (8x5, 16x9, 32x18 cells).")
                 .defineInRange("screen_glow", 2, 0, 3);
         SCREEN_GLOW_STRENGTH = builder
-                .comment("Brightness of that colour light in percent.")
+                .comment("Brightness of that colour light in percent (how bright a picture has to be to give full light).")
                 .defineInRange("screen_glow_strength", 80, 0, 100);
         ACOUSTICS = builder
                 .comment("Room acoustics for the screen sound (needs the FFmpeg decoder with spatial audio): walls muffle the sound,",

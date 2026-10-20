@@ -322,6 +322,11 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
     private void syncToClient() {
         syncToClient(null);
     }
+    /** Every {@code step}-th tile in each direction of a screen of {@code tiles} tiles is a light source. */
+    public static int lightStep(int tiles) {
+        return tiles <= MAX_LIGHT_SOURCES ? 1 : (int) Math.ceil(Math.sqrt(tiles / (double) MAX_LIGHT_SOURCES));
+    }
+
     /** A playing screen lights its surroundings (turned off by content config {@code screen.light_when_playing}). */
     public void updateLight() {
         if (level == null || level.isClientSide || !isMaster()) return;
@@ -330,7 +335,7 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         lightApplied = want;
         Direction right = getBlockState().getValue(VideoScreenBlock.FACING).getCounterClockWise();
         int count = screenCols * screenRows;
-        int step = count <= MAX_LIGHT_SOURCES ? 1 : (int) Math.ceil(Math.sqrt(count / (double) MAX_LIGHT_SOURCES));
+        int step = lightStep(count);
         for (int row = 0; row < screenRows; row++) for (int col = 0; col < screenCols; col++) {
             BlockPos pos = worldPosition.relative(right, col).above(row);
             if (!level.hasChunkAt(pos)) continue;
