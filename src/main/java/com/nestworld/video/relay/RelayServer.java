@@ -72,7 +72,15 @@ public final class RelayServer {
     private ScheduledExecutorService maintenance;
     private final AtomicLong originBytes = new AtomicLong(), servedBytes = new AtomicLong(), hits = new AtomicLong(), misses = new AtomicLong();
 
+    /** Whether playlists may point at private/loopback addresses. */
+    private final java.util.function.BooleanSupplier allowPrivateOrigins;
+
     public RelayServer(String bind, int port, int cacheMb, int prefetchSegments) {
+        this(bind, port, cacheMb, prefetchSegments, () -> RelayConfig.ALLOW_PRIVATE_ORIGINS.get());
+    }
+
+    public RelayServer(String bind, int port, int cacheMb, int prefetchSegments, java.util.function.BooleanSupplier allowPrivateOrigins) {
+        this.allowPrivateOrigins = allowPrivateOrigins;
         this.bind = bind; this.port = port;
         this.maxCacheBytes = Math.max(16, cacheMb) * 1024L * 1024L;
         this.prefetchSegments = Math.max(0, prefetchSegments);
@@ -101,7 +109,8 @@ public final class RelayServer {
     }
 
     public boolean isRunning() { return server != null; }
-    public int port() { return port; }
+    /** The port it listens on (the one the system picked when started with port 0). */
+    public int port() { return server != null ? server.getAddress().getPort() : port; }
 
     /** Path (starting with /r/) that clients use instead of {@code originUrl}. */
     public String pathFor(String originUrl) {
@@ -265,7 +274,7 @@ public final class RelayServer {
             String current = url;
             for (int hop = 0; hop <= MAX_REDIRECTS; hop++) {
                 // A playlist is data from a third party: never let it send the server into a private network.
-                if (!RelayConfig.ALLOW_PRIVATE_ORIGINS.get()) com.nestworld.video.security.UrlSafety.requirePublic(current);
+                if (!allowPrivateOrigins.getAsBoolean()) com.nestworld.video.security.UrlSafety.requirePublic(current);
                 else if (!current.startsWith("http")) throw new IOException("only http(s) is allowed");
                 HttpRequest request = HttpRequest.newBuilder(URI.create(current)).timeout(Duration.ofSeconds(45))
                         .header("User-Agent", USER_AGENT).header("Referer", source.referer).GET().build();

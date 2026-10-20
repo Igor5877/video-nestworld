@@ -12,6 +12,7 @@ public final class NestworldConfig {
     public static final ForgeConfigSpec.ConfigValue<String> DECODER;
     public static final ForgeConfigSpec.BooleanValue SPATIAL_AUDIO;
     public static final ForgeConfigSpec.BooleanValue MIPMAPS;
+    public static final ForgeConfigSpec.BooleanValue STREAM_CACHE;
     public static final ForgeConfigSpec.BooleanValue AUTO_VSYNC, DEBUG_STATS;
     public static final ForgeConfigSpec.IntValue SPATIAL_SOFTNESS;
     public static final ForgeConfigSpec.BooleanValue ACOUSTICS;
@@ -48,6 +49,10 @@ public final class NestworldConfig {
                 .comment("FFmpeg decoder only: play the sound from the screen in 3D (stereo is split into a left and a right",
                         "speaker at the screen's edges). Takes effect for streams started after the change.")
                 .define("spatial_audio", true);
+        STREAM_CACHE = builder
+                .comment("Keep the HLS stream in memory on this computer (FFmpeg decoder): the part already played stays (jumping back",
+                        "is instant) and the next 30 s or so are downloaded ahead (jumping forward is instant). Up to 192 MB of memory.")
+                .define("stream_cache", true);
         SPATIAL_SOFTNESS = builder
                 .comment("How gentle the stereo image of the screen is, 0 (wide, strongly panned) to 100 (almost mono).",
                         "Softer values blend the left and right speaker and keep the panning angle small when you stand close.")

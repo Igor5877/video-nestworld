@@ -101,7 +101,7 @@ public final class FfmpegDisplay extends Display {
             }
             if (closed) return;
             String referer = origin(source);
-            String target = HlsVariants.pick(source, NestworldConfig.MAX_VIDEO_HEIGHT.get(), USER_AGENT, referer);
+            String target = LocalStreamCache.wrap(HlsVariants.pick(source, NestworldConfig.MAX_VIDEO_HEIGHT.get(), USER_AGENT, referer));
             VideoDecoder created = FfmpegLibs.newDecoder();
             decoder = created;
             openedNanos = System.nanoTime();
@@ -294,6 +294,9 @@ public final class FfmpegDisplay extends Display {
             long took = (now - seekStartedNanos) / 1000L;
             leadUs = Math.max(300_000L, Math.min(8_000_000L, (leadUs * 6 + (took + 150_000L) * 4) / 10));
             seekStartedNanos = 0;
+            if (NestworldConfig.DEBUG_STATS.get())
+                LOGGER.info("Nestworld Video: seek ready in {}ms (aiming {}ms ahead next time), first frame {}ms, shared timeline {}ms",
+                        took / 1000, leadUs / 1000, head.ptsUs / 1000, timelineUs() == Long.MIN_VALUE ? -1 : timelineUs() / 1000);
         }
         long shared = timelineUs();
         if (shared != Long.MIN_VALUE && !eos) {

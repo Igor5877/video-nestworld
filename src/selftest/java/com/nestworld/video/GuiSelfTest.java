@@ -185,7 +185,7 @@ public class GuiSelfTest {
                                     ModBlocks.VIDEO_SCREEN_BLOCK.get().defaultBlockState().setValue(VideoScreenBlock.FACING, Direction.NORTH), 2);
                         be.assemble();
                         boolean longVideo = Boolean.getBoolean("nestworldvideo.guiacoustics") || Boolean.getBoolean("nestworldvideo.guiglow") || Boolean.getBoolean("nestworldvideo.guidisplay");   // the acoustics test must keep playing for a while
-                        be.setVideo(new Video("toon", "", longVideo ? (Boolean.getBoolean("nestworldvideo.guidisplay") || Boolean.getBoolean("nestworldvideo.guiglow") ? "file:///tmp/claude-0/chart/chart.m3u8" : "file:///tmp/claude-0/spike/media/long.m3u8") : "file:///tmp/claude-0/toon/toon.m3u8", "", ""));
+                        be.setVideo(new Video("toon", "", System.getProperty("nestworldvideo.guiurl") != null ? System.getProperty("nestworldvideo.guiurl") : longVideo ? (Boolean.getBoolean("nestworldvideo.guidisplay") || Boolean.getBoolean("nestworldvideo.guiglow") ? "file:///tmp/claude-0/chart/chart.m3u8" : "file:///tmp/claude-0/spike/media/long.m3u8") : "file:///tmp/claude-0/toon/toon.m3u8", "", ""));
                         if (longVideo) be.setRepeat(true);
                         be.play();
                         var source = mc.getSingleplayerServer().createCommandSourceStack().withSuppressedOutput();
@@ -237,6 +237,10 @@ public class GuiSelfTest {
                 if (ticks == 200) { shotPrefix = "glow-off"; capture = 1; }
                 if (ticks == 210) com.nestworld.video.NestworldConfig.SCREEN_GLOW.set(2);
                 if (ticks == 320) { shotPrefix = "glow-mid"; capture = 1; }
+                if (ticks == 250 || ticks == 290) mc.getSingleplayerServer().execute(() -> {   // jumps of +10 s and -10 s
+                    if (mc.getSingleplayerServer().overworld().getBlockEntity(ORIGIN) instanceof com.nestworld.video.block.VideoScreenBlockEntity jump)
+                        jump.seekBy(ticks == 250 ? 10_000 : -10_000, null);
+                });
                 if (ticks == 330) mc.getSingleplayerServer().execute(() -> {   // paused on a frame: the light has to stay
                     if (mc.getSingleplayerServer().overworld().getBlockEntity(ORIGIN) instanceof com.nestworld.video.block.VideoScreenBlockEntity paused) paused.pause();
                 });
