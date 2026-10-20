@@ -122,7 +122,7 @@ public final class BslPatch {
                 "  #define BLOOM_CONTRAST 0 //[-4 -3 -2 -1 0 1 2 3 4]" + nl
                 + "  #define DISPLAY_BRIGHTNESS 100 //[25 50 60 70 80 90 100 110 120 130 140 150 200]" + nl
                 + "  #define DISPLAY_BLOOM 20 //[0 10 20 30 40 50 60 70 80 90 100 120 150]" + nl
-                + "  #define DISPLAY_LIGHT 100 //[0 25 50 75 100 125 150 200 300]" + nl
+                + "  #define DISPLAY_LIGHT 100 //[0 25 50 75 100 125 150 200 300 400]" + nl
                 + "//Nestworld Video: the screen writes a mask into colortex8 (free unless screen-space coloured light is on) so its bloom can be scaled//" + nl
                 + "  #if DISPLAY_BLOOM != 100 && !defined MCBL_SS" + nl
                 + "  #define NW_DISPLAY_MASK" + nl
@@ -273,7 +273,7 @@ public final class BslPatch {
                     }
                     light += sum * (w * h / 40.0 / 3.14159) * visible * (1.0 - smoothstep(0.6 * range, range, dist));
                 }
-                light *= DISPLAY_LIGHT * 0.01;
+                light *= DISPLAY_LIGHT * 0.03;   // 100 = clearly visible in a dark room
                 #endif
                 return light;
             }
