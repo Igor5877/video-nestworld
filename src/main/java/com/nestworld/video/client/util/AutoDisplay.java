@@ -13,6 +13,7 @@ final class AutoDisplay extends Display {
     private final String url, source;
     private boolean fellBack;
     private boolean playing = true;
+    private java.util.function.LongSupplier timeline;
     private int volume = 100;
     private double spatial = 1.0;
 
@@ -37,6 +38,7 @@ final class AutoDisplay extends Display {
         delegate.setVolume(volume);
         delegate.applySpatialVolume(spatial);
         delegate.setPlaying(playing);
+        if (timeline != null) delegate.setTimeline(timeline);
         if (old != null) {
             try { old.release(); } catch (RuntimeException ignored) { /* already failed */ }
         }
@@ -79,5 +81,6 @@ final class AutoDisplay extends Display {
     @Override public boolean hasMipmaps() { return delegate.hasMipmaps(); }
     @Override public long frameSerial() { return delegate.frameSerial(); }
     @Override public void setPlaybackRate(double rate) { delegate.setPlaybackRate(rate); }
+    @Override public void setTimeline(java.util.function.LongSupplier timelineMs) { this.timeline = timelineMs; delegate.setTimeline(timelineMs); }
     @Override public void release() { delegate.release(); }
 }

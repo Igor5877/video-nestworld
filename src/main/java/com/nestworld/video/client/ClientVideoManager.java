@@ -60,6 +60,11 @@ public class ClientVideoManager {
             }
             Display display = Display.create(url, source);
             display.syncPosition(screenPosition(pos));
+            // A start or a jump waits on the first frame for the shared timeline instead of starting early and jumping again.
+            display.setTimeline(() -> {
+                var level = Minecraft.getInstance().level;
+                return level != null && level.getBlockEntity(pos) instanceof VideoScreenBlockEntity s ? s.getTimelinePositionMs() : Long.MIN_VALUE;
+            });
             activeDisplays.put(pos, display);
         } catch (RuntimeException exception) {
             com.mojang.logging.LogUtils.getLogger().warn("Unable to start video at {}", pos, exception);
@@ -155,7 +160,7 @@ public class ClientVideoManager {
     private long screenPosition(BlockPos pos) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level != null && mc.level.getBlockEntity(pos) instanceof VideoScreenBlockEntity screen)
-            return screen.getPlaybackPositionMs();
+            return screen.getTimelinePositionMs() >= 0 ? screen.getTimelinePositionMs() : screen.getPlaybackPositionMs();
         return 0;
     }
 
@@ -264,7 +269,7 @@ public class ClientVideoManager {
             if (current != null)
                 screen.setClientPlaybackAdvancing(current.isPlaying() && !current.isBuffering());
             if (current != null && current.needsInitialSync())
-                current.syncPosition(screen.getPlaybackPositionMs());
+                current.syncPosition(screen.getTimelinePositionMs() >= 0 ? screen.getTimelinePositionMs() : screen.getPlaybackPositionMs());
             long now = mc.level.getGameTime();
             if (current != null && screen.isPlaying() && !current.isBuffering()) {
                 Long lastRecord = lastHistoryRecords.get(pos);

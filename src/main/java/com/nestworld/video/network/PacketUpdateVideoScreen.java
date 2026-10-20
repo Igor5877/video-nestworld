@@ -30,7 +30,7 @@ public class PacketUpdateVideoScreen {
         this.title = title;
         this.isPlaying = isPlaying;
         this.stopped = stopped;
-        this.positionMs = Math.max(0, positionMs);
+        this.positionMs = positionMs;   // below 0 while the screen counts down to a start
         this.serverMs = serverMs;
         this.autoNext = autoNext; this.repeat = repeat; this.nextCancelled = nextCancelled;
         this.relayUrl = relayUrl == null ? "" : relayUrl;

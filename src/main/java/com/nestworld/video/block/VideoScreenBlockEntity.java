@@ -52,6 +52,12 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
     private long playbackPositionMs;
     /** Server: {@link SyncClock#nowMs()} at which the playing video was at 0 ms (real time, not game ticks). */
     private long playbackStartedMs = Long.MIN_VALUE;
+    /**
+     * When the viewers have to open the stream first (a start after Stop, the next episode, a repeat, nobody watching
+     * yet), the video starts this much later on the shared timeline: everyone opens it, waits on the first frame and
+     * starts together from the beginning instead of jumping in late.
+     */
+    private static final long START_DELAY_MS = 2500;
     /** Client: the shared timeline was at {@code timelinePositionMs} when the server's clock read {@code timelineServerMs}. */
     private long timelinePositionMs, timelineServerMs = Long.MIN_VALUE;
     /** Client monotonic clock anchor; unlike game time it advances while video frames render. */
@@ -215,7 +221,9 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
     public void play() {
         if (!currentVideoUrl.isBlank()) {
             refreshPlaybackPosition();
-            playbackStartedMs = SyncClock.nowMs() - playbackPositionMs;
+            boolean opening = stopped || (level instanceof net.minecraft.server.level.ServerLevel server
+                    && CinemaMod.viewerSnapshot(server, worldPosition).count() == 0);
+            playbackStartedMs = SyncClock.nowMs() - playbackPositionMs + (opening ? START_DELAY_MS : 0);
             isPlaying = true; stopped = false; syncToClient();
         }
     }
@@ -228,7 +236,7 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         if (!isMaster() || !isPlaying || !currentVideoUrl.equals(endedUrl)) return;
         Video next = null;
         if (repeat) {
-            playbackPositionMs = 0; playbackStartedMs = SyncClock.nowMs();
+            playbackPositionMs = 0; playbackStartedMs = SyncClock.nowMs() + START_DELAY_MS;
             syncToClient();
             return;
         }
@@ -236,7 +244,7 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
             next = NextEpisode.find(CinemaMod.videoConfig.getCategories(), endedUrl);
         if (next == null) { stop(); return; }
         currentVideoUrl = next.getUrl(); currentVideoTitle = next.getTitle(); nextCancelled = false;
-        playbackPositionMs = 0; playbackStartedMs = SyncClock.nowMs();
+        playbackPositionMs = 0; playbackStartedMs = SyncClock.nowMs() + START_DELAY_MS;
         isPlaying = true; stopped = false; syncToClient();
     }
     public void setAutoNext(boolean value) { autoNext = value; if (value) nextCancelled = false; syncToClient(); }
@@ -321,18 +329,20 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
      * so it is what decoders are held to.
      */
     public long getTimelinePositionMs() {
-        if (!isPlaying || timelineServerMs == Long.MIN_VALUE) return -1;
-        return Math.max(0, timelinePositionMs + SyncClock.serverNowMs() - timelineServerMs);
+        if (!isPlaying || timelineServerMs == Long.MIN_VALUE) return Long.MIN_VALUE;
+        return timelinePositionMs + SyncClock.serverNowMs() - timelineServerMs;   // below 0 while counting down to a start
     }
-    /** Server: the timeline position and the server clock reading it belongs to (for a pulse to a viewer). */
+    /** Server: the timeline position (below 0 while counting down to a start) and the server clock reading it belongs to. */
     public long[] timelineNow() {
+        long now = SyncClock.nowMs();
+        if (isPlaying && playbackStartedMs != Long.MIN_VALUE) return new long[]{now - playbackStartedMs, now};
         refreshPlaybackPosition();
-        return new long[]{playbackPositionMs, SyncClock.nowMs()};
+        return new long[]{playbackPositionMs, now};
     }
     /** Client: the server's periodic word on where the timeline is. */
     public void applyClock(long positionMs, long serverMs) {
         if (!isPlaying) return;
-        timelinePositionMs = Math.max(0, positionMs); timelineServerMs = serverMs;
+        timelinePositionMs = positionMs; timelineServerMs = serverMs;
     }
     private void syncToClient() {
         syncToClient(null);
@@ -365,8 +375,9 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         if (level == null || level.isClientSide) return;
         updateLight();
         updateBlock();
+        long[] timeline = timelineNow();
         var packet = new PacketUpdateVideoScreen(worldPosition, currentVideoUrl, currentVideoTitle, isPlaying, stopped,
-                getPlaybackPositionMs(), SyncClock.nowMs(), autoNext, repeat, nextCancelled, currentRelayUrl(), currentAdult());
+                timeline[0], timeline[1], autoNext, repeat, nextCancelled, currentRelayUrl(), currentAdult());
         boolean sentToExtra = false;
         for (Player player : level.players()) if (player instanceof ServerPlayer serverPlayer
                 && serverPlayer.distanceToSqr(worldPosition.getX() + .5, worldPosition.getY() + .5,
@@ -387,11 +398,10 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         this.relayUrl = relayUrl == null ? "" : relayUrl;
         this.autoNext = autoNext; this.repeat = repeat; this.nextCancelled = nextCancelled;
         currentVideoUrl = url; currentVideoTitle = title; isPlaying = playing; this.stopped = stopped;
-        playbackPositionMs = Math.max(0, positionMs);
         // The shared timeline keeps advancing on the server's clock, also while this client's decoder buffers.
-        timelinePositionMs = playbackPositionMs;
+        timelinePositionMs = positionMs;
         timelineServerMs = playing ? serverMs : Long.MIN_VALUE;
-        if (playing) playbackPositionMs = getTimelinePositionMs();   // the packet took a moment to arrive
+        playbackPositionMs = Math.max(0, playing ? getTimelinePositionMs() : positionMs);   // the packet took a moment to arrive
         playbackStartedNanos = level != null && level.isClientSide && playing
                 ? System.nanoTime() - playbackPositionMs * 1_000_000L
                 : Long.MIN_VALUE;

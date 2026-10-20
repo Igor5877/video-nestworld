@@ -290,6 +290,26 @@ public final class FfmpegDisplay extends Display {
         boolean enoughVideo = queuedFrames >= Math.min(3, maxFrames) || eos;
         boolean enoughAudio = !useAudio || output.queuedUs() >= 150_000L || eos || now - firstFrameWaitNanos > 3_000_000_000L;
         if (!enoughVideo || !enoughAudio) return;
+        if (seekStartedNanos != 0) {   // learn how far ahead to aim the next time
+            long took = (now - seekStartedNanos) / 1000L;
+            leadUs = Math.max(1_000_000L, Math.min(8_000_000L, (leadUs * 7 + (took + 500_000L) * 3) / 10));
+            seekStartedNanos = 0;
+        }
+        long shared = timelineUs();
+        if (shared != Long.MIN_VALUE && !eos) {
+            // Hold the first frame until the shared timeline reaches it, so everyone starts together.
+            if (shared < head.ptsUs - 40_000L) return;
+            if (shared > head.ptsUs + 250_000L) {
+                // Behind it: far behind means aim further ahead; a little behind means skip what has already passed.
+                if (shared - head.ptsUs > SEEK_DRIFT_US) { seekTo(shared + leadUs); return; }
+                synchronized (lock) {
+                    while (!frames.isEmpty() && frames.peek().ptsUs < shared) pool.add(frames.poll());
+                    lock.notifyAll();
+                }
+                if (output != null) output.discardBefore(shared);
+                return;
+            }
+        }
         started = true;
         seekTargetUs = -1;
         firstFrameWaitNanos = 0;
@@ -454,8 +474,20 @@ public final class FfmpegDisplay extends Display {
         synchronized (lock) { head = frames.peek(); }
         long current = started ? mediaTimeUs() : head != null ? head.ptsUs : 0;
         if (Math.abs(current - target) <= SEEK_DRIFT_US) return;
-        seekTo(target);
+        // While playing, the shared timeline moves on during the seek: aim ahead of it and wait for it on the first frame.
+        seekTo(playing && timelineUs() >= 0 ? target + leadUs : target);
     }
+
+    /** The shared timeline (see {@link #setTimeline}) in microseconds, below 0 while counting down to a start, Long.MIN_VALUE if unknown. */
+    private volatile java.util.function.LongSupplier timeline;
+    @Override public void setTimeline(java.util.function.LongSupplier timelineMs) { timeline = timelineMs; }
+    private long timelineUs() {
+        java.util.function.LongSupplier t = timeline;
+        long ms = t == null ? Long.MIN_VALUE : t.getAsLong();
+        return ms == Long.MIN_VALUE ? Long.MIN_VALUE : ms * 1000L;
+    }
+    /** How long a seek takes until there is enough to start (learned), and when the current one began. */
+    private long leadUs = 2_500_000L, seekStartedNanos;
 
     private long watchMediaUs = -1, watchSinceNanos;
     /**
@@ -478,6 +510,7 @@ public final class FfmpegDisplay extends Display {
 
     private void seekTo(long target) {
         seekTargetUs = target;
+        seekStartedNanos = System.nanoTime();
         int generation = decoder.seek(target);
         expectedGeneration = generation;
         synchronized (lock) {

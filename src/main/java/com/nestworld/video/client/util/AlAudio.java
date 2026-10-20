@@ -132,6 +132,19 @@ final class AlAudio implements Runnable {
         }
     }
 
+    /** Drops buffered chunks that end before {@code ptsUs} (while the video waits to start, so the decoder is not blocked). */
+    void discardBefore(long ptsUs) {
+        synchronized (lock) {
+            while (!queue.isEmpty()) {
+                Chunk c = queue.peek();
+                long durationUs = c.pcm.remaining() * 1_000_000L / ((long) sampleRate * bytesPerFrame);
+                if (c.ptsUs + durationUs >= ptsUs) break;
+                queue.poll(); queuedUs -= durationUs;
+            }
+            lock.notifyAll();
+        }
+    }
+
     /** Drops everything buffered and ignores chunks older than the new generation. */
     void flush(int newGeneration) {
         synchronized (lock) {
