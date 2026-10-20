@@ -87,7 +87,9 @@ final class AlAudio implements Runnable {
     int underruns() { return underruns; }
     private volatile int underruns;
     private boolean wasDry;
-    void setGain(float value) { gain = Math.max(0f, Math.min(1f, value)); }
+    /** Up to {@value #MAX_GAIN}: the menu's volume goes to 200%. */
+    void setGain(float value) { gain = Math.max(0f, Math.min(MAX_GAIN, value)); }
+    private static final float MAX_GAIN = 2f;
     /** Playback speed (OpenAL pitch): the clock counts played samples, so it follows by itself. */
     private volatile float pitch = 1f;
     void setPitch(float value) { pitch = Math.max(0.9f, Math.min(1.1f, value)); }
@@ -175,6 +177,7 @@ final class AlAudio implements Runnable {
         try {
             for (int s = 0; s < sourceCount; s++) {
                 sources[s] = AL10.alGenSources();
+                AL10.alSourcef(sources[s], AL10.AL_MAX_GAIN, MAX_GAIN);   // OpenAL caps a source at 1 unless told otherwise
                 for (int i = 0; i < BUFFER_COUNT; i++) buffers[s][i] = AL10.alGenBuffers();
                 if (spatial) {
                     AL10.alSourcei(sources[s], AL10.AL_SOURCE_RELATIVE, AL10.AL_FALSE);
@@ -284,7 +287,11 @@ final class AlAudio implements Runnable {
                     clockStampNanos = System.nanoTime();
                     clockUs = baseUs + played * 1_000_000L / sampleRate;
                 }
-                check("loop");
+                // The error flag belongs to the context, which Minecraft's sound thread shares: an error there can show up
+                // here. Only a run of errors means our own sources are broken.
+                int error = AL10.alGetError();
+                if (error == AL10.AL_NO_ERROR) loopErrors = 0;
+                else if (++loopErrors >= 20) throw new IllegalStateException("OpenAL error 0x" + Integer.toHexString(error) + " in loop");
                 try { Thread.sleep(5); } catch (InterruptedException e) { break; }
             }
         } catch (Throwable t) {
@@ -326,6 +333,7 @@ final class AlAudio implements Runnable {
     }
 
     private long chunkStartUs;
+    private int loopErrors;
 
     /** Merges queued decoder frames into one ~100 ms buffer; returns null when nothing usable is queued. */
     private ByteBuffer nextChunk() {

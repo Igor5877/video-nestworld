@@ -472,6 +472,7 @@ public final class FfmpegDisplay extends Display {
         if (streamInfo != null && pendingSyncUs >= 0 && decoder != null) applySync();
         // Playback must not depend on anyone looking at the screen: start the clock (and with it the sound) from the
         // client tick, and keep consuming frames while the renderer is not drawing this screen.
+        recoverAudio();
         maybeStart();
         if (started && System.nanoTime() - lastRenderNanos > 150_000_000L) discardDueFrames();
         trackEndStall();
@@ -479,6 +480,34 @@ public final class FfmpegDisplay extends Display {
         watchdog();
         diagnose();
         stats();
+    }
+
+    /**
+     * Minecraft restarted its sound engine (another output device chosen, F3+T, headphones plugged in): our sources went
+     * with the old OpenAL context and the video would go on silent. Open the sound again and jump to where the picture
+     * is, so sound and picture start together like after any seek.
+     */
+    private long audioRetryNanos;
+    private int audioRetries;
+    private void recoverAudio() {
+        AlAudio output = audio;
+        StreamInfo streamInfo = info;
+        if (output == null || output.isAvailable() || streamInfo == null || !streamInfo.hasAudio || decoder == null || audioRetries >= 5) return;
+        long now = System.nanoTime();
+        if (now - audioRetryNanos < 2_000_000_000L || org.lwjgl.openal.ALC10.alcGetCurrentContext() == 0L) return;
+        audioRetryNanos = now;
+        audioRetries++;
+        AlAudio fresh = new AlAudio(streamInfo.sampleRate, streamInfo.channels, NestworldConfig.SPATIAL_AUDIO.get(),
+                NestworldConfig.SPATIAL_SOFTNESS.get() / 200f);
+        if (!fresh.isAvailable()) return;
+        output.close();
+        fresh.setPitch((float) rate);
+        audio = fresh;
+        applySpatialVolume(spatial);
+        long position = mediaTimeUs(), shared = timelineUs();
+        long target = shared != Long.MIN_VALUE && playing ? Math.max(0, shared + leadUs) : position;
+        LOGGER.info("Nestworld Video: the sound output was restarted, reopening the sound at {}ms ({}/5)", target / 1000, audioRetries);
+        seekTo(target);
     }
 
     private void stats() {

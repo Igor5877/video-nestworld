@@ -250,6 +250,30 @@ public class GuiSelfTest {
                 if (ticks == 390) { System.out.println("NESTWORLD GUI TEST PASS: decoders " + com.nestworld.video.client.ClientVideoManager.getInstance().displays().size()); mc.stop(); }
                 return;
             }
+            if (Boolean.getBoolean("nestworldvideo.guisound")) {   // needs -Pguianime, a stream with sound (-Pguiurl) and ALSOFT_DRIVERS=null: volume above 100%, the sound engine restarted mid-video
+                if (ticks == 5) com.nestworld.video.NestworldConfig.DEBUG_STATS.set(true);
+                var display = com.nestworld.video.client.ClientVideoManager.getInstance().getDisplay(ORIGIN);
+                Object audio = display == null ? null : audioOrNull(display);
+                boolean sounding = audio != null && (boolean) call(audio, "isAvailable") && (boolean) call(audio, "isPlaying");
+                if (soundStep == 0 && sounding) { display.setVolume(200); soundStep = 1; soundTick = ticks; }
+                if (soundStep == 1 && ticks - soundTick == 40) {
+                    float gain = (float) read(audio, "gain");
+                    System.out.println("NESTWORLD SOUND: playing, gain at 200% = " + gain + ", clock " + call(audio, "clockUs"));
+                    if (gain < 1.5f) throw new AssertionError("volume 200% gives gain " + gain);
+                    display.setVolume(100);
+                    mc.getSoundManager().reload();   // like choosing another output device
+                    System.out.println("NESTWORLD SOUND: sound engine restarted");
+                    soundStep = 2; soundTick = ticks;
+                }
+                if (soundStep == 2 && ticks - soundTick == 200) {
+                    long clock = audio == null ? -1 : (long) call(audio, "clockUs");
+                    System.out.println("NESTWORLD SOUND: after restart available=" + (audio != null && (boolean) call(audio, "isAvailable")) + " playing=" + sounding + " clock=" + clock);
+                    if (!sounding || clock < 0) throw new AssertionError("the sound did not come back");
+                    System.out.println("NESTWORLD GUI TEST PASS"); mc.stop();
+                }
+                if (ticks == 1500) throw new AssertionError("the sound never started (step " + soundStep + ")");
+                return;
+            }
             if (Boolean.getBoolean("nestworldvideo.guiglow")) {   // needs -Pguianime: night, a stone hall, the playing screen; screenshots with the glow off and on
                 if (ticks == 5) com.nestworld.video.NestworldConfig.DEBUG_STATS.set(true);
                 if (ticks == 20) { mc.options.hideGui = true; mc.getSingleplayerServer().execute(() -> {
@@ -573,6 +597,19 @@ public class GuiSelfTest {
             if (ticks == 250) capture = 6;
             if (ticks == 270) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
         } catch (Throwable t) { failure = t; }
+    }
+
+    static int soundStep, soundTick;
+    /** The AlAudio of a playing FFmpeg display (through AutoDisplay), or null. */
+    private static Object audioOrNull(Object display) throws ReflectiveOperationException {
+        if (display.getClass().getSimpleName().equals("AutoDisplay")) display = read(display, "delegate");
+        return display == null || !display.getClass().getSimpleName().equals("FfmpegDisplay") ? null : read(display, "audio");
+    }
+    private static Object read(Object target, String name) throws ReflectiveOperationException {
+        var field = target.getClass().getDeclaredField(name); field.setAccessible(true); return field.get(target);
+    }
+    private static Object call(Object target, String name) throws ReflectiveOperationException {
+        var method = target.getClass().getDeclaredMethod(name); method.setAccessible(true); return method.invoke(target);
     }
 
     private static void set(Object target, String name, Object value) throws ReflectiveOperationException {
