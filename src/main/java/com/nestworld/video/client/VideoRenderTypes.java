@@ -72,8 +72,9 @@ public final class VideoRenderTypes extends RenderStateShard {
                             float x, float y, float w, float h, float uMax, float vMax, int light) {
         var matrix = poseStack.last().pose();
         boolean patched = patchedPackActive();   // the patched pack decodes the picture itself: no tint compensation
-        int r = patched ? 255 : 255 * NestworldConfig.SHADER_TINT_RED.get() / 100;
-        int g = patched ? 255 : 255 * NestworldConfig.SHADER_TINT_GREEN.get() / 100;
+        // The patched pack scales the picture itself and reads the visible part of the frame from red (u) and green (v).
+        int r = patched ? Math.round(Math.min(1f, uMax) * 255) : 255 * NestworldConfig.SHADER_TINT_RED.get() / 100;
+        int g = patched ? Math.round(Math.min(1f, vMax) * 255) : 255 * NestworldConfig.SHADER_TINT_GREEN.get() / 100;
         int b = patched ? 255 : 255 * NestworldConfig.SHADER_TINT_BLUE.get() / 100;
         consumer.vertex(matrix, x, y + h, 0).color(r, g, b, 255).uv(0, vMax).uv2(light).endVertex();
         consumer.vertex(matrix, x + w, y + h, 0).color(r, g, b, 255).uv(uMax, vMax).uv2(light).endVertex();

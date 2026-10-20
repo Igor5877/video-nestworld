@@ -29,7 +29,8 @@ import java.util.Map;
  * <p>Layout, one row per screen (RGBA8, read with texelFetch): texel 0 = (normal x + 1, normal z + 1, brightness setting
  * 0..255, 255 if the row is used); texel 1 = centre x (RG) and y (BA), texel 2 = centre z (RG), width and height in blocks (B, A); texel 3 =
  * (every how many tiles one gives block light, its light level, 0, 255); texels 4.. = the picture as {@value #COLS} x {@value #ROWS} sRGB cells, row 0 at the top. Positions are relative to the camera
- * of the frame, 16 bits each: {@code (value + 256) * 128}.
+ * of the frame, 16 bits each: {@code (value + 256) * 128}. The row after the screens holds the picture scaling settings
+ * (upscaler 0..2, sharpness 0..100, 255 if scaling is on, 255).
  */
 public final class ScreenGlow {
     public static final ResourceLocation TEXTURE = new ResourceLocation("nestworldvideo", "dynamic/screen_light");
@@ -47,7 +48,6 @@ public final class ScreenGlow {
 
     private final Map<BlockPos, State> states = new HashMap<>();
     private DynamicTexture texture;
-    private boolean uploadedEmpty;
 
     /** Only under a shader pack (Oculus/Iris): the vanilla pipeline does not read the texture. */
     public static boolean enabled() {
@@ -89,23 +89,21 @@ public final class ScreenGlow {
     public void upload(Vec3 camera) {
         Minecraft mc = Minecraft.getInstance();
         if (texture == null) {
-            texture = new DynamicTexture(WIDTH, MAX_SCREENS, true);
+            texture = new DynamicTexture(WIDTH, MAX_SCREENS + 1, true);
             mc.getTextureManager().register(TEXTURE, texture);
         }
         long now = System.nanoTime();
         states.values().removeIf(s -> now - s.lastSeen > 2_000_000_000L);   // a screen that went out of range or stopped
-        if (states.isEmpty() || !enabled()) {
-            if (uploadedEmpty) return;
-            texture.getPixels().fillRect(0, 0, WIDTH, MAX_SCREENS, 0);
-            texture.upload();
-            uploadedEmpty = true;
-            return;
-        }
+        NativeImage pixels = texture.getPixels();
+        pixels.fillRect(0, 0, WIDTH, MAX_SCREENS + 1, 0);
+        // Last row: the picture scaling settings, for the pack's own drawing of the screen.
+        String upscaler = NestworldConfig.UPSCALER.get();
+        put(pixels, 0, MAX_SCREENS, "anime4k".equals(upscaler) ? 2 : "edge".equals(upscaler) ? 1 : 0, NestworldConfig.SHARPNESS.get(),
+                NestworldConfig.SMOOTH_SCALING.get() ? 255 : 0, 255);
+        if (states.isEmpty() || !enabled()) { texture.upload(); return; }
         List<State> nearest = new ArrayList<>(states.values());
         nearest.sort(Comparator.comparingDouble(s -> s.centre.distanceToSqr(camera)));
-        NativeImage pixels = texture.getPixels();
         int strength = Math.round(NestworldConfig.SCREEN_GLOW_STRENGTH.get() * 2.55f);
-        pixels.fillRect(0, 0, WIDTH, MAX_SCREENS, 0);
         for (int row = 0; row < Math.min(MAX_SCREENS, nearest.size()); row++) {
             State s = nearest.get(row);
             Vec3 rel = s.centre.subtract(camera);
@@ -119,7 +117,6 @@ public final class ScreenGlow {
                 put(pixels, HEADER + i, row, byteOf(s.rgb[i * 3]), byteOf(s.rgb[i * 3 + 1]), byteOf(s.rgb[i * 3 + 2]), 255);
         }
         texture.upload();
-        uploadedEmpty = false;
     }
 
     private static int fixed(double v) { return (int) Math.max(0, Math.min(65535, Math.round((v + 256) * 128))); }

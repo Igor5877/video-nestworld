@@ -44,7 +44,8 @@ public final class ShaderUpscaler {
 
     /** Used while the picture goes through the shader pack and the scaling shader is on. */
     public static boolean active() {
-        return VideoScreenBlockRenderer.useVanillaPipeline() && NestworldConfig.SMOOTH_SCALING.get()
+        // The patched BSL scales the picture itself, per screen pixel; this pass is for other packs.
+        return VideoScreenBlockRenderer.useVanillaPipeline() && NestworldConfig.SMOOTH_SCALING.get() && !VideoRenderTypes.patchedPackActive()
                 && ClientModEvents.videoScreenShader() != null;
     }
 

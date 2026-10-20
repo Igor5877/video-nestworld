@@ -178,7 +178,7 @@ public final class BslPatch {
 
         edit(out, originals, "shaders/program/gbuffers_block.glsl", (t, nl) -> {
             String fragmentMain = "//Program//" + nl + "void main() {" + nl + "    vec4 albedo = texture2D(texture, texCoord) * color;";   // the vertex shader has a main() too
-            t = replaceOnce(t, fragmentMain, DISPLAY_FUNCTIONS.replace("\n", nl) + nl + fragmentMain);
+            t = replaceOnce(t, fragmentMain, (DISPLAY_FUNCTIONS + displayScaling()).replace("\n", nl) + nl + fragmentMain);
             // Dynamic video is not in the block atlas and has no parallax/normal maps.
             t = replaceOnce(t, "float skipParallax = float(blockID == 251);",
                     "float skipParallax = float(blockID == 251 || NW_IS_DISPLAY(blockID));");
@@ -187,7 +187,7 @@ public final class BslPatch {
                     + "\tif (NW_IS_DISPLAY(blockID)) {" + nl
                     + "\t\t// Nestworld Video screen: self-emissive linear radiance; shared exposure and tonemap apply once." + nl
                     + "\t\tdisplayMask = 1.0;" + nl
-                    + "\t\talbedo = vec4(NwDisplayColor(texture2D(texture, texCoord).rgb), 1.0);" + nl
+                    + "\t\talbedo = vec4(NwDisplayColor(NwVideo(texture, texCoord)), 1.0);" + nl
                     + "\t\t#if ALPHA_BLEND == 0" + nl
                     + "\t\talbedo.rgb = sqrt(albedo.rgb);" + nl
                     + "\t\t#endif" + nl
@@ -238,6 +238,40 @@ public final class BslPatch {
                 return linearVideo * (0.35 * DISPLAY_BRIGHTNESS * 0.01);
             }
             """;
+
+    /**
+     * The mod's own picture scaling (bicubic / edge-directed / Anime4K and sharpening, {@code video_screen.fsh}) run per
+     * screen pixel inside the pack, as it is without a shader pack. The code is taken from the mod's shader file, with
+     * texture calls in the pack's style; the settings come from the last row of {@code nwScreenLight}, the visible part
+     * of the frame from the vertex colour (red = u, green = v).
+     */
+    static String displayScaling() throws PatchException {
+        String src;
+        try (InputStream in = BslPatch.class.getResourceAsStream("/assets/nestworldvideo/shaders/core/video_screen.fsh")) {
+            if (in == null) throw new PatchException("У моді немає шейдера масштабування video_screen.fsh");
+            src = new String(in.readAllBytes(), StandardCharsets.UTF_8).replace("\r\n", "\n");
+        } catch (IOException e) { throw new PatchException("Не вдалося прочитати video_screen.fsh: " + e.getMessage()); }
+        int start = src.indexOf("vec3 catmullRom("), main = src.indexOf("void main() {");
+        int end = src.lastIndexOf("fragColor = vec4(color, 1.0) * ColorModulator;");
+        if (start < 0 || main < start || end < main) throw new PatchException("Шейдер масштабування мода має несподівану будову");
+        String body = src.substring(start, main)
+                + "vec3 nwScale(sampler2D Sampler0, vec2 texCoord0) {" + src.substring(main + "void main() {".length(), end) + "return color;\n}\n";
+        for (String name : new String[]{"catmullRom", "easuLuma", "easuSet", "easuTap", "easu", "a4kLuma", "anime4k"})
+            body = body.replaceAll("\\b" + name + "\\(", "nw_" + name + "(");
+        body = body.replaceAll("\\bUvMax\\b", "nwUvMax").replaceAll("\\bSharpness\\b", "nwSharpness").replaceAll("\\bUpscaler\\b", "nwUpscaler")
+                .replaceAll("\\btextureGrad\\(", "texture2DGradARB(").replaceAll("\\btexture\\(", "texture2D(");
+        return "//Nestworld Video: the mod's picture scaling, per screen pixel//////////////////////////////////////////////\n"
+                + "vec2 nwUvMax = vec2(1.0);\nfloat nwSharpness = 0.0, nwUpscaler = 1.0;\n"
+                + body
+                + "vec3 NwVideo(sampler2D tex, vec2 uv) {\n"
+                + "    ivec4 settings = ivec4(texelFetch(nwScreenLight, ivec2(0, 4), 0) * 255.0 + 0.5);\n"
+                + "    if (settings.a < 128 || settings.b < 128) return texture2D(tex, uv).rgb;   // scaling off (or no data yet)\n"
+                + "    nwUpscaler = float(settings.r);\n"
+                + "    nwSharpness = float(settings.g) / 100.0;\n"
+                + "    nwUvMax = max(color.rg, vec2(1.0 / 255.0));\n"
+                + "    return nwScale(tex, uv);\n"
+                + "}\n";
+    }
 
     /**
      * Light from the video screens on any surface: each screen is a glowing rectangle of {@code 8 x 5} cells with the
