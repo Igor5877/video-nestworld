@@ -263,7 +263,7 @@ public final class ScreenGlow {
                     sample(state, f.u[i], f.v[i], f.level[i], colour);
                     float a = Math.min(1f, f.corner[i] * strength * 0.6f);
                     consumer.vertex(matrix, (float) (f.cornerPos[i][0] - cam.x), (float) (f.cornerPos[i][1] - cam.y), (float) (f.cornerPos[i][2] - cam.z))
-                            .color(colour[0], colour[1], colour[2], a).uv(0.5f, 0.5f).endVertex();
+                            .color(colour[0], colour[1], colour[2], a).endVertex();
                 }
             }
         }
