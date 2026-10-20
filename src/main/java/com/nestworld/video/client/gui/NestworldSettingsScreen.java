@@ -47,7 +47,7 @@ public final class NestworldSettingsScreen extends Screen {
         if (net.minecraftforge.fml.ModList.get().isLoaded("watermedia")) choice("Декодер відео", cellW, () -> switch (NestworldConfig.DECODER.get()) {
                     case "ffmpeg" -> "FFmpeg (власний)"; case "watermedia" -> "VLC (WaterMedia)"; default -> "Авто"; },
                 () -> { cycleString(NestworldConfig.DECODER, List.of("auto", "ffmpeg", "watermedia")); restartStreams = true; },
-                "Авто: спочатку VLC, а якщо він не показує картинку, FFmpeg.\nFFmpeg працює однаково на всіх системах (потрібне завантаження бібліотек один раз).");
+                "Авто: FFmpeg, а якщо він не може відкрити відео, VLC.\nЛише FFmpeg плавно тримає синхронізацію з іншими глядачами, кешує потік (миттєва перемотка) і дає світло екрана. Бібліотеки завантажуються один раз.");
         choice("Максимальна якість", cellW, () -> { int h = NestworldConfig.MAX_VIDEO_HEIGHT.get(); return h == 0 ? "Авто (найкраща)" : h + "p"; },
                 () -> { cycleInt(NestworldConfig.MAX_VIDEO_HEIGHT, QUALITIES); restartStreams = true; },
                 "Обмеження висоти відео для потоків з кількома якостями.\nНижча якість — менше навантаження на мережу й процесор.");

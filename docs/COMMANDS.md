@@ -76,7 +76,8 @@
 
 | Параметр | За замовчуванням | Значення |
 |---|---|---|
-| `decoder` | `auto` | `auto`, `ffmpeg` або `watermedia` (VLC). Без WaterMedia завжди FFmpeg |
+| `decoder` | `auto` | `auto` (FFmpeg, а якщо не може — VLC), `ffmpeg` або `watermedia` (VLC). Без WaterMedia завжди FFmpeg |
+| `stream_cache` | `true` | Локальний кеш HLS-потоку (FFmpeg): переглянуте лишається в пам'яті, наступні ~30 с качаються наперед — перемотка ±10 с миттєва. До 192 МБ |
 | `max_video_height` | `0` | Максимальна висота відео (0 = найкраща) |
 | `max_stream_distance` | `128` | На якій відстані екран працює (блоків), на ній же вмикається авто-VSync |
 | `max_active_streams` | `8` | Скільки відео декодується одночасно |

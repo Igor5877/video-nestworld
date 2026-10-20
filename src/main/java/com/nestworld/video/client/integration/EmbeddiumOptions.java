@@ -75,7 +75,7 @@ public final class EmbeddiumOptions {
         Storage storage = new Storage();
         var decoder = OptionImpl.createBuilder(Decoder.class, storage)
                 .setName(Component.literal("Декодер відео"))
-                .setTooltip(Component.literal("Авто: спочатку VLC, а якщо він не показує картинку, FFmpeg. FFmpeg працює однаково на всіх системах."))
+                .setTooltip(Component.literal("Авто: FFmpeg, а якщо він не може відкрити відео, VLC. Лише FFmpeg плавно тримає синхронізацію, кешує потік (миттєва перемотка) і дає світло екрана."))
                 .setControl(o -> new CyclingControl<>(o, Decoder.class, names(Decoder.values(), d -> d.label)))
                 .setBinding((s, v) -> { NestworldConfig.DECODER.set(v.key); s.restartStreams = true; }, s -> Decoder.of(NestworldConfig.DECODER.get()))
                 .build();

@@ -5,7 +5,10 @@ import org.slf4j.Logger;
 
 import java.awt.Dimension;
 
-/** Starts with WaterMedia/VLC and hands the stream over to FFmpeg if VLC cannot play it. */
+/**
+ * Starts with the FFmpeg decoder (only it keeps in step with other viewers softly, waits for the shared timeline, caches
+ * the stream and gives the screen light) and hands the stream over to WaterMedia/VLC if FFmpeg cannot play it.
+ */
 final class AutoDisplay extends Display {
     private static final Logger LOGGER = LogUtils.getLogger();
 
@@ -21,12 +24,10 @@ final class AutoDisplay extends Display {
 
     AutoDisplay(String url, String source) {
         this.url = url; this.source = source;
-        Display first;
         try {
-            first = new VlcDisplay(url, source);
-            this.delegate = first;
-        } catch (RuntimeException e) {
-            LOGGER.warn("Nestworld Video: VLC could not start ({}), using FFmpeg", e.toString());
+            this.delegate = new FfmpegDisplay(url, source);
+        } catch (RuntimeException | LinkageError e) {
+            LOGGER.warn("Nestworld Video: FFmpeg could not start ({}), using VLC", e.toString());
             fallBack();
         }
     }
@@ -34,7 +35,7 @@ final class AutoDisplay extends Display {
     private void fallBack() {
         Display old = delegate;
         fellBack = true;
-        delegate = new FfmpegDisplay(url, source);
+        delegate = new VlcDisplay(url, source);
         delegate.setVolume(volume);
         delegate.applySpatialVolume(spatial);
         delegate.setPlaying(playing);
@@ -47,7 +48,7 @@ final class AutoDisplay extends Display {
     @Override public void tick() {
         delegate.tick();
         if (!fellBack && delegate.isBroken()) {
-            LOGGER.warn("Nestworld Video: VLC could not play {}; switching to the FFmpeg decoder", url.contains("?") ? url.substring(0, url.indexOf('?')) + "?<redacted>" : url);
+            LOGGER.warn("Nestworld Video: FFmpeg could not play {}; switching to VLC (WaterMedia)", url.contains("?") ? url.substring(0, url.indexOf('?')) + "?<redacted>" : url);
             fallBack();
         }
     }
@@ -61,7 +62,7 @@ final class AutoDisplay extends Display {
     @Override public boolean needsInitialSync() { return delegate.needsInitialSync(); }
     @Override public boolean isLoading() { return delegate.isLoading(); }
     @Override public boolean isBuffering() { return delegate.isBuffering(); }
-    /** While VLC is still being replaced the screen should keep showing the loading animation, not an error. */
+    /** While FFmpeg is still being replaced the screen should keep showing the loading animation, not an error. */
     @Override public boolean isBroken() { return fellBack && delegate.isBroken(); }
     @Override public boolean isEnded() { return delegate.isEnded(); }
     @Override public boolean pollEnded() { return delegate.pollEnded(); }

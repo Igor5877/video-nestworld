@@ -42,7 +42,7 @@ public final class NestworldConfig {
                         "Changed from the quality button in the screen menu; no effect on single-quality files.")
                 .defineInRange("max_video_height", 0, 0, 4320);
         DECODER = builder
-                .comment("Video decoder: \"auto\" (WaterMedia/VLC, switching to FFmpeg if VLC cannot open the stream),",
+                .comment("Video decoder: \"auto\" (FFmpeg, switching to WaterMedia/VLC if FFmpeg cannot open the stream),",
                         "\"ffmpeg\" (always FFmpeg; its libraries are downloaded once into the game directory) or \"watermedia\".")
                 .defineInList("decoder", "auto", java.util.List.of("auto", "ffmpeg", "watermedia"));
         SPATIAL_AUDIO = builder

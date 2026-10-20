@@ -59,7 +59,7 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
      */
     private static final long START_DELAY_MS = 2500;
     /** A jump (±10 s) lands this much later on the shared timeline: every viewer has time to seek, then all go on together. */
-    private static final long SEEK_DELAY_MS = 500;
+    private static final long SEEK_DELAY_MS = 300;
     /** Client: the shared timeline was at {@code timelinePositionMs} when the server's clock read {@code timelineServerMs}. */
     private long timelinePositionMs, timelineServerMs = Long.MIN_VALUE;
     /** Client monotonic clock anchor; unlike game time it advances while video frames render. */
