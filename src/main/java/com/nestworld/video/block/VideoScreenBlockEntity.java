@@ -38,6 +38,10 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
     private String relayUrl = "";
     /** The video on this screen is marked 18+ (decided by the server; viewers without access get a placeholder). */
     private boolean adult;
+    /** Server: whether the tiles were last set to give light (null = not decided yet since loading). */
+    private Boolean lightApplied;
+    /** A big screen lights only an even grid of its tiles: every lit block costs the lighting engine work. */
+    private static final int MAX_LIGHT_SOURCES = 150;
     /** Who started the current session and whether other players may take over its controls (kept on the controller). */
     private java.util.UUID sessionOwner;
     private String sessionOwnerName = "";
@@ -318,8 +322,28 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
     private void syncToClient() {
         syncToClient(null);
     }
+    /** A playing screen lights its surroundings (turned off by content config {@code screen.light_when_playing}). */
+    public void updateLight() {
+        if (level == null || level.isClientSide || !isMaster()) return;
+        boolean want = isPlaying && com.nestworld.video.content.ContentConfig.SCREEN_LIGHT.get();
+        if (lightApplied != null && lightApplied == want) return;
+        lightApplied = want;
+        Direction right = getBlockState().getValue(VideoScreenBlock.FACING).getCounterClockWise();
+        int count = screenCols * screenRows;
+        int step = count <= MAX_LIGHT_SOURCES ? 1 : (int) Math.ceil(Math.sqrt(count / (double) MAX_LIGHT_SOURCES));
+        for (int row = 0; row < screenRows; row++) for (int col = 0; col < screenCols; col++) {
+            BlockPos pos = worldPosition.relative(right, col).above(row);
+            if (!level.hasChunkAt(pos)) continue;
+            BlockState state = level.getBlockState(pos);
+            if (!(state.getBlock() instanceof VideoScreenBlock)) continue;
+            boolean lit = want && (step == 1 || (col % step == step / 2 && row % step == step / 2));
+            if (state.getValue(VideoScreenBlock.LIT) != lit) level.setBlock(pos, state.setValue(VideoScreenBlock.LIT, lit), 3);
+        }
+    }
+
     public void syncToClient(@Nullable ServerPlayer extraRecipient) {
         if (level == null || level.isClientSide) return;
+        updateLight();
         updateBlock();
         var packet = new PacketUpdateVideoScreen(worldPosition, currentVideoUrl, currentVideoTitle, isPlaying, stopped,
                 getPlaybackPositionMs(), level.getGameTime(), autoNext, repeat, nextCancelled, currentRelayUrl(), currentAdult());

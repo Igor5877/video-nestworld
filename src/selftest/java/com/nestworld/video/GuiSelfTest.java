@@ -200,6 +200,26 @@ public class GuiSelfTest {
         try {
             ticks++;
             if (ticks == 30) mc.resizeDisplay();
+            if (Boolean.getBoolean("nestworldvideo.guilight")) {   // needs -Pguianime: a playing screen gives light, a stopped one does not
+                var server = mc.getSingleplayerServer();
+                java.util.function.Supplier<String> report = () -> {
+                    var tile = mc.level.getBlockState(ORIGIN.relative(Direction.NORTH.getCounterClockWise(), 2));
+                    int lit = 0, total = 0;
+                    for (int r = 0; r < 3; r++) for (int c = 0; c < 6; c++) {
+                        var st = mc.level.getBlockState(ORIGIN.relative(Direction.NORTH.getCounterClockWise(), c).above(r));
+                        if (st.getBlock() instanceof VideoScreenBlock) { total++; if (st.getValue(VideoScreenBlock.LIT)) lit++; }
+                    }
+                    var front = ORIGIN.relative(Direction.NORTH, 3).relative(Direction.NORTH.getCounterClockWise(), 2);
+                    return "lit tiles " + lit + "/" + total + ", client block light 3 blocks in front = " + mc.level.getBrightness(net.minecraft.world.level.LightLayer.BLOCK, front)
+                            + ", light emission of a tile = " + tile.getLightEmission();
+                };
+                if (ticks == 100) System.out.println("LIGHT-TEST playing: " + report.get());
+                if (ticks == 110) server.execute(() -> ((VideoScreenBlockEntity) server.overworld().getBlockEntity(ORIGIN)).stop());
+                if (ticks == 160) System.out.println("LIGHT-TEST stopped: " + report.get());
+                if (ticks == 170) server.execute(() -> ((VideoScreenBlockEntity) server.overworld().getBlockEntity(ORIGIN)).play());
+                if (ticks == 220) { System.out.println("LIGHT-TEST playing again: " + report.get()); System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
+                return;
+            }
             if (Boolean.getBoolean("nestworldvideo.guiacoustics")) {   // needs -Pguianime for the 6x3 screen; real world, real rays
                 var acoustics = com.nestworld.video.client.ClientVideoManager.getInstance().getAcoustics();
                 if (ticks == 20) mc.options.hideGui = true;

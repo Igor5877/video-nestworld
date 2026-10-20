@@ -49,6 +49,7 @@
 | `config/videos.json` | Каталог (усі збережені аніме та серії). Заповнюється `/aniua`, його надсилають усім гравцям. Тільки росте: видаляти непотрібне поки можна лише вручну, потім `/reloadvideo`. |
 | `config/nestworld-video-sources.json` | Ручні відповідності `провайдер:id серії` → пряме посилання `https://….m3u8/.mp4`, для серій без готового потоку. Ключі виду `ashdi:62553`, розмір файлу до 256 КБ. |
 | `config/nestworldvideo-content.toml` | 18+: `default_access` (`ops`/`everyone`/`nobody`), `adult_ratings` (оцінки Hikka, що вважаються 18+, за замовчуванням `rx`; додай `r_plus`, щоб включити й сильніший еротичний вміст). |
+| `config/nestworldvideo-content.toml`, секція `[screen]` | `light_when_playing` (за замовчуванням `true`): екран, що грає, світить (рівень світла 7), великий екран освітлює рівномірну сітку блоків (до ~150 джерел), а не всі. Діє для екранів, що почали або зупинили відтворення після зміни |
 | `config/nestworldvideo-common.toml` | Ретрансляція (relay), див. нижче. |
 
 ## Ретрансляція (relay), секція `[relay]` у `nestworldvideo-common.toml`

@@ -18,6 +18,8 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
+import net.minecraft.world.level.block.state.properties.BooleanProperty;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraftforge.network.NetworkHooks;
@@ -27,19 +29,24 @@ import javax.annotation.Nullable;
 public class VideoScreenBlock extends BaseEntityBlock {
     
     public static final DirectionProperty FACING = DirectionProperty.create("facing", Direction.Plane.HORIZONTAL);
+    /** The screen is playing and gives light (set by the server for some or all tiles of the screen). */
+    public static final BooleanProperty LIT = BlockStateProperties.LIT;
+    /** Block light of a lit tile; fixed because the client computes lighting from the state with the same number. */
+    public static final int LIGHT_LEVEL = 7;
     
     public VideoScreenBlock() {
         super(BlockBehaviour.Properties.of()
                 .strength(3.0f)
                 .requiresCorrectToolForDrops()
                 .noOcclusion()
+                .lightLevel(state -> state.getValue(LIT) ? LIGHT_LEVEL : 0)
         );
-        this.registerDefaultState(this.stateDefinition.any().setValue(FACING, Direction.NORTH));
+        this.registerDefaultState(this.stateDefinition.any().setValue(FACING, Direction.NORTH).setValue(LIT, false));
     }
     
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-        builder.add(FACING);
+        builder.add(FACING, LIT);
     }
     
     @Nullable
