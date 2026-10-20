@@ -26,6 +26,12 @@ public final class LocalStreamCache {
         return cache == null ? url : "http://127.0.0.1:" + cache.port() + cache.pathFor(url);
     }
 
+    /** What the connection managed lately (from the cache's downloads), in bits per second; 0 = not measured or no cache. */
+    public static long throughputBitsPerSecond() {
+        RelayServer cache = relay;
+        return cache == null ? 0 : cache.throughputBytesPerSecond() * 8;
+    }
+
     /** A viewer joining at {@code positionMs}: start downloading from there while the decoder is still opening. */
     public static void prefetchAt(String url, long positionMs) {
         if (!NestworldConfig.STREAM_CACHE.get() || url == null || !url.startsWith("http") || !url.toLowerCase(java.util.Locale.ROOT).contains(".m3u8")) return;

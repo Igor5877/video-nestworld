@@ -77,6 +77,8 @@ public final class FfmpegDisplay extends Display {
     /** Stalls (no picture to show although playing) after the start: when each began, and the current one. */
     private final java.util.ArrayDeque<Long> stallStarts = new java.util.ArrayDeque<>();
     private long stallSinceNanos;
+    /** When the decoder began opening the stream or the last seek, until playback starts (0 once started). */
+    private volatile long waitingSinceNanos = System.nanoTime();
     private boolean lowerSuggested;
     private long startedWallNanos, mediaBaseUs, frozenUs, lastMediaUs, lastShownPtsUs;
     private long firstFrameWaitNanos, lastDiagnosticNanos, lastRenderNanos;
@@ -114,7 +116,8 @@ public final class FfmpegDisplay extends Display {
             String referer = origin(source);
             int limit = NestworldConfig.MAX_VIDEO_HEIGHT.get();
             if (heightCap > 0) limit = limit == 0 ? heightCap : Math.min(limit, heightCap);
-            HlsVariants.Choice choice = HlsVariants.pickChoice(source, limit, USER_AGENT, referer);
+            // What the connection managed lately (measured by the local cache) rules out renditions it could not keep up with.
+            HlsVariants.Choice choice = HlsVariants.pickChoice(source, limit, LocalStreamCache.throughputBitsPerSecond(), USER_AGENT, referer);
             chosenHeight = choice.height(); lowerHeight = choice.lowerHeight();
             String target = LocalStreamCache.wrap(choice.url());
             // A viewer joining a running video: fetch the part of the stream it starts at while the decoder opens.
@@ -514,8 +517,12 @@ public final class FfmpegDisplay extends Display {
     /** Counts the times playback ran dry (the network or the decoder could not keep up), for {@link #lowerQualitySuggestion()}. */
     private void trackStalls() {
         boolean dry;
-        synchronized (lock) { dry = started && playing && !eos && frames.isEmpty(); }
+        int queued;
+        synchronized (lock) { dry = started && playing && !eos && frames.isEmpty(); queued = frames.size(); }
         long now = System.nanoTime();
+        if (started) waitingSinceNanos = 0;
+        // Not even started 8 s after opening or seeking, with almost nothing decoded: that is the longest stall of all.
+        else if (playing && waitingSinceNanos != 0 && queued < 3 && now - waitingSinceNanos > 8_000_000_000L) slowStart = true;
         if (!dry) { stallSinceNanos = 0; return; }
         if (stallSinceNanos == 0) { stallSinceNanos = now; stallStarts.addLast(now); }
         while (!stallStarts.isEmpty() && now - stallStarts.peekFirst() > 45_000_000_000L) stallStarts.pollFirst();
@@ -527,7 +534,7 @@ public final class FfmpegDisplay extends Display {
      */
     @Override public int lowerQualitySuggestion() {
         if (lowerSuggested || lowerHeight <= 0) return 0;
-        boolean longStall = stallSinceNanos != 0 && System.nanoTime() - stallSinceNanos > 2_500_000_000L;
+        boolean longStall = slowStart || (stallSinceNanos != 0 && System.nanoTime() - stallSinceNanos > 2_500_000_000L);
         if (!longStall && stallStarts.size() < 3) return 0;
         lowerSuggested = true;
         LOGGER.info("Nestworld Video: playback of {} keeps running dry at {}p ({} stalls in 45 s{}); suggesting {}p",
@@ -554,7 +561,10 @@ public final class FfmpegDisplay extends Display {
         seekTo(media);
     }
 
+    private boolean slowStart;
+
     private void seekTo(long target) {
+        waitingSinceNanos = System.nanoTime();
         seekTargetUs = target;
         seekStartedNanos = System.nanoTime();
         int generation = decoder.seek(target);

@@ -340,7 +340,40 @@ public final class RelayServer {
     /** The host answered with a server error (5xx): worth asking again. */
     private static final class RetryableException extends IOException { RetryableException(String m) { super(m); } }
 
+    // Download speed: measured over the periods in which at least one download is running (parallel downloads share them).
+    private int activeDownloads;
+    private long busySinceNanos, busyBytes;
+    private volatile long throughputBytesPerSecond;
+
+    /** What the connection to the video hosts managed lately, in bytes per second (0 = not measured yet). */
+    public long throughputBytesPerSecond() { return throughputBytesPerSecond; }
+
+    private synchronized void downloadStarted() {
+        if (activeDownloads++ == 0) { busySinceNanos = System.nanoTime(); busyBytes = 0; }
+    }
+
+    private synchronized void downloadEnded(long bytes) {
+        busyBytes += bytes;
+        if (--activeDownloads > 0) return;
+        long nanos = System.nanoTime() - busySinceNanos;
+        if (busyBytes < 300_000 || nanos < 50_000_000L) return;   // too little to say anything
+        long rate = busyBytes * 1_000_000_000L / nanos;
+        throughputBytesPerSecond = throughputBytesPerSecond == 0 ? rate : (throughputBytesPerSecond * 6 + rate * 4) / 10;
+    }
+
     private Entry download(Source source, String url, boolean playlist) throws Exception {
+        downloadStarted();
+        long got = 0;
+        try {
+            Entry e = downloadOnce(source, url, playlist);
+            got = e.data().length;
+            return e;
+        } finally {
+            downloadEnded(got);
+        }
+    }
+
+    private Entry downloadOnce(Source source, String url, boolean playlist) throws Exception {
         {
             HttpResponse<java.io.InputStream> response = null;
             String current = url;
