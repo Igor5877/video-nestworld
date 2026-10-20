@@ -137,6 +137,7 @@ public final class FfmpegDisplay extends Display {
             if (streamInfo.hasAudio)
                 audio = new AlAudio(streamInfo.sampleRate, streamInfo.channels, NestworldConfig.SPATIAL_AUDIO.get(),
                         NestworldConfig.SPATIAL_SOFTNESS.get() / 200f);
+            if (audio != null) audio.setPitch((float) rate);
             info = streamInfo;
         }
 
@@ -265,7 +266,7 @@ public final class FfmpegDisplay extends Display {
             long clock = output.clockUs();
             return clock >= 0 ? Math.max(lastMediaUs, clock) : lastMediaUs;
         }
-        return mediaBaseUs + (System.nanoTime() - startedWallNanos) / 1000L;
+        return mediaBaseUs + (long) ((System.nanoTime() - startedWallNanos) / 1000L * rate);
     }
 
     private void discardDueFrames() {
@@ -313,7 +314,7 @@ public final class FfmpegDisplay extends Display {
                 return lastMediaUs;
             }
         }
-        lastMediaUs = mediaBaseUs + (System.nanoTime() - startedWallNanos) / 1000L;
+        lastMediaUs = mediaBaseUs + (long) ((System.nanoTime() - startedWallNanos) / 1000L * rate);
         return lastMediaUs;
     }
 
@@ -507,6 +508,17 @@ public final class FfmpegDisplay extends Display {
     }
 
     @Override public boolean isPlaying() { return playing && started && !isEnded(); }
+
+    /** Playback speed for keeping in step with the other viewers (sound through OpenAL pitch, the clock follows it). */
+    private volatile double rate = 1.0;
+    @Override public void setPlaybackRate(double value) {
+        double r = Math.max(0.95, Math.min(1.05, value));
+        if (Math.abs(r - rate) < 0.0005) return;
+        if (started && playing && !audioClock) { mediaBaseUs = mediaTimeUs(); startedWallNanos = System.nanoTime(); }
+        rate = r;
+        AlAudio output = audio;
+        if (output != null) output.setPitch((float) r);
+    }
 
     @Override public void syncPosition(long positionMs) {
         pendingSyncUs = Math.max(0, positionMs) * 1000L;

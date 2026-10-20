@@ -24,20 +24,31 @@ public class ClientPacketHandler {
     }
 
     public static void handleUpdateVideoScreen(BlockPos pos, String url, String title, boolean playing, boolean stopped,
-                                                long positionMs, long serverGameTime,
+                                                long positionMs, long serverMs,
                                                 boolean autoNext, boolean repeat, boolean nextCancelled, String relayUrl, boolean adult) {
         Level world = Minecraft.getInstance().level;
         if (world == null || !world.isLoaded(pos)) return;
         if (world.getBlockEntity(pos) instanceof VideoScreenBlockEntity screen) {
-            long tickOffset = world.getGameTime() - serverGameTime;
-            // Client and server clocks normally track each other, but avoid turning
-            // a stale chunk packet into a huge seek when a world was reconnected.
-            if (Math.abs(tickOffset) > 200) tickOffset = 0;
-            long adjustedPosition = Math.max(0, positionMs + tickOffset * 50L);
-            screen.updatePlayback(url, title, playing, stopped, adjustedPosition, autoNext, repeat, nextCancelled, relayUrl, adult);
+            com.nestworld.video.SyncClock.oneWay(serverMs);
+            boolean wasPlaying = screen.isPlaying();
+            String previousUrl = screen.getCurrentVideoUrl();
+            long previous = screen.getTimelinePositionMs();
+            screen.updatePlayback(url, title, playing, stopped, positionMs, serverMs, autoNext, repeat, nextCancelled, relayUrl, adult);
             ClientVideoManager.getInstance().reconcile(screen);
-            ClientVideoManager.getInstance().syncPosition(pos, adjustedPosition);
+            long now = playing ? screen.getTimelinePositionMs() : positionMs;
+            // Only a real change of the timeline moves the decoder (play, pause, seek, another video). A packet about
+            // repeat, auto-next or the relay leaves it alone; small differences are evened out softly.
+            if (playing != wasPlaying || !url.equals(previousUrl) || !playing || previous < 0 || Math.abs(now - previous) > 1000)
+                ClientVideoManager.getInstance().syncPosition(pos, now);
         }
+    }
+
+    /** The server's periodic answer to this client's heartbeat for a screen. */
+    public static void handleScreenClock(BlockPos pos, boolean playing, long positionMs, long serverMs, long clientSentMs) {
+        com.nestworld.video.SyncClock.roundTrip(clientSentMs, serverMs);
+        Level world = Minecraft.getInstance().level;
+        if (world == null || !world.isLoaded(pos)) return;
+        if (playing && world.getBlockEntity(pos) instanceof VideoScreenBlockEntity screen) screen.applyClock(positionMs, serverMs);
     }
 
     public static void handleSyncVideos(String jsonConfig) {

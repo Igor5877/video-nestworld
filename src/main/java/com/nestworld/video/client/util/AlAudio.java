@@ -88,6 +88,9 @@ final class AlAudio implements Runnable {
     private volatile int underruns;
     private boolean wasDry;
     void setGain(float value) { gain = Math.max(0f, Math.min(1f, value)); }
+    /** Playback speed (OpenAL pitch): the clock counts played samples, so it follows by itself. */
+    private volatile float pitch = 1f;
+    void setPitch(float value) { pitch = Math.max(0.9f, Math.min(1.1f, value)); }
     void setPlaying(boolean value) { playing = value; }
     void setAcoustics(com.nestworld.video.client.acoustics.AcousticResult value) { acoustics = value; }
 
@@ -111,7 +114,7 @@ final class AlAudio implements Runnable {
         if (base < 0) return -1;
         if (alPlaying) {
             long extra = (System.nanoTime() - clockStampNanos) / 1000L;
-            return base + Math.max(0, Math.min(extra, 30_000L));
+            return base + (long) (Math.max(0, Math.min(extra, 30_000L)) * pitch);
         }
         return base;
     }
@@ -176,7 +179,7 @@ final class AlAudio implements Runnable {
             long lastLatencyNanos = 0;
             long unqueuedFrames = 0, baseUs = -1;
             int queued = 0;
-            float smoothGain = -1f, sentGain = -1f;
+            float smoothGain = -1f, sentGain = -1f, sentPitch = 1f;
             float[] smoothSpeakers = null, sentSpeakers = null;
             while (!closed) {
                 if (ALC10.alcGetCurrentContext() != context) throw new IllegalStateException("OpenAL context changed");
@@ -229,6 +232,10 @@ final class AlAudio implements Runnable {
                 if (Math.abs(smoothGain - sentGain) > 0.002f || (targetGain == 0f && sentGain != 0f)) {
                     sentGain = Math.abs(smoothGain - targetGain) < 0.002f ? targetGain : smoothGain;
                     for (int source : sources) AL10.alSourcef(source, AL10.AL_GAIN, sentGain);
+                }
+                if (pitch != sentPitch) {
+                    sentPitch = pitch;
+                    for (int source : sources) AL10.alSourcef(source, AL10.AL_PITCH, sentPitch);
                 }
                 if (spatial) {
                     float[] target = speakers;

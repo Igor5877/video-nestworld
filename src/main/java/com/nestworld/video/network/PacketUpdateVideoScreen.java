@@ -17,13 +17,13 @@ public class PacketUpdateVideoScreen {
     final boolean isPlaying;
     final boolean stopped;
     final long positionMs;
-    final long serverGameTime;
+    final long serverMs;
     final boolean autoNext, repeat, nextCancelled;
     final String relayUrl;
     final boolean adult;
 
     public PacketUpdateVideoScreen(BlockPos pos, String url, String title, boolean isPlaying, boolean stopped,
-                                   long positionMs, long serverGameTime,
+                                   long positionMs, long serverMs,
                                    boolean autoNext, boolean repeat, boolean nextCancelled, String relayUrl, boolean adult) {
         this.pos = pos;
         this.url = url;
@@ -31,7 +31,7 @@ public class PacketUpdateVideoScreen {
         this.isPlaying = isPlaying;
         this.stopped = stopped;
         this.positionMs = Math.max(0, positionMs);
-        this.serverGameTime = serverGameTime;
+        this.serverMs = serverMs;
         this.autoNext = autoNext; this.repeat = repeat; this.nextCancelled = nextCancelled;
         this.relayUrl = relayUrl == null ? "" : relayUrl;
         this.adult = adult;
@@ -44,7 +44,7 @@ public class PacketUpdateVideoScreen {
         buf.writeBoolean(packet.isPlaying);
         buf.writeBoolean(packet.stopped);
         buf.writeLong(packet.positionMs);
-        buf.writeLong(packet.serverGameTime);
+        buf.writeLong(packet.serverMs);
         buf.writeBoolean(packet.autoNext); buf.writeBoolean(packet.repeat); buf.writeBoolean(packet.nextCancelled);
         buf.writeUtf(packet.relayUrl, 2048);
         buf.writeBoolean(packet.adult);
@@ -64,7 +64,7 @@ public class PacketUpdateVideoScreen {
         context.enqueueWork(() ->
             DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
                 () -> () -> ClientPacketHandler.handleUpdateVideoScreen(pos, url, title, isPlaying, packet.stopped,
-                        packet.positionMs, packet.serverGameTime, packet.autoNext, packet.repeat, packet.nextCancelled, packet.relayUrl, packet.adult)));
+                        packet.positionMs, packet.serverMs, packet.autoNext, packet.repeat, packet.nextCancelled, packet.relayUrl, packet.adult)));
         context.setPacketHandled(true);
     }
 }

@@ -63,6 +63,8 @@ public abstract class Display {
     public boolean hasMipmaps() { return false; }
     /** Goes up by one with every new picture in the texture; -1 when the decoder does not tell. */
     public long frameSerial() { return -1; }
+    /** Plays slightly faster or slower (about 0.95..1.05) to keep in step with the other viewers; ignored if unsupported. */
+    public void setPlaybackRate(double rate) {}
     public void setSoundPlacement(double cx, double cy, double cz, double rx, double ry, double rz) {}
     /** Room acoustics for this screen's sound (null = none); only the FFmpeg audio path uses it. */
     public void setAcoustics(com.nestworld.video.client.acoustics.AcousticResult result) {}

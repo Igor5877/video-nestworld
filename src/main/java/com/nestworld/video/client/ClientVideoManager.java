@@ -330,23 +330,36 @@ public class ClientVideoManager {
      * Every viewer opens its own stream and a slow start leaves it behind the others for good. Compare the decoder with
      * the screen's shared timeline (game clock) and pull it back with a seek when it is clearly off.
      */
+    /** Within this the viewers count as together; beyond {@link #SEEK_DRIFT_MS} the decoder jumps, in between it plays a little faster or slower. */
+    private static final long IN_STEP_MS = 30, SEEK_DRIFT_MS = 2000;
+    /** Speed change per millisecond off (300 ms off = 3 % faster or slower), at most {@link #MAX_RATE_CHANGE}. */
+    private static final double RATE_PER_MS = 0.0001, MAX_RATE_CHANGE = 0.03;
+
     private void correctDrift(BlockPos pos, VideoScreenBlockEntity screen, Display display, long gameTime) {
-        long[] state = driftState.computeIfAbsent(pos, k -> new long[]{0, 0, 0});   // {off-since tick, last seek tick, last log tick}
+        long now = com.nestworld.video.SyncClock.nowMs();
+        long[] state = driftState.computeIfAbsent(pos, k -> new long[]{0, Long.MIN_VALUE / 2, 0});   // {off-since ms, last seek ms, last log ms}
         long expected = screen.getTimelinePositionMs(), actual = display.getPlaybackTime();
         if (expected < 0 || actual < 0 || !screen.isPlaying() || !display.isPlaying() || display.isBuffering() || display.getDuration() <= 0) {
-            state[0] = 0; return;
+            state[0] = 0; display.setPlaybackRate(1.0); return;
         }
         long drift = actual - expected;
-        if (NestworldConfig.DEBUG_STATS.get() && gameTime - state[2] >= 40) {
-            state[2] = gameTime;
+        if (NestworldConfig.DEBUG_STATS.get() && now - state[2] >= 2000) {
+            state[2] = now;
             com.mojang.logging.LogUtils.getLogger().info("Nestworld Video sync: this player is {}ms {} the shared timeline ({}ms vs {}ms)",
                     Math.abs(drift), drift < 0 ? "BEHIND" : "ahead of", actual, expected);
         }
-        if (Math.abs(drift) < 2000) { state[0] = 0; return; }
-        if (state[0] == 0) state[0] = gameTime;
-        // Off for a second and not corrected in the last 15 s (a seek takes a moment to land).
-        if (gameTime - state[0] >= 20 && gameTime - state[1] >= 300) {
-            state[1] = gameTime; state[0] = 0;
+        if (Math.abs(drift) < SEEK_DRIFT_MS) {
+            // Even it out softly: a few percent faster or slower is not heard, a jump is seen.
+            state[0] = 0;
+            double change = Math.abs(drift) <= IN_STEP_MS ? 0 : Math.max(-MAX_RATE_CHANGE, Math.min(MAX_RATE_CHANGE, -drift * RATE_PER_MS));
+            display.setPlaybackRate(1.0 + change);
+            return;
+        }
+        display.setPlaybackRate(1.0);
+        if (state[0] == 0) state[0] = now;
+        // Far off for a second and not jumped in the last 5 s (a seek takes a moment to land).
+        if (now - state[0] >= 1000 && now - state[1] >= 5000) {
+            state[1] = now; state[0] = 0;
             com.mojang.logging.LogUtils.getLogger().info("Nestworld Video: re-syncing with the other viewers ({}ms off)", drift);
             display.syncPosition(expected);
         }

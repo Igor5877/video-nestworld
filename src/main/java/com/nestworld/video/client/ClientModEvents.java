@@ -69,5 +69,6 @@ public class ClientModEvents {
     public static void onPlayerLogout(ClientPlayerNetworkEvent.LoggingOut event) {
         ClientVideoManager.getInstance().shutdown();
         ClientData.setVideoConfig(null);
+        com.nestworld.video.SyncClock.reset();   // the next server has a clock of its own
     }
 }

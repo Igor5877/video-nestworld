@@ -78,5 +78,6 @@ final class AutoDisplay extends Display {
     @Override public boolean managesTextureFilter() { return delegate.managesTextureFilter(); }
     @Override public boolean hasMipmaps() { return delegate.hasMipmaps(); }
     @Override public long frameSerial() { return delegate.frameSerial(); }
+    @Override public void setPlaybackRate(double rate) { delegate.setPlaybackRate(rate); }
     @Override public void release() { delegate.release(); }
 }
