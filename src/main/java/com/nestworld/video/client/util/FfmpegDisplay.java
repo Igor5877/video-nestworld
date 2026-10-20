@@ -392,6 +392,7 @@ public final class FfmpegDisplay extends Display {
         GlStateManager._bindTexture(previous);
         sampleColours(frame);
         frameShown = true;
+        frameSerial++;
         if (!firstFrameLogged) {
             firstFrameLogged = true;
             LOGGER.info("Nestworld Video: stream {} decodes at {}x{} (FFmpeg)", safe(url), frame.width, frame.height);
@@ -572,6 +573,8 @@ public final class FfmpegDisplay extends Display {
 
     @Override public boolean managesTextureFilter() { return true; }
     @Override public boolean hasMipmaps() { return mipmapped && frameShown; }
+    private volatile long frameSerial = -1;
+    @Override public long frameSerial() { return frameSerial; }
 
     @Override public void setVolume(int volume) { baseVolume = Math.max(0, Math.min(200, volume)); }
     @Override public int getVolume() { return baseVolume; }

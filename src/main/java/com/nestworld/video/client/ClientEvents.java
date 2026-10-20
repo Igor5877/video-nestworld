@@ -26,6 +26,14 @@ public class ClientEvents {
 
     @Mod.EventBusSubscriber(modid = CinemaMod.MOD_ID, value = Dist.CLIENT)
     public static class ForgeEvents {
+        /** Under a shader pack, new video frames are enlarged before the world (and the pack) draws anything. */
+        @SubscribeEvent
+        public static void onRenderTick(net.minecraftforge.event.TickEvent.RenderTickEvent event) {
+            if (event.phase != net.minecraftforge.event.TickEvent.Phase.START || Minecraft.getInstance().level == null) return;
+            try { ShaderUpscaler.prepare(ClientVideoManager.getInstance().displays()); }
+            catch (RuntimeException e) { LOGGER.warn("Nestworld Video: the picture could not be enlarged for the shader pack: {}", e.toString()); }
+        }
+
         /** The screens' light data for the shader pack is written once per frame, before the world is drawn. */
         @SubscribeEvent
         public static void onRenderLevel(net.minecraftforge.client.event.RenderLevelStageEvent event) {

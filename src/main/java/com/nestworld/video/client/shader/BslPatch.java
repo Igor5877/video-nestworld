@@ -295,7 +295,8 @@ public final class BslPatch {
                             sum += c * (cosScreen * cosSurface / d2);
                         }
                     }
-                    light += sum * (w * h / 40.0 / 3.14159) * visible * (1.0 - smoothstep(0.6 * range, range, dist));
+                    float modStrength = float(head.b) / 204.0;   // the mod's own brightness setting, 80% = 1
+                    light += sum * (w * h / 40.0 / 3.14159) * visible * modStrength * (1.0 - smoothstep(0.6 * range, range, dist));
                 }
                 light *= DISPLAY_LIGHT * 0.03;   // 100 = clearly visible in a dark room
                 #endif

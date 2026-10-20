@@ -26,8 +26,8 @@ import java.util.Map;
  * pack lights each surface from the screen as from a glowing rectangle (colour of each part of the picture, angle and
  * distance). Walls are respected through the screen's own block light ({@code LIT}).
  *
- * <p>Layout, one row per screen (RGBA8, read with texelFetch): texel 0 = (normal x + 1, normal z + 1, 0, 255 if the row
- * is used); texel 1 = centre x (RG) and y (BA), texel 2 = centre z (RG), width and height in blocks (B, A); texels
+ * <p>Layout, one row per screen (RGBA8, read with texelFetch): texel 0 = (normal x + 1, normal z + 1, brightness setting
+ * 0..255, 255 if the row is used); texel 1 = centre x (RG) and y (BA), texel 2 = centre z (RG), width and height in blocks (B, A); texels
  * 3.. = the picture as {@value #COLS} x {@value #ROWS} sRGB cells, row 0 at the top. Positions are relative to the camera
  * of the frame, 16 bits each: {@code (value + 256) * 128}.
  */
@@ -103,13 +103,14 @@ public final class ScreenGlow {
         List<State> nearest = new ArrayList<>(states.values());
         nearest.sort(Comparator.comparingDouble(s -> s.centre.distanceToSqr(camera)));
         NativeImage pixels = texture.getPixels();
+        int strength = Math.round(NestworldConfig.SCREEN_GLOW_STRENGTH.get() * 2.55f);
         pixels.fillRect(0, 0, WIDTH, MAX_SCREENS, 0);
         for (int row = 0; row < Math.min(MAX_SCREENS, nearest.size()); row++) {
             State s = nearest.get(row);
             Vec3 rel = s.centre.subtract(camera);
             if (Math.abs(rel.x) > 250 || Math.abs(rel.y) > 250 || Math.abs(rel.z) > 250) continue;
             int x = fixed(rel.x), y = fixed(rel.y), z = fixed(rel.z);
-            put(pixels, 0, row, s.facing.getStepX() + 1, s.facing.getStepZ() + 1, 0, 255);
+            put(pixels, 0, row, s.facing.getStepX() + 1, s.facing.getStepZ() + 1, strength, 255);
             put(pixels, 1, row, x >> 8, x & 255, y >> 8, y & 255);
             put(pixels, 2, row, z >> 8, z & 255, Math.min(255, s.width), Math.min(255, s.height));
             for (int i = 0; i < COLS * ROWS; i++)

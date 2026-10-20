@@ -77,5 +77,6 @@ final class AutoDisplay extends Display {
     @Override public float[] uvScale() { return delegate.uvScale(); }
     @Override public boolean managesTextureFilter() { return delegate.managesTextureFilter(); }
     @Override public boolean hasMipmaps() { return delegate.hasMipmaps(); }
+    @Override public long frameSerial() { return delegate.frameSerial(); }
     @Override public void release() { delegate.release(); }
 }

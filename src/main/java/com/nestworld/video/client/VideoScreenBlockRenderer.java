@@ -128,7 +128,7 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
         poseStack.popPose();
     }
 
-    private static boolean useVanillaPipeline() {
+    static boolean useVanillaPipeline() {
         return switch (NestworldConfig.RENDER_MODE.get()) {
             case "vanilla_pipeline" -> true;
             case "direct" -> false;
@@ -147,7 +147,10 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
         else h = cols / aspect;
         float x = (cols - w) / 2f, y = 1 - rows + (rows - h) / 2f;
         float[] scale = display.uvScale();
-        VertexConsumer consumer = buffer.getBuffer(VideoRenderTypes.forTexture(textureId, display.hasMipmaps()));
+        boolean mipmapped = display.hasMipmaps();
+        int enlarged = ShaderUpscaler.active() ? ShaderUpscaler.textureFor(display) : -1;
+        if (enlarged > 0) { textureId = enlarged; scale = new float[]{1f, 1f}; mipmapped = ShaderUpscaler.mipmapped(display); }
+        VertexConsumer consumer = buffer.getBuffer(VideoRenderTypes.forTexture(textureId, mipmapped));
         VideoRenderTypes.quad(consumer, poseStack, x, y, w, h, scale[0], scale[1], LightTexture.FULL_BRIGHT);
     }
 

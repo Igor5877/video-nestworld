@@ -96,6 +96,8 @@ public class ClientVideoManager {
         for (BlockPos pos : activeDisplays.keySet()) stopPlaying(pos);
     }
 
+    public java.util.Collection<Display> displays() { return activeDisplays.values(); }
+
     public Display getDisplay(BlockPos pos) {
         return activeDisplays.get(pos);
     }

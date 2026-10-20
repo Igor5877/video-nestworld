@@ -88,11 +88,11 @@ public final class NestworldConfig {
         UPSCALER = builder
                 .comment("How a video is enlarged when its screen is bigger than the video: \"edge\" follows the direction of",
                         "lines (like AMD FSR 1.0's upscaler) for smoother diagonals without halos, \"bicubic\" is a plain",
-                        "sharp filter, \"anime4k\" (experimental) additionally sharpens line art. Needs video.smooth_scaling and no shader pack.")
+                        "sharp filter, \"anime4k\" (experimental) additionally sharpens line art. Needs video.smooth_scaling. Under a shader pack each new frame is enlarged 2x this way before the pack draws it.")
                 .defineInList("upscaler", "edge", java.util.List.of("edge", "bicubic", "anime4k"));
         SHARPNESS = builder
                 .comment("Extra sharpening of the picture in the scaling shader, 0 (off) to 100.",
-                        "Only applies with video.smooth_scaling and when no shader pack is active.")
+                        "Only applies with video.smooth_scaling.")
                 .defineInRange("sharpness", 0, 0, 100);
         builder.comment("Colour correction for the picture while a shader pack is active, in percent per channel.",
                 "Shader packs grade the whole image and may tint it (for example BSL makes pure white slightly cream).",

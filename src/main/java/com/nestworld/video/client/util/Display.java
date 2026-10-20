@@ -61,6 +61,8 @@ public abstract class Display {
     public boolean managesTextureFilter() { return false; }
     /** True when the current texture has a full mipmap chain. */
     public boolean hasMipmaps() { return false; }
+    /** Goes up by one with every new picture in the texture; -1 when the decoder does not tell. */
+    public long frameSerial() { return -1; }
     public void setSoundPlacement(double cx, double cy, double cz, double rx, double ry, double rz) {}
     /** Room acoustics for this screen's sound (null = none); only the FFmpeg audio path uses it. */
     public void setAcoustics(com.nestworld.video.client.acoustics.AcousticResult result) {}

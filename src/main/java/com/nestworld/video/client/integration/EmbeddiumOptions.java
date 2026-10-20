@@ -96,16 +96,16 @@ public final class EmbeddiumOptions {
         var smooth = tick(storage, "Згладжування (бікубічне)", "Згладжує сходинки на великих екранах. Вимкніть, якщо відеокарта не тягне.", NestworldConfig.SMOOTH_SCALING);
         var upscaler = OptionImpl.createBuilder(Upscaler.class, storage)
                 .setName(Component.literal("Збільшення картинки"))
-                .setTooltip(Component.literal("Як збільшується відео, коли екран більший за нього. Не діє з шейдерами."))
+                .setTooltip(Component.literal("Як збільшується відео, коли екран більший за нього. З шейдерами кадр збільшується вдвічі перед тим, як його малює шейдер-пак."))
                 .setControl(o -> new CyclingControl<>(o, Upscaler.class, names(Upscaler.values(), u -> u.label)))
                 .setBinding((s, v) -> NestworldConfig.UPSCALER.set(v.key), s -> Upscaler.of(NestworldConfig.UPSCALER.get()))
                 .build();
-        var sharp = slider(storage, "Різкість", "Додаткове підвищення різкості. Не діє з шейдерами.", NestworldConfig.SHARPNESS, 0, 100, 5, ControlValueFormatter.percentage());
+        var sharp = slider(storage, "Різкість", "Додаткове підвищення різкості.", NestworldConfig.SHARPNESS, 0, 100, 5, ControlValueFormatter.percentage());
         var mips = tick(storage, "Мипмапи (дальні екрани)", "Менше мерехтіння далеких екранів (лише для FFmpeg).", NestworldConfig.MIPMAPS);
 
         var spatial = tick(storage, "Просторовий звук", "Звук іде з екрана в 3D (лише для FFmpeg). Діє для потоків, запущених після зміни.", NestworldConfig.SPATIAL_AUDIO);
         var soft = slider(storage, "М’якість звуку", "0 — широка панорама, 100 — майже моно.", NestworldConfig.SPATIAL_SOFTNESS, 0, 100, 5, ControlValueFormatter.percentage());
-        var glow = slider(storage, "Колірне світло екрана", "0 вимкнено, 1 низьке, 2 середнє, 3 високе. Екран підсвічує кімнату кольорами картинки (лише з шейдерами Oculus/Iris).", NestworldConfig.SCREEN_GLOW, 0, 3, 1, ControlValueFormatter.number());
+        var glow = slider(storage, "Колірне світло екрана", "0 вимкнено, інакше увімкнено. Екран підсвічує кімнату кольорами картинки (лише з запатченим BSL, Oculus/Iris).", NestworldConfig.SCREEN_GLOW, 0, 3, 1, ControlValueFormatter.number());
         var glowStrength = slider(storage, "Яскравість кольорового світла", "Наскільки яскраво екран підсвічує кімнату (лише з шейдерами).", NestworldConfig.SCREEN_GLOW_STRENGTH, 0, 100, 5, ControlValueFormatter.percentage());
         var acoustics = tick(storage, "Акустика приміщення", "Стіни приглушують звук екрана, двері й отвори пропускають його, у залах з’являється луна (лише FFmpeg і просторовий звук).", NestworldConfig.ACOUSTICS);
         var reverb = slider(storage, "Луна приміщення", "0 — лише приглушення стінами. Звукова доріжка вже може містити власну луну.", NestworldConfig.ACOUSTICS_REVERB, 0, 100, 5, ControlValueFormatter.percentage());

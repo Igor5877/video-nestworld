@@ -59,9 +59,9 @@ public final class NestworldSettingsScreen extends Screen {
                 "Згладжує сходинки на великих екранах. Вимкніть, якщо відеокарта не тягне.");
         choice("Збільшення картинки", cellW, () -> switch (NestworldConfig.UPSCALER.get()) { case "bicubic" -> "Бікубічне"; case "anime4k" -> "Anime4K (тест)"; default -> "Слідує за лініями"; },
                 () -> cycleString(NestworldConfig.UPSCALER, List.of("edge", "bicubic", "anime4k")),
-                "Як збільшується відео, коли екран більший за нього. Не діє з шейдерами.");
+                "Як збільшується відео, коли екран більший за нього. З шейдерами кадр збільшується вдвічі перед тим, як його малює шейдер-пак.");
         slider("Різкість", cellW, 100, 0, NestworldConfig.SHARPNESS::get, NestworldConfig.SHARPNESS::set,
-                "Додаткове підвищення різкості. Не діє з шейдерами.");
+                "Додаткове підвищення різкості.");
         toggle("Мипмапи (дальні екрани)", cellW, NestworldConfig.MIPMAPS,
                 "Менше мерехтіння далеких екранів (лише для FFmpeg).");
         toggle("Просторовий звук", cellW, NestworldConfig.SPATIAL_AUDIO,
@@ -70,7 +70,7 @@ public final class NestworldSettingsScreen extends Screen {
                 "0 — широка панорама, 100 — майже моно.");
         choice("Колірне світло екрана", cellW, () -> switch (NestworldConfig.SCREEN_GLOW.get()) { case 0 -> "Вимкнено"; case 1 -> "Низьке"; case 3 -> "Високе"; default -> "Середнє"; },
                 () -> safely(() -> NestworldConfig.SCREEN_GLOW.set((NestworldConfig.SCREEN_GLOW.get() + 1) % 4)),
-                "Екран підсвічує підлогу й стіни кольорами картинки: темний кадр світить слабко, світлий сильно. Лише з шейдерами (Oculus/Iris).\nНижче значення це менший радіус (6 / 10 / 15 блоків) і менше поверхонь.");
+                "Екран підсвічує підлогу й стіни кольорами картинки: темний кадр світить слабко, світлий сильно. Лише з запатченим BSL (Oculus/Iris); тонке налаштування — у налаштуваннях шейдера, розділ Camera.");
         slider("Яскравість кольорового світла", cellW, 100, 0, NestworldConfig.SCREEN_GLOW_STRENGTH::get, NestworldConfig.SCREEN_GLOW_STRENGTH::set,
                 "Наскільки яскраво екран підсвічує кімнату (лише з шейдерами).");
         toggle("Акустика приміщення", cellW, NestworldConfig.ACOUSTICS,
