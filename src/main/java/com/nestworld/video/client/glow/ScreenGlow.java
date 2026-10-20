@@ -42,7 +42,7 @@ public final class ScreenGlow {
         Vec3 centre = Vec3.ZERO;
         Direction facing = Direction.NORTH;
         int width, height;
-        long lastSeen;
+        long lastSeen;   // System.nanoTime(): the game clock is corrected by the server and can jump back
     }
 
     private final Map<BlockPos, State> states = new HashMap<>();
@@ -71,7 +71,7 @@ public final class ScreenGlow {
         state.facing = facing;
         state.width = screen.getScreenCols();
         state.height = screen.getScreenRows();
-        state.lastSeen = gameTime;
+        state.lastSeen = System.nanoTime();
         float k = state.init ? 0.3f : 1f;   // about 150 ms to follow the picture: smooth, never a jump
         for (int row = 0; row < ROWS; row++) for (int col = 0; col < COLS; col++) {
             float[] c = cell(grid, col, row);
@@ -91,8 +91,8 @@ public final class ScreenGlow {
             texture = new DynamicTexture(WIDTH, MAX_SCREENS, true);
             mc.getTextureManager().register(TEXTURE, texture);
         }
-        long now = mc.level == null ? 0 : mc.level.getGameTime();
-        states.values().removeIf(s -> now - s.lastSeen > 40 || now < s.lastSeen);   // a screen that went out of range or stopped
+        long now = System.nanoTime();
+        states.values().removeIf(s -> now - s.lastSeen > 2_000_000_000L);   // a screen that went out of range or stopped
         if (states.isEmpty() || !enabled()) {
             if (uploadedEmpty) return;
             texture.getPixels().fillRect(0, 0, WIDTH, MAX_SCREENS, 0);

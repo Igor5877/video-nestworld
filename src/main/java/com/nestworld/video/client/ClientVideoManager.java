@@ -303,8 +303,8 @@ public class ClientVideoManager {
                 if (current.isPlaying() && dist < 48) acoustics.update(mc.level, pos, screen, current, mc.level.getGameTime());
                 else { current.setAcoustics(null); acoustics.forget(pos); }
                 // Lit while a picture is on the screen, also when paused: the last frame keeps lighting the room.
+                // A tick without colours (or a step past the distance) must not switch the light off: it times out by itself.
                 if (current.glowGrid() != null && dist < 40) glow.update(mc.level, pos, screen, current, mc.level.getGameTime());
-                else glow.forget(pos);
             }
             if (current != null) {
                 double diagonal = Math.hypot(screen.getScreenCols(), screen.getScreenRows());
