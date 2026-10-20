@@ -13,23 +13,34 @@ public class PacketScreenWatch {
     private final boolean watching;
     /** The client's clock when it sent this, echoed back in {@link PacketScreenClock}. */
     private final long clientMs;
+    /** The video this client's decoder plays and its length in ms (0 = not known yet), so the server can judge end reports. */
+    private final String url;
+    private final long durationMs;
 
-    public PacketScreenWatch(BlockPos pos, boolean watching) { this(pos, watching, com.nestworld.video.SyncClock.nowMs()); }
+    public PacketScreenWatch(BlockPos pos, boolean watching) { this(pos, watching, "", 0); }
 
-    private PacketScreenWatch(BlockPos pos, boolean watching, long clientMs) {
+    public PacketScreenWatch(BlockPos pos, boolean watching, String url, long durationMs) {
+        this(pos, watching, com.nestworld.video.SyncClock.nowMs(), url, durationMs);
+    }
+
+    private PacketScreenWatch(BlockPos pos, boolean watching, long clientMs, String url, long durationMs) {
         this.pos = pos.immutable();
         this.watching = watching;
         this.clientMs = clientMs;
+        this.url = url == null ? "" : url;
+        this.durationMs = durationMs;
     }
 
     public static void encode(PacketScreenWatch packet, FriendlyByteBuf buf) {
         buf.writeBlockPos(packet.pos);
         buf.writeBoolean(packet.watching);
         buf.writeLong(packet.clientMs);
+        buf.writeUtf(packet.url, 4096);
+        buf.writeLong(packet.durationMs);
     }
 
     public static PacketScreenWatch decode(FriendlyByteBuf buf) {
-        return new PacketScreenWatch(buf.readBlockPos(), buf.readBoolean(), buf.readLong());
+        return new PacketScreenWatch(buf.readBlockPos(), buf.readBoolean(), buf.readLong(), buf.readUtf(4096), buf.readLong());
     }
 
     public static void handle(PacketScreenWatch packet, Supplier<NetworkEvent.Context> supplier) {
@@ -45,6 +56,7 @@ public class PacketScreenWatch {
             // The pulse: tell this viewer where the timeline is, with the server's clock and its own send time echoed.
             if (player.level().hasChunkAt(packet.pos) && player.level().getBlockEntity(packet.pos) instanceof com.nestworld.video.block.VideoScreenBlockEntity screen
                     && screen.isMaster()) {
+                screen.noteDuration(player.getUUID(), packet.url, packet.durationMs);
                 long[] now = screen.timelineNow();
                 Networking.INSTANCE.send(net.minecraftforge.network.PacketDistributor.PLAYER.with(() -> player),
                         new PacketScreenClock(packet.pos, screen.isPlaying(), now[0], now[1], packet.clientMs));

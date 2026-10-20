@@ -179,8 +179,10 @@ public class ClientVideoManager {
 
     private void reportViewer(BlockPos pos, boolean watching) {
         if (watching) {
+            Display display = activeDisplays.get(pos);
             if (Minecraft.getInstance().getConnection() != null)
-                Networking.INSTANCE.sendToServer(new PacketScreenWatch(pos, true));
+                Networking.INSTANCE.sendToServer(display == null ? new PacketScreenWatch(pos, true)
+                        : new PacketScreenWatch(pos, true, display.getUrl(), Math.max(0, display.getDuration())));
             lastViewerReports.put(pos, 0L);
         } else if (lastViewerReports.remove(pos) != null) {
             if (Minecraft.getInstance().getConnection() != null)
@@ -403,11 +405,11 @@ public class ClientVideoManager {
                     && screen.getPlaybackPositionMs() > current.getDuration() + 3000 && current.getPlaybackTime() >= 0
                     && lastEndReports.putIfAbsent(pos, current.getUrl()) == null) {
                 recordHistory(pos, current, true);
-                Networking.INSTANCE.sendToServer(new PacketVideoEnded(pos, current.getUrl()));
+                Networking.INSTANCE.sendToServer(new PacketVideoEnded(pos, current.getUrl(), Math.max(0, current.getDuration())));
             }
             if (current != null && screen.isPlaying() && current.pollEnded()) {
                 recordHistory(pos, current, true);
-                Networking.INSTANCE.sendToServer(new PacketVideoEnded(pos, current.getUrl()));
+                Networking.INSTANCE.sendToServer(new PacketVideoEnded(pos, current.getUrl(), Math.max(0, current.getDuration())));
             }
             if (current != null)
                 screen.setClientPlaybackAdvancing(current.isPlaying() && !current.isBuffering());

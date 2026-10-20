@@ -58,6 +58,11 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
      * starts together from the beginning instead of jumping in late.
      */
     private static final long START_DELAY_MS = 2500;
+    /** Server: the length of the current video as each viewer's decoder reports it (not saved; refilled by heartbeats). */
+    private final java.util.Map<java.util.UUID, Long> reportedDurations = new java.util.HashMap<>();
+    private String reportedDurationsUrl = "";
+    /** An end report is believed this long before the end as the viewers know it (the decoders' durations differ a little). */
+    private static final long END_SLACK_MS = 5000;
     /** A jump (±10 s) lands this much later on the shared timeline: every viewer has time to seek, then all go on together. */
     private static final long SEEK_DELAY_MS = 300;
     /** Client: the shared timeline was at {@code timelinePositionMs} when the server's clock read {@code timelineServerMs}. */
@@ -334,6 +339,25 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         currentVideoUrl = next.getUrl(); currentVideoTitle = next.getTitle(); nextCancelled = false;
         playbackPositionMs = 0; playbackStartedMs = SyncClock.nowMs() + START_DELAY_MS;
         isPlaying = true; stopped = false; syncToClient();
+    }
+    /** Server: a viewer's decoder says the current video {@code url} is {@code durationMs} long. */
+    public void noteDuration(java.util.UUID viewer, String url, long durationMs) {
+        if (!url.equals(currentVideoUrl) || durationMs <= 0 || durationMs > 7L * 24 * 3600 * 1000) return;
+        if (!url.equals(reportedDurationsUrl)) { reportedDurations.clear(); reportedDurationsUrl = url; }
+        if (reportedDurations.size() < 512 || reportedDurations.containsKey(viewer)) reportedDurations.put(viewer, durationMs);
+    }
+    /**
+     * Server: whether the shared timeline has reached the end of {@code url}, by the median of the lengths the viewers
+     * reported. One viewer whose stream broke off early (its decoder sees the end of what it got) or a client that lies
+     * cannot move everybody on to the next episode. Without any reported length the report is believed, as before.
+     */
+    public boolean atEnd(String url, long reporterDurationMs) {
+        java.util.List<Long> lengths = url.equals(reportedDurationsUrl) ? new java.util.ArrayList<>(reportedDurations.values()) : new java.util.ArrayList<>();
+        if (lengths.isEmpty() && reporterDurationMs > 0) lengths.add(reporterDurationMs);
+        if (lengths.isEmpty()) return true;
+        java.util.Collections.sort(lengths);
+        long length = lengths.get(lengths.size() / 2);
+        return timelineNow()[0] >= length - END_SLACK_MS;
     }
     public void setAutoNext(boolean value) { autoNext = value; if (value) nextCancelled = false; syncToClient(); }
     public void setRepeat(boolean value) { repeat = value; syncToClient(); }

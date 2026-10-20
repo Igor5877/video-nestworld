@@ -7,7 +7,7 @@ import net.minecraftforge.network.simple.SimpleChannel;
 
 public class Networking {
 
-    private static final String PROTOCOL_VERSION = "11";
+    private static final String PROTOCOL_VERSION = "12";
     public static final SimpleChannel INSTANCE = NetworkRegistry.newSimpleChannel(
             ResourceLocation.fromNamespaceAndPath(CinemaMod.MOD_ID, "main"),
             () -> PROTOCOL_VERSION,
