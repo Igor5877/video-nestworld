@@ -28,7 +28,7 @@ import java.util.Map;
  *
  * <p>Layout, one row per screen (RGBA8, read with texelFetch): texel 0 = (normal x + 1, normal z + 1, brightness setting
  * 0..255, 255 if the row is used); texel 1 = centre x (RG) and y (BA), texel 2 = centre z (RG), width and height in blocks (B, A); texel 3 =
- * (every how many tiles one gives block light, its light level, 0, 255); texels 4.. = the picture as {@value #COLS} x {@value #ROWS} sRGB cells, row 0 at the top. Positions are relative to the camera
+ * (every how many tiles one gives block light, its light level, fade 0..255, 255); texels 4.. = the picture as {@value #COLS} x {@value #ROWS} sRGB cells, row 0 at the top. Positions are relative to the camera
  * of the frame, 16 bits each: {@code (value + 256) * 128}. The row after the screens holds the picture scaling settings
  * (upscaler 0..2, sharpness 0..100, 255 if scaling is on, 255).
  */
@@ -44,6 +44,22 @@ public final class ScreenGlow {
         Direction facing = Direction.NORTH;
         int width, height, lightStep;
         long lastSeen;   // System.nanoTime(): the game clock is corrected by the server and can jump back
+        final long firstSeen = System.nanoTime();
+    }
+
+    /** The light comes up over this long when a screen starts giving it, and goes down over this long when it stops. */
+    private static final long FADE_IN_NANOS = 600_000_000L, FADE_OUT_NANOS = 1_000_000_000L, FADE_OUT_DELAY_NANOS = 250_000_000L;
+
+    /**
+     * 0..1: how much of its light a screen gives now. It comes up and goes down smoothly (a screen coming into range,
+     * starting or stopping), and fades out over the last quarter of the stream distance instead of cutting off there.
+     */
+    private static float fade(State s, long now, double distance) {
+        float in = Math.min(1f, (now - s.firstSeen) / (float) FADE_IN_NANOS);
+        float out = 1f - Math.max(0f, Math.min(1f, (now - s.lastSeen - FADE_OUT_DELAY_NANOS) / (float) FADE_OUT_NANOS));
+        double limit = Math.min(250, NestworldConfig.MAX_STREAM_DISTANCE.get()), t = Math.max(0, Math.min(1, (distance - 0.75 * limit) / (0.25 * limit)));
+        float far = (float) (1 - t * t * (3 - 2 * t));
+        return in * out * far;
     }
 
     private final Map<BlockPos, State> states = new HashMap<>();
@@ -112,7 +128,7 @@ public final class ScreenGlow {
             put(pixels, 0, row, s.facing.getStepX() + 1, s.facing.getStepZ() + 1, strength, 255);
             put(pixels, 1, row, x >> 8, x & 255, y >> 8, y & 255);
             put(pixels, 2, row, z >> 8, z & 255, Math.min(255, s.width), Math.min(255, s.height));
-            put(pixels, 3, row, Math.min(255, s.lightStep), VideoScreenBlock.LIGHT_LEVEL, 0, 255);
+            put(pixels, 3, row, Math.min(255, s.lightStep), VideoScreenBlock.LIGHT_LEVEL, Math.round(fade(s, now, rel.length()) * 255), 255);
             for (int i = 0; i < COLS * ROWS; i++)
                 put(pixels, HEADER + i, row, byteOf(s.rgb[i * 3]), byteOf(s.rgb[i * 3 + 1]), byteOf(s.rgb[i * 3 + 2]), 255);
         }

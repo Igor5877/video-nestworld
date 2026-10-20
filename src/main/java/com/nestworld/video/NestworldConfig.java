@@ -32,7 +32,7 @@ public final class NestworldConfig {
                 .defineInRange("decode_screens", 2, 1, 16);
         MAX_STREAM_DISTANCE = builder
                 .comment("Maximum distance in blocks for an active video stream on this client.")
-                .defineInRange("max_stream_distance", 128, 16, 512);
+                .defineInRange("max_stream_distance", 256, 16, 512);
         SMOOTH_SCALING = builder
                 .comment("Scale video with the mod's scaling shader (see video.upscaler) instead of plain bilinear filtering.",
                         "Under a shader pack it also enlarges each new frame 2x before the pack draws it. Disable if your GPU struggles.")
@@ -64,21 +64,21 @@ public final class NestworldConfig {
                 .defineInRange("screen_glow", 2, 0, 3);
         SCREEN_GLOW_STRENGTH = builder
                 .comment("Brightness of that colour light in percent, 80 = as tuned; the shader pack has its own settings on top.")
-                .defineInRange("screen_glow_strength", 80, 0, 100);
+                .defineInRange("screen_glow_strength", 40, 0, 100);
         ACOUSTICS = builder
                 .comment("Room acoustics for the screen sound (needs the FFmpeg decoder with spatial audio): walls muffle the sound,",
                         "doors and openings let it through, and halls add reverb. Uses OpenAL EFX; switches itself off if unavailable.")
                 .define("acoustics", true);
         ACOUSTICS_REVERB = builder
                 .comment("Strength of the room reverb in percent (0 = only muffling by walls). The soundtrack may carry its own reverb.")
-                .defineInRange("acoustics_reverb", 60, 0, 100);
+                .defineInRange("acoustics_reverb", 40, 0, 100);
         ACOUSTICS_MUFFLE = builder
                 .comment("How strongly walls muffle the screen sound, in percent (100 = default; higher makes the difference between",
                         "materials and the effect of a wall stronger, 0 = walls do not muffle).")
-                .defineInRange("acoustics_muffle", 100, 0, 200);
+                .defineInRange("acoustics_muffle", 150, 0, 200);
         ACOUSTICS_QUALITY = builder
                 .comment("Acoustic ray quality: 1 fast, 2 balanced, 3 detailed (more rays and bounces).")
-                .defineInRange("acoustics_quality", 2, 1, 3);
+                .defineInRange("acoustics_quality", 3, 1, 3);
         AUTO_VSYNC = builder
                 .comment("Temporarily enable VSync while a video screen is playing in front of you, to avoid horizontal tearing",
                         "bands at a high frame rate. Your own VSync setting is restored afterwards and never overwritten.")
@@ -94,11 +94,11 @@ public final class NestworldConfig {
                 .comment("How a video is enlarged when its screen is bigger than the video: \"edge\" follows the direction of",
                         "lines (like AMD FSR 1.0's upscaler) for smoother diagonals without halos, \"bicubic\" is a plain",
                         "sharp filter, \"anime4k\" (experimental) additionally sharpens line art. Needs video.smooth_scaling. Under a shader pack each new frame is enlarged 2x this way before the pack draws it.")
-                .defineInList("upscaler", "edge", java.util.List.of("edge", "bicubic", "anime4k"));
+                .defineInList("upscaler", "anime4k", java.util.List.of("edge", "bicubic", "anime4k"));
         SHARPNESS = builder
                 .comment("Extra sharpening of the picture in the scaling shader, 0 (off) to 100.",
                         "Only applies with video.smooth_scaling.")
-                .defineInRange("sharpness", 0, 0, 100);
+                .defineInRange("sharpness", 90, 0, 100);
         builder.comment("Colour correction for the picture while a shader pack is active, in percent per channel.",
                 "Shader packs grade the whole image and may tint it (for example BSL makes pure white slightly cream).",
                 "Lower red and green to cancel a warm tint. Measured with BSL v10.1.1 on its default settings: 75 / 82 / 100",

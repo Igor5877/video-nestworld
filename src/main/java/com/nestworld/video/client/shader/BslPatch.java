@@ -30,7 +30,7 @@ public final class BslPatch {
     public static final int BLOCK_ID = 260;
     public static final String SUFFIX = "_NestworldVideo";
     public static final String MARKER = "shaders/nestworld_display.txt";
-    private static final String PATCH_VERSION = "4";
+    private static final String PATCH_VERSION = "5";
 
     /** SHA-256 of each file the patch edits, in BSL v10.1.1. */
     private static final Map<String, String> FILES = new LinkedHashMap<>();
@@ -298,6 +298,7 @@ public final class BslPatch {
                     // A big screen gives block light only from an even grid of its tiles (every step-th one).
                     ivec4 lit = ivec4(texelFetch(nwScreenLight, ivec2(3, s), 0) * 255.0 + 0.5);
                     float slack = 2.0 * floor(float(lit.r) * 0.5);
+                    float fade = float(lit.b) / 255.0;   // the screen's light coming up or going down (in range, starting, stopping)
                     vec3 rel = worldPos - centre;
                     float front = dot(rel, n);
                     float range = 8.0 + 1.5 * max(w, h);
@@ -307,7 +308,7 @@ public final class BslPatch {
                     float excess = blockLight * 15.0 - (float(lit.g) - steps - slack);
                     #ifdef DISPLAY_REPLACE_BLOCKLIGHT
                     // Where the block light is the screen's own, its plain white light gives way to the coloured light below.
-                    if (steps < float(lit.g)) vanilla = min(vanilla, 1.0 - smoothstep(-3.0, -2.0, excess) * (1.0 - smoothstep(0.5, 1.5, excess)));
+                    if (steps < float(lit.g)) vanilla = min(vanilla, 1.0 - fade * smoothstep(-3.0, -2.0, excess) * (1.0 - smoothstep(0.5, 1.5, excess)));
                     #endif
                     if (front < 0.02 || dist > range) continue;
                     // Walls: that block light must reach this point about as strongly as it would in the open.
@@ -333,7 +334,7 @@ public final class BslPatch {
                         }
                     }
                     float modStrength = float(head.b) / 204.0;   // the mod's own brightness setting, 80% = 1
-                    light += sum * (w * h / 40.0 / 3.14159) * visible * modStrength * (1.0 - smoothstep(0.6 * range, range, dist));
+                    light += sum * (w * h / 40.0 / 3.14159) * visible * modStrength * fade * (1.0 - smoothstep(0.6 * range, range, dist));
                 }
                 light *= DISPLAY_LIGHT * 0.03;   // 100 = clearly visible in a dark room
                 #endif

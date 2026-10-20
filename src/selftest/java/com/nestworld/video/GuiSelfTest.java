@@ -260,6 +260,10 @@ public class GuiSelfTest {
                         "fill -7 -61 -7 10 -52 10 stone outline|tp @a 2 -60 -1 0 0", "fill -7 -61 -7 10 -52 10 air outline|tp @a 2 -60 -1 0 0",
                         "fill -7 -61 -7 10 -52 10 oak_planks outline|tp @a 2 -60 -1 0 0", "fill -7 -61 -7 10 -52 10 white_wool outline|tp @a 2 -60 -1 0 0",
                         "say end"};
+                if (Boolean.getBoolean("nestworldvideo.guihall"))   // a long stone hall: 4, 12 and 24 blocks from the screen, then the same outdoors
+                    spots = new String[]{"fill -9 -61 -40 12 -50 8 stone outline|tp @a 2 -60 1 0 0", "tp @a 2 -60 -7 0 0", "tp @a 2 -60 -19 0 0",
+                            "fill -9 -61 -40 12 -50 8 air outline|fill -9 -61 -40 12 -61 8 grass_block|tp @a 2 -60 1 0 0", "tp @a 2 -60 -7 0 0",
+                            "tp @a 2 -60 -19 0 0", "say end"};
                 var display = com.nestworld.video.client.ClientVideoManager.getInstance().getDisplay(ORIGIN);
                 Object audio = display == null ? null : audioOrNull(display);
                 boolean sounding = audio != null && (boolean) call(audio, "isAvailable") && (boolean) call(audio, "isPlaying");

@@ -29,6 +29,8 @@ public final class ScreenAcoustics {
     /** The direct sound is re-evaluated every 2 ticks (100 ms), the reverb every 5 (250 ms). */
     private static final int DIRECT_TICKS = 2, REVERB_TICKS = 5;
     private static final int[] RAYS = {12, 20, 32}, BOUNCES = {2, 3, 4};
+    /** How far an acoustic ray travels before it counts as gone (open air): halls up to about this long ring as halls. */
+    public static final int RAY_DISTANCE = 96;
 
     private static final class State {
         long lastDirect = Long.MIN_VALUE / 2, lastReverb = Long.MIN_VALUE / 2;
@@ -68,18 +70,25 @@ public final class ScreenAcoustics {
                 state.lastReverb = gameTime;
                 int quality = Math.max(1, Math.min(3, NestworldConfig.ACOUSTICS_QUALITY.get())) - 1;
                 state.reverb = AcousticSolver.reverb(world, centre.add(front.scale(0.8)), front, listener, RAYS[quality], BOUNCES[quality],
-                        NestworldConfig.ACOUSTICS_REVERB.get() / 100.0, 48);
+                        NestworldConfig.ACOUSTICS_REVERB.get() / 100.0, RAY_DISTANCE);
             }
-            AcousticResult result = new AcousticResult(state.direct.gainL(), state.direct.hfL(), state.direct.gainR(), state.direct.hfR(),
+            // The back rows of a hall: less direct sound, the same reverb.
+            double dx = Math.max(bounds.minX - camera.x, Math.max(0, camera.x - bounds.maxX));
+            double dy = Math.max(bounds.minY - camera.y, Math.max(0, camera.y - bounds.maxY));
+            double dz = Math.max(bounds.minZ - camera.z, Math.max(0, camera.z - bounds.maxZ));
+            float far = (float) AcousticSolver.directDistanceFactor(Math.sqrt(dx * dx + dy * dy + dz * dz),
+                    Math.hypot(screen.getScreenCols(), screen.getScreenRows()), state.reverb.enclosure());
+            AcousticResult result = new AcousticResult(state.direct.gainL() * far, state.direct.hfL(), state.direct.gainR() * far, state.direct.hfR(),
                     state.reverb.sendGain(), state.reverb.sendHf(), state.reverb.decayTime());
             state.result = result.isValid() ? result : AcousticResult.OPEN;
             display.setAcoustics(state.result);
             if (NestworldConfig.DEBUG_STATS.get() && gameTime - state.lastLog >= 40) {
                 state.lastLog = gameTime;
-                LOGGER.info("Nestworld Video acoustics: direct L {}/{} R {}/{} (gain/high-freq), reverb send {} hf {} decay {}s",
+                LOGGER.info("Nestworld Video acoustics: direct L {}/{} R {}/{} (gain/high-freq), reverb send {} hf {} decay {}s, enclosure {}, distance factor {}",
                         String.format("%.2f", result.directGainL()), String.format("%.2f", result.directHfL()),
                         String.format("%.2f", result.directGainR()), String.format("%.2f", result.directHfR()),
-                        String.format("%.2f", result.sendGain()), String.format("%.2f", result.sendHf()), String.format("%.2f", result.decayTime()));
+                        String.format("%.2f", result.sendGain()), String.format("%.2f", result.sendHf()), String.format("%.2f", result.decayTime()),
+                        String.format("%.2f", state.reverb.enclosure()), String.format("%.2f", far));
             }
         } catch (RuntimeException e) {
             state.failed = true;

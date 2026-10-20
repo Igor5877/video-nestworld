@@ -93,6 +93,9 @@ public final class NestworldSettingsScreen extends Screen {
         toggle("Статистика в журналі", cellW, NestworldConfig.DEBUG_STATS,
                 "Пише в latest.log швидкість годинника, черги, розсинхрон. Для пошуку проблем.");
 
+        var reset = new CinemaButton(Component.literal("Типові"), left + 12, top + panelH - 28, 90, b -> resetToDefaults());
+        reset.setTooltip(net.minecraft.client.gui.components.Tooltip.create(Component.literal("Повернути всі налаштування відео мода до типових значень.")));
+        addRenderableWidget(reset);
         addRenderableWidget(new CinemaButton(Component.literal("Готово"), left + panelW / 2 - 60, top + panelH - 28, 120, b -> onClose()));
         var done = (CinemaButton) children().get(children().size() - 1);
         done.primary = true; done.centered = true;
@@ -177,6 +180,20 @@ public final class NestworldSettingsScreen extends Screen {
         if (maxScroll() > 0) g.drawString(font, "▾ прокрутіть колесом миші", left + panelW - 12 - font.width("▾ прокрутіть колесом миші"), top + 12, MUTED, false);
         super.render(g, mx, my, partial);
     }
+
+    /** Every setting of the mod back to its default (the values the config file is created with). */
+    private void resetToDefaults() {
+        for (var field : NestworldConfig.class.getFields()) {
+            if (!java.lang.reflect.Modifier.isStatic(field.getModifiers())
+                    || !net.minecraftforge.common.ForgeConfigSpec.ConfigValue.class.isAssignableFrom(field.getType())) continue;
+            try { resetValue((net.minecraftforge.common.ForgeConfigSpec.ConfigValue<?>) field.get(null)); }
+            catch (IllegalAccessException ignored) { }
+        }
+        restartStreams = true;
+        rebuildWidgets();
+    }
+
+    private static <T> void resetValue(net.minecraftforge.common.ForgeConfigSpec.ConfigValue<T> value) { value.set(value.getDefault()); }
 
     @Override public void onClose() {
         minecraft.setScreen(parent);

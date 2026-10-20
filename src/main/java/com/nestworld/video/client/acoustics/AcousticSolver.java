@@ -22,7 +22,26 @@ public final class AcousticSolver {
     /** How much of the loudness follows the high-frequency loss: low enough to keep speech audible behind a wall. */
     private static final double GAIN_EXPONENT = 0.25;
 
-    public record Reverb(float sendGain, float sendHf, float decayTime) {}
+    /** @param enclosure 0 (open sky) .. 1 (closed room): how much of the room's sound there is */
+    public record Reverb(float sendGain, float sendHf, float decayTime, float enclosure) {
+        public Reverb(float sendGain, float sendHf, float decayTime) { this(sendGain, sendHf, decayTime, 0f); }
+    }
+
+    /**
+     * In a room the direct sound of the screen falls off with distance (half the pressure per doubling) while the
+     * room's reverberant sound stays about the same everywhere: the back rows of a cinema hear less screen and more
+     * hall. Outdoors there is no hall, there the plain falloff applies. Returns the factor for the direct sound.
+     *
+     * @param distance       from the listener to the screen's surface
+     * @param screenDiagonal in blocks: a bigger screen is a bigger source, its sound starts falling off farther away
+     */
+    public static double directDistanceFactor(double distance, double screenDiagonal, double enclosure) {
+        double reference = Math.max(6.0, 4.0 + 0.3 * screenDiagonal);
+        double inverse = Math.max(0.4, reference / Math.max(reference, distance));
+        // Under the open sky about half of the rays still hit the ground: only a mostly closed room counts as a hall.
+        double hall = clamp((enclosure - 0.6) / 0.3, 0, 1);
+        return 1.0 - hall * (1.0 - inverse);
+    }
     public record Direct(float gainL, float hfL, float gainR, float hfR) {}
 
     /** Least blocked path from any probe to the listener, turned into a low-pass (gain, high-frequency gain). */
@@ -75,9 +94,11 @@ public final class AcousticSolver {
                 pathLength += hit.distance();
                 energy *= Math.min(1.0, Math.max(0.0, hit.reflectivity()));
                 V3 point = hit.point().add(hit.normal().scale(0.05));
-                // What reaches the listener from this surface (in sight) goes into the reverb, weaker the longer the way.
+                // What reaches the listener from this surface (in sight) goes into the reverb, weaker the longer the
+                // sound has travelled from the screen. Not much weaker for a listener far from the screen: a hall's
+                // reverberant sound fills it evenly, the back rows hear as much of it as the front ones.
                 if (world.occlusion(point, listener, 0.2) < 0.05)
-                    contribution += energy / (1.0 + (pathLength + point.distanceTo(listener)) / 8.0);
+                    contribution += energy / (1.0 + (pathLength + 0.25 * point.distanceTo(listener)) / 16.0);
                 dir = dir.reflect(hit.normal()).normalized();
                 position = point;
             }
@@ -92,7 +113,7 @@ public final class AcousticSolver {
         // wooden room for half a second, wool swallows it; rays escaping to the sky shorten it.
         double absorptionCoefficient = Math.max(0.05, 1.0 - averageReflect);
         float decay = (float) clamp(0.04 * averageFree / absorptionCoefficient * (0.3 + 0.7 * enclosure), 0.3, 3.5);
-        return new Reverb(send, hf, decay);
+        return new Reverb(send, hf, decay, (float) enclosure);
     }
 
     public static double clamp(double v, double lo, double hi) { return v < lo ? lo : Math.min(v, hi); }

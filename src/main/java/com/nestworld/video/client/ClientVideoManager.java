@@ -450,11 +450,11 @@ public class ClientVideoManager {
             }
             // Room acoustics only matter while the screen is audible, which is also when it is close enough to compute them.
             if (current != null) {
-                if (current.isPlaying() && dist < 48) acoustics.update(mc.level, pos, screen, current, mc.level.getGameTime());
+                if (current.isPlaying() && dist < com.nestworld.video.client.acoustics.ScreenAcoustics.RAY_DISTANCE) acoustics.update(mc.level, pos, screen, current, mc.level.getGameTime());
                 else { current.setAcoustics(null); acoustics.forget(pos); }
                 // Lit while a picture is on the screen, also when paused: the last frame keeps lighting the room.
                 // A tick without colours (or a step past the distance) must not switch the light off: it times out by itself.
-                if (current.glowGrid() != null && dist < 40) glow.update(mc.level, pos, screen, current, mc.level.getGameTime());
+                if (current.glowGrid() != null && dist < NestworldConfig.MAX_STREAM_DISTANCE.get()) glow.update(mc.level, pos, screen, current, mc.level.getGameTime());
             }
             if (current != null) {
                 double diagonal = Math.hypot(screen.getScreenCols(), screen.getScreenRows());
