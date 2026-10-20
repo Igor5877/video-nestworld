@@ -146,10 +146,14 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
         if (cols / rows > aspect) w = rows * aspect;
         else h = cols / aspect;
         float x = (cols - w) / 2f, y = 1 - rows + (rows - h) / 2f;
-        VertexConsumer consumer = buffer.getBuffer(VideoRenderTypes.forTexture(textureId, display.hasMipmaps()));
-        Matrix4f matrix = poseStack.last().pose();
-        int light = LightTexture.FULL_BRIGHT;
         float[] scale = display.uvScale();
+        if ("unlit".equals(NestworldConfig.SHADER_SCREEN_MODE.get())) {
+            // Drawn without lighting, so the picture keeps its colours in sun, shade and the dark.
+            VertexConsumer unlit = buffer.getBuffer(VideoRenderTypes.forTextureUnlit(textureId, display.hasMipmaps()));
+            VideoRenderTypes.quadUnlit(unlit, poseStack, x, y, w, h, scale[0], scale[1]);
+            return;
+        }
+        VertexConsumer consumer = buffer.getBuffer(VideoRenderTypes.forTexture(textureId, display.hasMipmaps()));
         VideoRenderTypes.quad(consumer, poseStack, x, y, w, h, scale[0], scale[1], LightTexture.FULL_BRIGHT);
     }
 

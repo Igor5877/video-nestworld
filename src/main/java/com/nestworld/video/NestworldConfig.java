@@ -20,7 +20,7 @@ public final class NestworldConfig {
     public static final ForgeConfigSpec.IntValue SHARPNESS;
     public static final ForgeConfigSpec.IntValue SHADER_TINT_RED, SHADER_TINT_GREEN, SHADER_TINT_BLUE;
     public static final ForgeConfigSpec.ConfigValue<String> UPSCALER;
-    public static final ForgeConfigSpec.ConfigValue<String> RENDER_MODE;
+    public static final ForgeConfigSpec.ConfigValue<String> RENDER_MODE, SHADER_SCREEN_MODE;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -74,6 +74,10 @@ public final class NestworldConfig {
         ACOUSTICS_QUALITY = builder
                 .comment("Acoustic ray quality: 1 fast, 2 balanced, 3 detailed (more rays and bounces).")
                 .defineInRange("acoustics_quality", 2, 1, 3);
+        SHADER_SCREEN_MODE = builder
+                .comment("How the picture is drawn under a shader pack: \"lit\" (as text, the pack lights it) or \"unlit\"",
+                        "(experimental, beacon-beam style: independent of daylight but washed out and bloomed by BSL).")
+                .defineInList("shader_screen_mode", "lit", java.util.List.of("lit", "unlit"));
         AUTO_VSYNC = builder
                 .comment("Temporarily enable VSync while a video screen is playing in front of you, to avoid horizontal tearing",
                         "bands at a high frame rate. Your own VSync setting is restored afterwards and never overwritten.")
