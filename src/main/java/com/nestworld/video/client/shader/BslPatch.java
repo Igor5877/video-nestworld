@@ -121,11 +121,11 @@ public final class BslPatch {
         edit(out, originals, "shaders/lib/settings.glsl", (t, nl) -> replaceOnce(t,
                 "  #define BLOOM_CONTRAST 0 //[-4 -3 -2 -1 0 1 2 3 4]" + nl,
                 "  #define BLOOM_CONTRAST 0 //[-4 -3 -2 -1 0 1 2 3 4]" + nl
-                + "  #define DISPLAY_BRIGHTNESS 100 //[25 50 60 70 80 90 100 110 120 130 140 150 200]" + nl
-                + "  #define DISPLAY_BLOOM 20 //[0 10 20 30 40 50 60 70 80 90 100 120 150]" + nl
-                + "  #define DISPLAY_LIGHT 100 //[0 25 50 75 100 125 150 200 300 400]" + nl
-                + "  #define DISPLAY_LIGHT_CONTRAST 100 //[50 75 100 125 150 175 200]" + nl
-                + "  #define DISPLAY_LIGHT_SATURATION 100 //[0 25 50 75 100 125 150 200]" + nl
+                + "  #define DISPLAY_BRIGHTNESS 110 //[25 50 60 70 80 90 100 110 120 130 140 150 200]" + nl
+                + "  #define DISPLAY_BLOOM 30 //[0 10 20 30 40 50 60 70 80 90 100 120 150]" + nl
+                + "  #define DISPLAY_LIGHT 150 //[0 25 50 75 100 125 150 200 300 400]" + nl
+                + "  #define DISPLAY_LIGHT_CONTRAST 125 //[50 75 100 125 150 175 200]" + nl
+                + "  #define DISPLAY_LIGHT_SATURATION 125 //[0 25 50 75 100 125 150 200]" + nl
                 + "  #define DISPLAY_REPLACE_BLOCKLIGHT" + nl
                 + "//Nestworld Video: the screen writes a mask into colortex8 (free unless screen-space coloured light is on) so its bloom can be scaled//" + nl
                 + "  #if DISPLAY_BLOOM != 100 && !defined MCBL_SS" + nl
@@ -136,7 +136,7 @@ public final class BslPatch {
                 + "option.DISPLAY_BRIGHTNESS=Video Screen Brightness (%)" + nl
                 + "option.DISPLAY_BRIGHTNESS.comment=Emitted light of Nestworld Video screens (100 = normal display brightness). BSL exposure and grading still apply." + nl
                 + "option.DISPLAY_BLOOM=Video Screen Bloom (%)" + nl
-                + "option.DISPLAY_BLOOM.comment=How much the video screens feed bloom. 20 = subtle, 100 = full, 0 = none. Requires MCBL_SS off." + nl
+                + "option.DISPLAY_BLOOM.comment=How much the video screens feed bloom. 30 = subtle, 100 = full, 0 = none. Requires MCBL_SS off." + nl
                 + "option.DISPLAY_LIGHT=Video Screen Light (%)" + nl
                 + "option.DISPLAY_LIGHT.comment=Brightness of the coloured light the video screens give the room (follows the picture). 0 = none." + nl
                 + "option.DISPLAY_LIGHT_CONTRAST=Video Screen Light Contrast (%)" + nl
