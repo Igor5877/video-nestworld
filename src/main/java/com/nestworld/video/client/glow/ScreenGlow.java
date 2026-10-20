@@ -28,11 +28,17 @@ public final class ScreenGlow {
     /** Ticks between two looks at the picture. */
     private static final int UPDATE_TICKS = 4;
     /** A tile keeps a colour at least this long, so a flickering picture does not rebuild its chunk section all the time. */
-    private static final int HOLD_TICKS = 10;
+    private static final int HOLD_TICKS = 20;
     /** Most tiles whose state changes in one update: a big wall changes over a few updates instead of at once. */
     private static final int MAX_CHANGES = 48;
+    /** 0 = grey light, 1 = the picture's full colour. */
+    private static final float SATURATION = 0.55f;
+    /** Share of the new colour taken per update (about a second to settle). */
+    private static final float SMOOTHING = 0.2f;
+    /** A tile changes colour only when the new levels are at least this much closer (sum over the channels). */
+    private static final float HYSTERESIS = 0.12f;
     /** Linear light of the five levels of each channel; must match the table in the shader patch. */
-    static final float[] LEVELS = {0f, 0.12f, 0.3f, 0.6f, 1f};
+    static final float[] LEVELS = {0f, 0.05f, 0.15f, 0.4f, 1f};
 
     private static final class Tile {
         float r, g, b;          // smoothed linear colour
@@ -68,7 +74,8 @@ public final class ScreenGlow {
         int cols = screen.getScreenCols(), rows = screen.getScreenRows();
         // The server lights only an even grid of the tiles of a big wall; each lit tile speaks for the patch around it.
         int step = Math.max(1, VideoScreenBlockEntity.lightStep(cols * rows));
-        float gain = NestworldConfig.SCREEN_GLOW_STRENGTH.get() / 100f * 2f;
+        float gain = NestworldConfig.SCREEN_GLOW_STRENGTH.get() / 100f * 1.2f;
+        float[] frame = regionColour(grid, 0, 1, 0, 1);   // the whole picture: room light is mostly ambient, not a projection
         int changes = 0;
         for (int row = 0; row < rows; row++) for (int col = 0; col < cols; col++) {
             BlockPos tilePos = pos.relative(right, col).above(row);
@@ -77,11 +84,19 @@ public final class ScreenGlow {
             Tile tile = state.tiles.computeIfAbsent(tilePos, p -> new Tile());
             float[] linear = regionColour(grid, (col + 0.5 - step / 2.0) / cols, (col + 0.5 + step / 2.0) / cols,
                     1.0 - (row + 0.5 + step / 2.0) / rows, 1.0 - (row + 0.5 - step / 2.0) / rows);
+            // Half of each tile's light is the whole picture's colour, and the colour is pulled towards grey: a patch of
+            // red on a dark picture must not turn the room bright red.
+            for (int ch = 0; ch < 3; ch++) linear[ch] = 0.5f * linear[ch] + 0.5f * frame[ch];
+            float luma = 0.2126f * linear[0] + 0.7152f * linear[1] + 0.0722f * linear[2];
+            for (int ch = 0; ch < 3; ch++) linear[ch] = luma + (linear[ch] - luma) * SATURATION;
             if (!tile.init) { tile.r = linear[0]; tile.g = linear[1]; tile.b = linear[2]; tile.init = true; }
-            else { tile.r += (linear[0] - tile.r) * 0.5f; tile.g += (linear[1] - tile.g) * 0.5f; tile.b += (linear[2] - tile.b) * 0.5f; }
-            int target = code(tile.r * gain, tile.g * gain, tile.b * gain);
+            else { tile.r += (linear[0] - tile.r) * SMOOTHING; tile.g += (linear[1] - tile.g) * SMOOTHING; tile.b += (linear[2] - tile.b) * SMOOTHING; }
+            float wr = tile.r * gain, wg = tile.g * gain, wb = tile.b * gain;
+            int target = code(wr, wg, wb);
             int shown = current.getValue(VideoScreenBlock.GLOW);
-            if (target == shown || gameTime - tile.changedAt < HOLD_TICKS || changes >= MAX_CHANGES) continue;
+            // The light spreads through the shader one step per frame, so every change shows as a wave: change only when it is worth it.
+            if (target == shown || gameTime - tile.changedAt < HOLD_TICKS || changes >= MAX_CHANGES
+                    || (shown != 0 && error(shown, wr, wg, wb) - error(target, wr, wg, wb) < HYSTERESIS)) continue;
             tile.changedAt = gameTime;
             changes++;
             level.setBlock(tilePos, current.setValue(VideoScreenBlock.GLOW, target), Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
@@ -118,6 +133,11 @@ public final class ScreenGlow {
                 r += Math.pow(g.rgb()[o], 2.2); gr += Math.pow(g.rgb()[o + 1], 2.2); b += Math.pow(g.rgb()[o + 2], 2.2); n++;
             }
         return n == 0 ? new float[]{0, 0, 0} : new float[]{(float) (r / n), (float) (gr / n), (float) (b / n)};
+    }
+
+    /** How far the levels of a glow value are from the wanted linear colour. */
+    private static float error(int code, float r, float g, float b) {
+        return Math.abs(LEVELS[code / 25] - Math.min(1f, r)) + Math.abs(LEVELS[(code / 5) % 5] - Math.min(1f, g)) + Math.abs(LEVELS[code % 5] - Math.min(1f, b));
     }
 
     /** The glow value (0..124) whose levels come closest to the linear colour. */

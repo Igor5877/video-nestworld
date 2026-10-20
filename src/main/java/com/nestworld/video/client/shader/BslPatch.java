@@ -132,7 +132,7 @@ public final class BslPatch {
                 "  #define BLOOM_CONTRAST 0 //[-4 -3 -2 -1 0 1 2 3 4]" + nl
                 + "  #define DISPLAY_BRIGHTNESS 100 //[25 50 60 70 80 90 100 110 120 130 140 150 200]" + nl
                 + "  #define DISPLAY_BLOOM 20 //[0 10 20 30 40 50 60 70 80 90 100 120 150]" + nl
-                + "  #define DISPLAY_LIGHT 100 //[0 25 50 75 100 125 150 200 300]" + nl
+                + "  #define DISPLAY_LIGHT 60 //[0 20 30 40 50 60 80 100 125 150 200]" + nl
                 + "//Nestworld Video: the screen writes a mask into colortex8 (free unless screen-space coloured light is on) so its bloom can be scaled//" + nl
                 + "  #if DISPLAY_BLOOM != 100 && !defined MCBL_SS" + nl
                 + "  #define NW_DISPLAY_MASK" + nl
@@ -159,7 +159,7 @@ public final class BslPatch {
                 "\t// Nestworld Video: 5 x 5 x 5 levels of red, green and blue (100 + r * 25 + g * 5 + b), the colour of a lit screen tile" + nl
                 + "\tif (data >= 101 && data <= 224) {" + nl
                 + "\t\tuint nwIndex = data - 100;" + nl
-                + "\t\tfloat nwLevels[5] = float[5](0.0, 0.12, 0.3, 0.6, 1.0);" + nl
+                + "\t\tfloat nwLevels[5] = float[5](0.0, 0.05, 0.15, 0.4, 1.0);" + nl
                 + "\t\temission = vec3(nwLevels[nwIndex / 25], nwLevels[(nwIndex / 5) % 5], nwLevels[nwIndex % 5]) * (4.0 * DISPLAY_LIGHT * 0.01);" + nl
                 + "\t}" + nl
                 + "\treturn emission;"));
