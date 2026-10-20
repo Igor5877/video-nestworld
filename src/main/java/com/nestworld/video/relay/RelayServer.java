@@ -41,6 +41,11 @@ public final class RelayServer {
         /** For a segment: the playlist it belongs to and its position in it (drives prefetching). */
         final Map<Integer, int[]> position = new HashMap<>();
         final Map<Integer, List<Integer>> playlistSegments = new HashMap<>();
+        /** For a playlist: where each of its segments starts, in seconds from the first. */
+        final Map<Integer, double[]> playlistStarts = new HashMap<>();
+        /** A viewer joins at this segment (of playlist 0) until {@code aimUntilMs}: no prefetching before it. */
+        volatile int aimSegment = -1;
+        volatile long aimUntilMs;
         volatile long lastUsed = System.currentTimeMillis();
         Source(String id, String originUrl) { this.id = id; this.originUrl = originUrl; this.referer = originOf(originUrl); }
         synchronized int register(String url) {
@@ -131,6 +136,36 @@ public final class RelayServer {
         workers.execute(() -> { try { playlist(source, originUrl, 0); } catch (Exception ignored) { /* best effort */ } });
     }
 
+    /**
+     * Start downloading the segments of {@code originUrl} (a media playlist) from {@code positionMs} on, before anyone
+     * asks: a viewer that joins a running video needs that part first, not the beginning.
+     */
+    public void prefetchAt(String originUrl, long positionMs) {
+        pathFor(originUrl);
+        Source source = sourcesByUrl.get(originUrl);
+        if (workers == null || source == null) return;
+        try {
+            workers.execute(() -> {
+                try {
+                    playlist(source, originUrl, 0);
+                    List<Integer> list; double[] starts;
+                    synchronized (source) { list = source.playlistSegments.get(0); starts = source.playlistStarts.get(0); }
+                    if (list == null || starts == null || starts.length != list.size()) return;
+                    int i = 0;
+                    while (i + 1 < starts.length && starts[i + 1] * 1000 <= positionMs) i++;
+                    source.aimSegment = i; source.aimUntilMs = System.currentTimeMillis() + 20_000L;
+                    for (int k = i; k < Math.min(list.size(), i + 1 + prefetchSegments); k++) {
+                        String url = source.url(list.get(k));
+                        if (url != null && cacheGet(url) == null && !inFlight.containsKey(url)) {
+                            if (k == i) fetch(source, url, false);   // the one needed first, right away
+                            else workers.execute(() -> { try { fetch(source, url, false); } catch (Exception ignored) { /* best effort */ } });
+                        }
+                    }
+                } catch (Exception ignored) { /* best effort: the decoder fetches what it needs anyway */ }
+            });
+        } catch (RejectedExecutionException ignored) { /* busy: nothing lost */ }
+    }
+
     // ---- request handling -------------------------------------------------------------------------------
 
     private void handle(HttpExchange exchange) throws IOException {
@@ -204,10 +239,15 @@ public final class RelayServer {
         URI base = URI.create(url);
         StringBuilder out = new StringBuilder(text.length() + 256);
         List<Integer> segments = new ArrayList<>();
+        List<Double> starts = new ArrayList<>();
+        double clock = 0, duration = 0;
         for (String line : text.split("\r?\n", -1)) {
             if (line.length() > 4096) throw new IOException("playlist line too long");
             String trimmed = line.trim();
             if (trimmed.isEmpty()) { out.append(line).append('\n'); continue; }
+            if (trimmed.startsWith("#EXTINF:")) {
+                try { duration = Double.parseDouble(trimmed.substring(8).split(",", 2)[0].trim()); } catch (NumberFormatException e) { duration = 0; }
+            }
             if (trimmed.startsWith("#")) {
                 Matcher m = URI_ATTRIBUTE.matcher(line);
                 if (m.find()) {
@@ -221,11 +261,12 @@ public final class RelayServer {
             String absolute = base.resolve(trimmed).toString();
             int n = source.register(absolute);
             boolean list = isPlaylist(trimmed);
-            if (!list) segments.add(n);
+            if (!list) { segments.add(n); starts.add(clock); clock += Math.max(0, duration); duration = 0; }
             out.append("/r/").append(source.id).append('/').append(list ? "p" : "s").append('/').append(n).append('\n');
         }
         if (!segments.isEmpty()) synchronized (source) {
             source.playlistSegments.put(playlistIndex, segments);
+            source.playlistStarts.put(playlistIndex, starts.stream().mapToDouble(Double::doubleValue).toArray());
             for (int i = 0; i < segments.size(); i++) source.position.put(segments.get(i), new int[]{playlistIndex, i});
         }
         // A finished (VOD) playlist never changes; a live one is refreshed constantly.
@@ -253,6 +294,8 @@ public final class RelayServer {
             list = pos == null ? null : source.playlistSegments.get(pos[0]);
         }
         if (list == null) return;
+        // The decoder reads the beginning only to learn the format while a viewer joins further on: do not download ahead of that.
+        if (pos[0] == 0 && pos[1] < source.aimSegment && System.currentTimeMillis() < source.aimUntilMs) return;
         for (int i = 1; i <= prefetchSegments && pos[1] + i < list.size(); i++) {
             String url = source.url(list.get(pos[1] + i));
             if (url != null && cacheGet(url) == null && !inFlight.containsKey(url))
@@ -270,6 +313,35 @@ public final class RelayServer {
         if (existing != null) { hits.incrementAndGet(); return existing.get(60, TimeUnit.SECONDS); }
         misses.incrementAndGet();
         try {
+            // A short network hiccup must not cost the decoder a segment: try again a couple of times.
+            Entry entry = null;
+            for (int attempt = 1; ; attempt++) {
+                try { entry = download(source, url, playlist); break; }
+                catch (java.net.http.HttpTimeoutException | java.net.ConnectException | RetryableException e) {
+                    if (attempt >= (playlist ? 2 : 3)) throw e;
+                    Thread.sleep(250L * attempt * attempt);
+                }
+                catch (IOException e) {
+                    if (attempt >= (playlist ? 2 : 3) || e.getMessage() == null || !e.getMessage().contains("closed")) throw e;
+                    Thread.sleep(250L * attempt * attempt);
+                }
+            }
+            cachePut(url, entry);
+            mine.complete(entry);
+            return entry;
+        } catch (Exception e) {
+            mine.completeExceptionally(e);
+            throw e;
+        } finally {
+            inFlight.remove(url, mine);
+        }
+    }
+
+    /** The host answered with a server error (5xx): worth asking again. */
+    private static final class RetryableException extends IOException { RetryableException(String m) { super(m); } }
+
+    private Entry download(Source source, String url, boolean playlist) throws Exception {
+        {
             HttpResponse<java.io.InputStream> response = null;
             String current = url;
             for (int hop = 0; hop <= MAX_REDIRECTS; hop++) {
@@ -286,7 +358,11 @@ public final class RelayServer {
                 if (location == null || hop == MAX_REDIRECTS) throw new IOException("too many or empty redirects for " + safe(url));
                 current = URI.create(current).resolve(location).toString();
             }
-            if (response.statusCode() / 100 != 2) { response.body().close(); throw new IOException("origin answered " + response.statusCode() + " for " + safe(url)); }
+            if (response.statusCode() / 100 != 2) {
+                response.body().close();
+                String why = "origin answered " + response.statusCode() + " for " + safe(url);
+                throw response.statusCode() >= 500 ? new RetryableException(why) : new IOException(why);
+            }
             byte[] body;
             try (var in = response.body()) {
                 long limit = playlist ? MAX_PLAYLIST_BYTES : MAX_SEGMENT_BYTES;
@@ -299,15 +375,7 @@ public final class RelayServer {
             if (playlist ? !com.nestworld.video.security.MediaChecks.looksLikePlaylist(body)
                     : !com.nestworld.video.security.MediaChecks.looksLikeSegment(body, type))
                 throw new IOException("origin sent unexpected content (" + type + ") for " + safe(url));
-            Entry entry = new Entry(body, type, System.currentTimeMillis() + (playlist ? 5_000L : 900_000L));
-            cachePut(url, entry);
-            mine.complete(entry);
-            return entry;
-        } catch (Exception e) {
-            mine.completeExceptionally(e);
-            throw e;
-        } finally {
-            inFlight.remove(url, mine);
+            return new Entry(body, type, System.currentTimeMillis() + (playlist ? 5_000L : 900_000L));
         }
     }
 

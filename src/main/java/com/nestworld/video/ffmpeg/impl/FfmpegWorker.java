@@ -89,6 +89,10 @@ public final class FfmpegWorker implements VideoDecoder {
             grabber.setOption("reconnect_streamed", "1");
             grabber.setOption("reconnect_delay_max", "5");
             grabber.setOption("allowed_extensions", "ALL");
+            // Read only about a second of the stream to learn its format (the default reads up to 5 s from the very start,
+            // which a viewer joining in the middle then throws away).
+            grabber.setOption("probesize", "2000000");
+            grabber.setOption("analyzeduration", "1500000");
             // Network streams only: a playlist must not be able to pull in local files or other protocols.
             if (url.startsWith("http")) grabber.setOption("protocol_whitelist", "http,https,tcp,tls,crypto");
             grabber.setPixelFormat(avutil.AV_PIX_FMT_RGBA);

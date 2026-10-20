@@ -21,34 +21,43 @@ public final class HlsVariants {
 
     private HlsVariants() {}
 
+    /** The rendition to open, its height (0 = unknown or not a master playlist) and the next lower height on offer (0 = none). */
+    public record Choice(String url, int height, int lowerHeight) {}
+
     /**
      * Returns the URL to open: the best variant not taller than {@code maxHeight} (0 = no limit), or the
      * original URL when it is not a master playlist, has separate audio renditions, or cannot be read.
      */
     public static String pick(String url, int maxHeight, String userAgent, String referer) {
-        if (!url.toLowerCase().contains(".m3u8")) return url;
+        return pickChoice(url, maxHeight, userAgent, referer).url();
+    }
+
+    /** Like {@link #pick}, also telling which height was chosen and which lower one exists. */
+    public static Choice pickChoice(String url, int maxHeight, String userAgent, String referer) {
+        if (!url.toLowerCase().contains(".m3u8")) return new Choice(url, 0, 0);
         try {
             HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(15))
                     .header("User-Agent", userAgent).GET();
             if (referer != null && !referer.isEmpty()) request.header("Referer", referer);
             HttpResponse<String> response = HTTP.send(request.build(), HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() != 200) return url;
+            if (response.statusCode() != 200) return new Choice(url, 0, 0);
             return choose(response.body(), response.uri(), maxHeight, url);
         } catch (java.io.IOException | RuntimeException e) {
             LOGGER.debug("Nestworld Video: could not read playlist, opening as is: {}", e.toString());
-            return url;
+            return new Choice(url, 0, 0);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return url;
+            return new Choice(url, 0, 0);
         }
     }
 
-    static String choose(String playlist, URI base, int maxHeight, String fallback) {
-        if (!playlist.startsWith("#EXTM3U") || !playlist.contains("#EXT-X-STREAM-INF")) return fallback;
+    static Choice choose(String playlist, URI base, int maxHeight, String fallback) {
+        if (!playlist.startsWith("#EXTM3U") || !playlist.contains("#EXT-X-STREAM-INF")) return new Choice(fallback, 0, 0);
         // Audio in a separate rendition group would be lost if only the video variant were opened.
-        if (playlist.contains("TYPE=AUDIO") && playlist.contains("URI=")) return fallback;
+        if (playlist.contains("TYPE=AUDIO") && playlist.contains("URI=")) return new Choice(fallback, 0, 0);
         String bestUri = null;
         int bestHeight = -1; long bestBandwidth = -1;
+        java.util.List<Integer> heights = new java.util.ArrayList<>();
         String[] lines = playlist.split("\\R");
         for (int i = 0; i < lines.length - 1; i++) {
             if (!lines[i].startsWith("#EXT-X-STREAM-INF")) continue;
@@ -58,14 +67,17 @@ public final class HlsVariants {
             Matcher res = RESOLUTION.matcher(lines[i]), bw = BANDWIDTH.matcher(lines[i]);
             int height = res.find() ? Integer.parseInt(res.group(2)) : 0;
             long bandwidth = bw.find() ? Long.parseLong(bw.group(1)) : 0;
+            if (height > 0) heights.add(height);
             if (maxHeight > 0 && height > maxHeight) continue;
             if (height > bestHeight || (height == bestHeight && bandwidth > bestBandwidth)) {
                 bestHeight = height; bestBandwidth = bandwidth; bestUri = lines[next].trim();
             }
         }
-        if (bestUri == null) return fallback;
+        if (bestUri == null) return new Choice(fallback, 0, 0);
         String resolved = base.resolve(bestUri).toString();
+        int lower = 0;
+        for (int h : heights) if (h < bestHeight && h > lower) lower = h;
         LOGGER.info("Nestworld Video: HLS variant chosen: {}p (limit {})", bestHeight, maxHeight == 0 ? "none" : maxHeight + "p");
-        return resolved;
+        return new Choice(resolved, Math.max(0, bestHeight), lower);
     }
 }

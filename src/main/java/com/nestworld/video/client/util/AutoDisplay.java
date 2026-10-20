@@ -20,12 +20,12 @@ final class AutoDisplay extends Display {
     private int volume = 100;
     private double spatial = 1.0;
 
-    AutoDisplay(String url) { this(url, url); }
+    AutoDisplay(String url) { this(url, url, 0); }
 
-    AutoDisplay(String url, String source) {
+    AutoDisplay(String url, String source, int heightCap) {
         this.url = url; this.source = source;
         try {
-            this.delegate = new FfmpegDisplay(url, source);
+            this.delegate = new FfmpegDisplay(url, source, heightCap);
         } catch (RuntimeException | LinkageError e) {
             LOGGER.warn("Nestworld Video: FFmpeg could not start ({}), using VLC", e.toString());
             fallBack();
@@ -82,6 +82,7 @@ final class AutoDisplay extends Display {
     @Override public boolean hasMipmaps() { return delegate.hasMipmaps(); }
     @Override public long frameSerial() { return delegate.frameSerial(); }
     @Override public void setPlaybackRate(double rate) { delegate.setPlaybackRate(rate); }
+    @Override public int lowerQualitySuggestion() { return delegate.lowerQualitySuggestion(); }
     @Override public void setTimeline(java.util.function.LongSupplier timelineMs) { this.timeline = timelineMs; delegate.setTimeline(timelineMs); }
     @Override public void release() { delegate.release(); }
 }

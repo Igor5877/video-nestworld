@@ -69,7 +69,15 @@ public final class FfmpegDisplay extends Display {
     private boolean mipmapped;
     private VFrame previewed;
     private long previewedPtsUs = -1;
-    private long pendingSyncUs = -1, seekTargetUs = -1;
+    private volatile long pendingSyncUs = -1;
+    private long seekTargetUs = -1;
+    /** Quality: the cap this display was opened with, the height chosen, and the next lower height the stream offers. */
+    private final int heightCap;
+    private volatile int chosenHeight, lowerHeight;
+    /** Stalls (no picture to show although playing) after the start: when each began, and the current one. */
+    private final java.util.ArrayDeque<Long> stallStarts = new java.util.ArrayDeque<>();
+    private long stallSinceNanos;
+    private boolean lowerSuggested;
     private long startedWallNanos, mediaBaseUs, frozenUs, lastMediaUs, lastShownPtsUs;
     private long firstFrameWaitNanos, lastDiagnosticNanos, lastRenderNanos;
     // Statistics for video.debug_stats (written by the decoder thread, read by the client tick).
@@ -83,8 +91,11 @@ public final class FfmpegDisplay extends Display {
 
     public FfmpegDisplay(String url) { this(url, url); }
 
-    public FfmpegDisplay(String url, String source) {
-        this.url = url; this.source = source;
+    public FfmpegDisplay(String url, String source) { this(url, source, 0); }
+
+    /** {@code heightCap}: at most this tall (0 = only the player's quality setting), e.g. after the connection could not keep up. */
+    public FfmpegDisplay(String url, String source, int heightCap) {
+        this.url = url; this.source = source; this.heightCap = heightCap;
         Thread opener = new Thread(this::open, "nestworld-ffmpeg-open");
         opener.setDaemon(true);
         opener.start();
@@ -101,7 +112,14 @@ public final class FfmpegDisplay extends Display {
             }
             if (closed) return;
             String referer = origin(source);
-            String target = LocalStreamCache.wrap(HlsVariants.pick(source, NestworldConfig.MAX_VIDEO_HEIGHT.get(), USER_AGENT, referer));
+            int limit = NestworldConfig.MAX_VIDEO_HEIGHT.get();
+            if (heightCap > 0) limit = limit == 0 ? heightCap : Math.min(limit, heightCap);
+            HlsVariants.Choice choice = HlsVariants.pickChoice(source, limit, USER_AGENT, referer);
+            chosenHeight = choice.height(); lowerHeight = choice.lowerHeight();
+            String target = LocalStreamCache.wrap(choice.url());
+            // A viewer joining a running video: fetch the part of the stream it starts at while the decoder opens.
+            long startAtUs = pendingSyncUs;
+            if (startAtUs > 0) LocalStreamCache.prefetchAt(choice.url(), (startAtUs + leadUs) / 1000L);
             VideoDecoder created = FfmpegLibs.newDecoder();
             decoder = created;
             openedNanos = System.nanoTime();
@@ -432,6 +450,7 @@ public final class FfmpegDisplay extends Display {
         maybeStart();
         if (started && System.nanoTime() - lastRenderNanos > 150_000_000L) discardDueFrames();
         trackEndStall();
+        trackStalls();
         watchdog();
         diagnose();
         stats();
@@ -491,6 +510,30 @@ public final class FfmpegDisplay extends Display {
     }
     /** How long a seek takes until there is enough to start (learned from the seeks of this stream), and when the current one began. */
     private long leadUs = 1_000_000L, seekStartedNanos;
+
+    /** Counts the times playback ran dry (the network or the decoder could not keep up), for {@link #lowerQualitySuggestion()}. */
+    private void trackStalls() {
+        boolean dry;
+        synchronized (lock) { dry = started && playing && !eos && frames.isEmpty(); }
+        long now = System.nanoTime();
+        if (!dry) { stallSinceNanos = 0; return; }
+        if (stallSinceNanos == 0) { stallSinceNanos = now; stallStarts.addLast(now); }
+        while (!stallStarts.isEmpty() && now - stallStarts.peekFirst() > 45_000_000_000L) stallStarts.pollFirst();
+    }
+
+    /**
+     * A lower height to reopen the stream at, once, when this viewer keeps running dry (three stalls within 45 s or one
+     * longer than 2.5 s) and the stream offers one; 0 otherwise.
+     */
+    @Override public int lowerQualitySuggestion() {
+        if (lowerSuggested || lowerHeight <= 0) return 0;
+        boolean longStall = stallSinceNanos != 0 && System.nanoTime() - stallSinceNanos > 2_500_000_000L;
+        if (!longStall && stallStarts.size() < 3) return 0;
+        lowerSuggested = true;
+        LOGGER.info("Nestworld Video: playback of {} keeps running dry at {}p ({} stalls in 45 s{}); suggesting {}p",
+                safe(url), chosenHeight, stallStarts.size(), longStall ? ", one over 2.5 s" : "", lowerHeight);
+        return lowerHeight;
+    }
 
     private long watchMediaUs = -1, watchSinceNanos;
     /**

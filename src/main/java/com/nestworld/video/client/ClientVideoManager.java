@@ -58,7 +58,7 @@ public class ClientVideoManager {
                 com.mojang.logging.LogUtils.getLogger().warn("Nestworld Video: refused to open an address that is not a public http(s) URL for the screen at {}", pos);
                 return;
             }
-            Display display = Display.create(url, source);
+            Display display = Display.create(url, source, qualityCaps.getOrDefault(pos, 0));
             display.syncPosition(screenPosition(pos));
             // A start or a jump waits on the first frame for the shared timeline instead of starting early and jumping again.
             display.setTimeline(() -> {
@@ -102,6 +102,19 @@ public class ClientVideoManager {
     }
 
     public java.util.Collection<Display> displays() { return activeDisplays.values(); }
+
+    /** Screens whose stream this client could not keep up with: the video height it plays them at for the rest of the session. */
+    private final Map<BlockPos, Integer> qualityCaps = new ConcurrentHashMap<>();
+
+    /** The connection or the decoder could not keep up: reopen the stream one quality step lower, at the shared timeline. */
+    private void lowerQuality(BlockPos pos, Display display, int height) {
+        qualityCaps.put(pos, height);
+        com.mojang.logging.LogUtils.getLogger().info("Nestworld Video: the screen at {} plays at {}p from now on: the video kept stopping to load", pos, height);
+        var player = Minecraft.getInstance().player;
+        if (player != null) player.displayClientMessage(net.minecraft.network.chat.Component.literal(
+                "Nestworld Video: відео не встигало завантажуватися — якість знижено до " + height + "p"), true);
+        stopPlaying(pos);   // the screen is reconciled on the next tick and opens again with the cap
+    }
 
     public Display getDisplay(BlockPos pos) {
         return activeDisplays.get(pos);
@@ -252,6 +265,8 @@ public class ClientVideoManager {
                 }
             }
             if (current != null) current.tick();
+            int lower = current == null ? 0 : current.lowerQualitySuggestion();
+            if (lower > 0) { lowerQuality(pos, current, lower); continue; }
             // The server's timeline ran past the end of the stream (e.g. the decoder only just started or lagged): report it
             // anyway, otherwise nobody tells the server and auto-next never happens.
             if (current != null && current.getDuration() > 0 && screen.getPlaybackPositionMs() < current.getDuration() - 1000)
@@ -400,6 +415,7 @@ public class ClientVideoManager {
         WatchHistory.saveNow();
         activeDisplays.values().forEach(Display::release);
         activeDisplays.clear();
+        qualityCaps.clear();
         desiredScreens.clear();
         lastViewerReports.clear();
         lastHistoryRecords.clear();

@@ -11,16 +11,19 @@ import java.awt.Dimension;
  */
 public abstract class Display {
 
-    public static Display create(String url) { return create(url, url); }
+    public static Display create(String url) { return create(url, url, 0); }
 
-    /** {@code url} identifies the video; {@code source} is the address actually opened (the server's relay, or the same URL). */
-    public static Display create(String url, String source) {
+    /**
+     * {@code url} identifies the video; {@code source} is the address actually opened (the server's relay, or the same
+     * URL); {@code heightCap} limits the quality (0 = only the player's setting), after the connection could not keep up.
+     */
+    public static Display create(String url, String source, int heightCap) {
         // WaterMedia is optional: without it the FFmpeg decoder is the only choice.
-        if (!ModList.get().isLoaded("watermedia")) return new FfmpegDisplay(url, source);
+        if (!ModList.get().isLoaded("watermedia")) return new FfmpegDisplay(url, source, heightCap);
         return switch (NestworldConfig.DECODER.get()) {
-            case "ffmpeg" -> new FfmpegDisplay(url, source);
+            case "ffmpeg" -> new FfmpegDisplay(url, source, heightCap);
             case "watermedia" -> new VlcDisplay(url, source);
-            default -> new AutoDisplay(url, source);
+            default -> new AutoDisplay(url, source, heightCap);
         };
     }
 
@@ -67,6 +70,8 @@ public abstract class Display {
     public void setPlaybackRate(double rate) {}
     /** Where the shared timeline is (ms, -1 = unknown or paused): starts and jumps can wait for it; ignored if unsupported. */
     public void setTimeline(java.util.function.LongSupplier timelineMs) {}
+    /** A lower video height to reopen at because playback keeps running dry, or 0 (asked once per display). */
+    public int lowerQualitySuggestion() { return 0; }
     public void setSoundPlacement(double cx, double cy, double cz, double rx, double ry, double rz) {}
     /** Room acoustics for this screen's sound (null = none); only the FFmpeg audio path uses it. */
     public void setAcoustics(com.nestworld.video.client.acoustics.AcousticResult result) {}
