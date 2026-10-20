@@ -300,7 +300,8 @@ public class ClientVideoManager {
             if (current != null) {
                 if (current.isPlaying() && dist < 48) acoustics.update(mc.level, pos, screen, current, mc.level.getGameTime());
                 else { current.setAcoustics(null); acoustics.forget(pos); }
-                if (current.isPlaying() && dist < 40) glow.update(mc.level, pos, screen, current, mc.level.getGameTime());
+                // Lit while a picture is on the screen, also when paused: the last frame keeps lighting the room.
+                if (current.glowGrid() != null && dist < 40) glow.update(mc.level, pos, screen, current, mc.level.getGameTime());
                 else glow.forget(pos);
             }
             if (current != null) {

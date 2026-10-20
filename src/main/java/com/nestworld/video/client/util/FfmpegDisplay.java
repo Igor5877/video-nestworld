@@ -317,36 +317,42 @@ public final class FfmpegDisplay extends Display {
         return lastMediaUs;
     }
 
-    private volatile float[] glow;
+    private volatile com.nestworld.video.client.glow.GlowGrid glow;
     private long lastGlowSampleNanos;
 
-    @Override public float[] glowColours() { return glow; }
+    @Override public com.nestworld.video.client.glow.GlowGrid glowGrid() { return glow; }
 
-    /** Average colour of the left, middle and right third of the frame from a sparse grid of pixels (about 10 times a second). */
+    /** Grid size of the colour light per quality level (1..3): the finer, the more detail the light follows. */
+    private static final int[][] GLOW_GRID = {{8, 5}, {16, 9}, {32, 18}};
+
+    /** Average colour of every cell of a grid over the frame, from a sparse set of pixels (about 10 times a second). */
     private void sampleColours(VFrame frame) {
         if (!com.nestworld.video.client.glow.ScreenGlow.enabled()) { glow = null; return; }
         long now = System.nanoTime();
         if (now - lastGlowSampleNanos < 80_000_000L) return;
         lastGlowSampleNanos = now;
         int w = frame.width, h = frame.height;
-        if (w < 3 || h < 2 || frame.data == null) return;
-        float[] out = new float[9];
-        int perThirdX = 10, rows = 10;
-        for (int third = 0; third < 3; third++) {
+        int[] size = GLOW_GRID[Math.max(1, Math.min(3, NestworldConfig.SCREEN_GLOW.get())) - 1];
+        int cols = size[0], rows = size[1];
+        if (w < cols || h < rows || frame.data == null) return;
+        float[] out = new float[cols * rows * 3];
+        int per = 3;   // 3 x 3 pixels per cell
+        for (int row = 0; row < rows; row++) for (int col = 0; col < cols; col++) {
             double r = 0, g = 0, b = 0; int n = 0;
-            for (int sy = 0; sy < rows; sy++) {
-                int y = Math.min(h - 1, (int) ((sy + 0.5) * h / rows));
-                for (int sx = 0; sx < perThirdX; sx++) {
-                    int x = Math.min(w - 1, (int) ((third + (sx + 0.5) / perThirdX) * w / 3.0));
+            for (int sy = 0; sy < per; sy++) {
+                int y = Math.min(h - 1, (int) ((row + (sy + 0.5) / per) * h / rows));
+                for (int sx = 0; sx < per; sx++) {
+                    int x = Math.min(w - 1, (int) ((col + (sx + 0.5) / per) * w / cols));
                     int i = (y * w + x) * 4;
                     if (i + 2 >= frame.data.capacity()) continue;
                     r += frame.data.get(i) & 0xFF; g += frame.data.get(i + 1) & 0xFF; b += frame.data.get(i + 2) & 0xFF; n++;
                 }
             }
             if (n == 0) return;
-            out[3 * third] = (float) (r / n / 255.0); out[3 * third + 1] = (float) (g / n / 255.0); out[3 * third + 2] = (float) (b / n / 255.0);
+            int o = (row * cols + col) * 3;
+            out[o] = (float) (r / n / 255.0); out[o + 1] = (float) (g / n / 255.0); out[o + 2] = (float) (b / n / 255.0);
         }
-        glow = out;
+        glow = new com.nestworld.video.client.glow.GlowGrid(cols, rows, out);
     }
 
     private void upload(VFrame frame) {

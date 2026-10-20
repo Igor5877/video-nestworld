@@ -29,8 +29,10 @@ import java.util.Map;
 
 /**
  * Colour light from a playing screen onto the surfaces around it that face it (floor, walls, ceiling), following what the
- * picture shows: the left, middle and right thirds of the frame light the matching part of the room. Drawn as soft
- * additive overlays on the exposed block faces; the faces are found once a second, so per frame only their colour changes.
+ * picture shows: the frame is reduced to a grid of colours (8x5 to 32x18 by quality) and every corner of every lit face
+ * takes the colour of the part of the picture it "sees"; the farther from the screen, the coarser (a blurrier average),
+ * like real light spreading. Drawn as soft additive overlays on the exposed block faces; the faces are found once a
+ * second, so per frame only their colours change.
  * The block light of a playing screen (a fixed level from the server) stays as it is.
  */
 public final class ScreenGlow {
@@ -39,19 +41,24 @@ public final class ScreenGlow {
     private static final double[] REACH = {4.0, 7.0, 11.0};
     private static final int[] MAX_FACES = {150, 400, 900};
     private static final int REBUILD_TICKS = 20;
+    /** Columns of the colour grid per quality level (must match the display's sampling). */
+    private static final int[] GRID_COLS = {8, 16, 32};
 
     private static final class Face {
         double x, y, z;            // centre of the face
         int nx, ny, nz;            // outward normal
         float[] corner = new float[4];   // light weight at each corner (0..1)
         double[][] cornerPos = new double[4][3];
-        float t;                   // 0 left .. 1 right along the screen
+        float[] u = new float[4], v = new float[4], level = new float[4];   // where in the picture each corner looks, and how coarsely
     }
 
     private static final class State {
         long lastBuild = Long.MIN_VALUE / 2;
         List<Face> faces = List.of();
-        float[] colour = new float[9];   // smoothed: left, middle, right thirds (r,g,b)
+        float[] current;          // smoothed colours of the grid cells (r,g,b each)
+        int cols, rows;
+        float[][] mips = new float[0][];   // mip chain: level 0 = the grid, each next one half the size
+        int[] mipCols = new int[0], mipRows = new int[0];
         boolean active;
     }
 
@@ -70,20 +77,24 @@ public final class ScreenGlow {
     public void update(Level level, BlockPos pos, VideoScreenBlockEntity screen, Display display, long gameTime) {
         int quality = NestworldConfig.SCREEN_GLOW.get();
         if (!enabled()) { states.remove(pos); return; }
-        float[] target = display.glowColours();
+        GlowGrid target = display.glowGrid();
         State state = states.computeIfAbsent(pos, p -> new State());
-        if (target == null) { state.active = false; return; }
+        if (target == null || !target.isValid()) { state.active = false; return; }
         state.active = true;
-        for (int i = 0; i < 9; i++) state.colour[i] += (target[i] - state.colour[i]) * 0.35f;   // about 100 ms
+        if (state.current == null || state.cols != target.cols() || state.rows != target.rows()) {
+            state.cols = target.cols(); state.rows = target.rows(); state.current = target.rgb().clone();
+        } else {
+            for (int i = 0; i < state.current.length; i++) state.current[i] += (target.rgb()[i] - state.current[i]) * 0.35f;   // about 100 ms
+        }
+        buildMips(state);
         if (gameTime - state.lastBuild >= REBUILD_TICKS) {
             state.lastBuild = gameTime;
             try {
                 state.faces = buildFaces(level, screen(screen), quality);
-                if (NestworldConfig.DEBUG_STATS.get()) LOGGER.info("Nestworld Video glow: {} surfaces lit around the screen at {} (strongest {}, average {}), colours L {} M {} R {}", state.faces.size(), pos,
+                if (NestworldConfig.DEBUG_STATS.get()) LOGGER.info("Nestworld Video glow: {} surfaces lit around the screen at {} (strongest {}, average {}), colour grid {}x{}", state.faces.size(), pos,
                         state.faces.isEmpty() ? 0 : String.format("%.2f", state.faces.get(0).corner[0]),
                         String.format("%.3f", state.faces.stream().mapToDouble(f -> (f.corner[0] + f.corner[1] + f.corner[2] + f.corner[3]) / 4).average().orElse(0)),
-                        java.util.Arrays.toString(java.util.Arrays.copyOfRange(state.colour, 0, 3)), java.util.Arrays.toString(java.util.Arrays.copyOfRange(state.colour, 3, 6)),
-                        java.util.Arrays.toString(java.util.Arrays.copyOfRange(state.colour, 6, 9)));
+                        state.cols, state.rows);
             }
             catch (RuntimeException e) { state.faces = List.of(); LOGGER.warn("Nestworld Video: screen glow could not be built: {}", e.toString()); }
         }
@@ -121,7 +132,7 @@ public final class ScreenGlow {
             for (Direction dir : Direction.values()) {
                 neighbour.set(x + dir.getStepX(), y + dir.getStepY(), z + dir.getStepZ());
                 if (!level.isLoaded(neighbour) || level.getBlockState(neighbour).isSolidRender(level, neighbour)) continue;
-                Face face = faceFor(world, g, x, y, z, dir, reach);
+                Face face = faceFor(world, g, x, y, z, dir, reach, GRID_COLS[quality - 1]);
                 if (face != null) found.add(face);
             }
         }
@@ -154,7 +165,7 @@ public final class ScreenGlow {
         return (float) (falloff * falloff * Math.min(1.0, facingScreen * 1.3) * Math.sqrt(screenFacing));
     }
 
-    private static Face faceFor(MinecraftRayWorld world, Geometry g, int x, int y, int z, Direction dir, double reach) {
+    private static Face faceFor(MinecraftRayWorld world, Geometry g, int x, int y, int z, Direction dir, double reach, int gridCols) {
         V3 normal = new V3(dir.getStepX(), dir.getStepY(), dir.getStepZ());
         V3 centre = new V3(x + 0.5 + dir.getStepX() * 0.5, y + 0.5 + dir.getStepY() * 0.5, z + 0.5 + dir.getStepZ() * 0.5);
         if (g.front.dot(centre.sub(g.centre)) < 0.45) return null;        // behind or beside the screen's surface plane
@@ -165,7 +176,6 @@ public final class ScreenGlow {
         if (world.occlusion(s, centre.add(normal.scale(0.05)), 0.5) > 0.3) return null;
         Face f = new Face();
         f.x = centre.x(); f.y = centre.y(); f.z = centre.z(); f.nx = dir.getStepX(); f.ny = dir.getStepY(); f.nz = dir.getStepZ();
-        f.t = (float) Math.max(0, Math.min(1, g.right.dot(centre.sub(g.centre)) / g.width + 0.5));
         // Corners of the 1x1 face, pushed a hair off the surface; the weight is evaluated at each corner for a smooth gradient.
         V3 t1 = dir.getAxis() == Direction.Axis.Y ? new V3(1, 0, 0) : new V3(0, 1, 0);
         V3 t2 = dir.getAxis() == Direction.Axis.X ? new V3(0, 0, 1) : dir.getAxis() == Direction.Axis.Z ? new V3(1, 0, 0) : new V3(0, 0, 1);
@@ -174,6 +184,11 @@ public final class ScreenGlow {
             V3 c = centre.add(t1.scale(0.5 * signs[i][0])).add(t2.scale(0.5 * signs[i][1])).add(normal.scale(0.02));
             f.cornerPos[i][0] = c.x(); f.cornerPos[i][1] = c.y(); f.cornerPos[i][2] = c.z();
             f.corner[i] = Math.max(weightAt(g, c, normal, reach), wc * 0.35f);
+            // Which part of the picture this corner looks at, and how far it is (the farther, the blurrier the colour).
+            V3 d = c.sub(g.centre);
+            f.u[i] = (float) Math.max(0, Math.min(1, d.dot(g.right) / g.width + 0.5));
+            f.v[i] = (float) Math.max(0, Math.min(1, 0.5 - d.y() / g.height));    // row 0 is the top of the picture
+            f.level[i] = (float) Math.max(0.0, Math.log(Math.max(1.0, nearestOnScreen(g, c).sub(c).length() / (g.width / gridCols))) / Math.log(2.0));
         }
         return f;
     }
@@ -194,32 +209,67 @@ public final class ScreenGlow {
         Matrix4f matrix = poseStack.last().pose();
         for (State state : states.values()) {
             if (!state.active || state.faces.isEmpty()) continue;
-            float luminance = 0.2126f * state.colour[1] + 0.7152f * state.colour[4] + 0.0722f * state.colour[7];
-            if (luminance < 0.01f && state.colour[0] + state.colour[3] + state.colour[6] < 0.03f) continue;
+            if (state.mips.length == 0) continue;
             if (consumer == null) consumer = buffers.getBuffer(RenderType.lightning());
+            float[] colour = new float[3];
             for (Face f : state.faces) {
-                float[] c = colourAt(state.colour, f.t);
                 // The render type culls back faces and the winding depends on the face's side, so every quad is drawn both ways round.
                 for (int pass = 0; pass < 2; pass++) for (int k = 0; k < 4; k++) {
                     int i = pass == 0 ? k : 3 - k;
+                    sample(state, f.u[i], f.v[i], f.level[i], colour);
                     float a = Math.min(1f, f.corner[i] * strength * 0.9f);
                     consumer.vertex(matrix, (float) (f.cornerPos[i][0] - cam.x), (float) (f.cornerPos[i][1] - cam.y), (float) (f.cornerPos[i][2] - cam.z))
-                            .color(c[0], c[1], c[2], a).endVertex();
+                            .color(colour[0], colour[1], colour[2], a).endVertex();
                 }
             }
         }
         if (consumer != null) buffers.endBatch(RenderType.lightning());
     }
 
-    /** Colour for a spot t (0 = left edge of the screen, 1 = right) from the three thirds, a little more saturated than the average. */
-    private static float[] colourAt(float[] thirds, float t) {
-        float p = t * 2f;                                 // 0..2 over left, middle, right
-        int i = Math.min(1, (int) p);
-        float k = p - i;
-        float[] out = new float[3];
-        for (int ch = 0; ch < 3; ch++) out[ch] = thirds[3 * i + ch] * (1 - k) + thirds[3 * (i + 1) + ch] * k;
+    /** Mip chain of the smoothed grid: each level averages 2x2 cells of the one before. */
+    private static void buildMips(State state) {
+        int levels = 1, c = state.cols, r = state.rows;
+        while ((c > 1 || r > 1) && levels < 6) { c = (c + 1) / 2; r = (r + 1) / 2; levels++; }
+        if (state.mips.length != levels) { state.mips = new float[levels][]; state.mipCols = new int[levels]; state.mipRows = new int[levels]; }
+        state.mips[0] = state.current; state.mipCols[0] = state.cols; state.mipRows[0] = state.rows;
+        for (int l = 1; l < levels; l++) {
+            int pc = state.mipCols[l - 1], pr = state.mipRows[l - 1], nc = (pc + 1) / 2, nr = (pr + 1) / 2;
+            float[] prev = state.mips[l - 1], next = state.mips[l] != null && state.mips[l].length == nc * nr * 3 ? state.mips[l] : new float[nc * nr * 3];
+            for (int y = 0; y < nr; y++) for (int x = 0; x < nc; x++) for (int ch = 0; ch < 3; ch++) {
+                float sum = 0; int n = 0;
+                for (int dy = 0; dy < 2; dy++) for (int dx = 0; dx < 2; dx++) {
+                    int px = x * 2 + dx, py = y * 2 + dy;
+                    if (px < pc && py < pr) { sum += prev[(py * pc + px) * 3 + ch]; n++; }
+                }
+                next[(y * nc + x) * 3 + ch] = sum / Math.max(1, n);
+            }
+            state.mips[l] = next; state.mipCols[l] = nc; state.mipRows[l] = nr;
+        }
+    }
+
+    /** Bilinear sample of one mip level at (u, v) in 0..1 (v from the top). */
+    private static void sampleLevel(State state, int level, float u, float v, float[] out, float weight) {
+        int c = state.mipCols[level], r = state.mipRows[level];
+        float[] data = state.mips[level];
+        float x = Math.max(0f, Math.min(c - 1f, u * c - 0.5f)), y = Math.max(0f, Math.min(r - 1f, v * r - 0.5f));
+        int x0 = (int) x, y0 = (int) y, x1 = Math.min(c - 1, x0 + 1), y1 = Math.min(r - 1, y0 + 1);
+        float fx = x - x0, fy = y - y0;
+        for (int ch = 0; ch < 3; ch++) {
+            float top = data[(y0 * c + x0) * 3 + ch] * (1 - fx) + data[(y0 * c + x1) * 3 + ch] * fx;
+            float bottom = data[(y1 * c + x0) * 3 + ch] * (1 - fx) + data[(y1 * c + x1) * 3 + ch] * fx;
+            out[ch] += (top * (1 - fy) + bottom * fy) * weight;
+        }
+    }
+
+    /** Colour at a spot of the picture seen from a given distance (level = blur), a little more saturated than the average. */
+    private static void sample(State state, float u, float v, float level, float[] out) {
+        out[0] = out[1] = out[2] = 0f;
+        float l = Math.max(0f, Math.min(state.mips.length - 1f, level));
+        int l0 = (int) l, l1 = Math.min(state.mips.length - 1, l0 + 1);
+        float k = l - l0;
+        sampleLevel(state, l0, u, v, out, 1 - k);
+        if (k > 0f) sampleLevel(state, l1, u, v, out, k);
         float lum = 0.2126f * out[0] + 0.7152f * out[1] + 0.0722f * out[2];
         for (int ch = 0; ch < 3; ch++) out[ch] = Math.max(0f, Math.min(1f, lum + (out[ch] - lum) * 1.5f));
-        return out;
     }
 }

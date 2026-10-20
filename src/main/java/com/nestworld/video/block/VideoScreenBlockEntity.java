@@ -325,7 +325,7 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
     /** A playing screen lights its surroundings (turned off by content config {@code screen.light_when_playing}). */
     public void updateLight() {
         if (level == null || level.isClientSide || !isMaster()) return;
-        boolean want = isPlaying && com.nestworld.video.content.ContentConfig.SCREEN_LIGHT.get();
+        boolean want = !stopped && !currentVideoUrl.isBlank() && com.nestworld.video.content.ContentConfig.SCREEN_LIGHT.get();   // playing or paused on a frame
         if (lightApplied != null && lightApplied == want) return;
         lightApplied = want;
         Direction right = getBlockState().getValue(VideoScreenBlock.FACING).getCounterClockWise();
