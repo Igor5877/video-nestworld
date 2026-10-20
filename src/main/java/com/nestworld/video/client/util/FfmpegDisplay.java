@@ -323,9 +323,23 @@ public final class FfmpegDisplay extends Display {
                         took / 1000, leadUs / 1000, head.ptsUs / 1000, timelineUs() == Long.MIN_VALUE ? -1 : timelineUs() / 1000);
         }
         long shared = timelineUs();
+        // A seek that landed far from where it was aimed (playlists whose segment durations are off make the HLS seek
+        // miss by tens of seconds on long jumps): aim again, corrected by the miss, a few times.
+        if (seekTargetUs >= 0 && seekRetries < 3 && !eos) {
+            long miss = head.ptsUs - seekTargetUs;
+            if (Math.abs(miss) > 1_500_000L) {
+                seekRetries++;
+                long desired = shared != Long.MIN_VALUE && playing ? shared + leadUs : seekTargetUs;
+                LOGGER.info("Nestworld Video: seek to {}ms landed at {}ms; aiming again ({}/3)", seekTargetUs / 1000, head.ptsUs / 1000, seekRetries);
+                seekTo(Math.max(0, desired - miss));
+                return;
+            }
+        }
         if (shared != Long.MIN_VALUE && !eos) {
-            // Hold the first frame until the shared timeline reaches it, so everyone starts together.
-            if (shared < head.ptsUs - 40_000L) return;
+            // Hold the first frame until the shared timeline reaches it, so everyone starts together (but never for long
+            // when the seek could not be made to land close: playing a little off beats a frozen screen).
+            boolean giveUp = seekRetries >= 3 && head.ptsUs - shared > 3_000_000L;
+            if (shared < head.ptsUs - 40_000L && !giveUp) return;
             if (shared > head.ptsUs + 250_000L) {
                 // Behind it: far behind means aim further ahead; a little behind means skip what has already passed.
                 if (shared - head.ptsUs > SEEK_DRIFT_US) { seekTo(shared + leadUs); return; }
@@ -339,6 +353,7 @@ public final class FfmpegDisplay extends Display {
         }
         started = true;
         seekTargetUs = -1;
+        seekRetries = 0;
         firstFrameWaitNanos = 0;
         mediaBaseUs = head.ptsUs;
         lastMediaUs = head.ptsUs;
@@ -502,6 +517,7 @@ public final class FfmpegDisplay extends Display {
         synchronized (lock) { head = frames.peek(); }
         long current = started ? mediaTimeUs() : head != null ? head.ptsUs : 0;
         if (Math.abs(current - target) <= SEEK_DRIFT_US) return;
+        seekRetries = 0;   // a new jump: corrections of the last one no longer apply
         // While playing, the shared timeline moves on during the seek: aim ahead of it and wait for it on the first frame.
         seekTo(playing && timelineUs() >= 0 ? target + leadUs : target);
     }
@@ -565,6 +581,8 @@ public final class FfmpegDisplay extends Display {
     }
 
     private boolean slowStart;
+    /** Re-aims of the current seek after it landed far off (see maybeStart). */
+    private int seekRetries;
 
     private void seekTo(long target) {
         waitingSinceNanos = System.nanoTime();

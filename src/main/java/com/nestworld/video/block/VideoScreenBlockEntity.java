@@ -170,6 +170,18 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         VideoScreenBlockEntity source = previous != null && previous.currentVideoUrl.equals(url) ? previous
                 : masters.stream().filter(m -> m.currentVideoUrl.equals(keptUrl)).findFirst().orElse(null);
         Playback kept = source == null || url.isBlank() ? null : source.capture();
+        if (kept == null || kept.stopped()) {
+            // Rebuilt from a screen that was taken apart a moment ago (a block broken to resize it): its video goes on
+            // (taking it apart stopped it, so a stopped state found on its old blocks does not count).
+            Parked parked = unpark(level, layout.tiles());
+            if (parked != null && (kept == null || parked.url().equals(url))) {
+                url = parked.url();
+                var p = parked.state();
+                kept = new Playback(p.title(), p.playing(), p.stopped(), p.positionMs(), SyncClock.nowMs() - p.positionMs(), p.autoNext(),
+                        p.repeat(), p.nextCancelled(), p.relayActive(), p.adult(), p.owner(), p.ownerName(), p.protection());
+                title = p.title();
+            }
+        }
         for (var master : masters)
             if (master.screenCols > 1 || master.screenRows > 1 || !master.currentVideoUrl.isEmpty()) {
                 // Carrying the video over: take the old screen apart without telling the viewers it stopped.
@@ -219,8 +231,41 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         if (level == null || level.isClientSide) return;
         VideoScreenBlockEntity master = controller();
         if (master != null && master != this) { master.resetLayout(); return; }
+        if (!currentVideoUrl.isEmpty() && !stopped) park();
         if (!currentVideoUrl.isEmpty() || isPlaying) stop();
         detachTiles();
+    }
+
+    /**
+     * A screen taken apart while it had a video (a block broken to resize it): its video and position are kept for a
+     * while, and a screen assembled again from any of its blocks continues from there.
+     */
+    private record Parked(net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension, Set<BlockPos> tiles, String url, Playback state, long atMs) {}
+    private static final java.util.List<Parked> PARKED = new java.util.ArrayList<>();
+    private static final long PARKED_FOR_MS = 120_000;
+
+    private void park() {
+        Set<BlockPos> tiles = new HashSet<>();
+        Direction right = getBlockState().getValue(VideoScreenBlock.FACING).getCounterClockWise();
+        for (int row = 0; row < screenRows; row++) for (int col = 0; col < screenCols; col++) tiles.add(worldPosition.relative(right, col).above(row).immutable());
+        synchronized (PARKED) {
+            long now = System.currentTimeMillis();
+            PARKED.removeIf(p -> now - p.atMs() > PARKED_FOR_MS);
+            PARKED.add(new Parked(level.dimension(), tiles, currentVideoUrl, capture(), now));
+        }
+    }
+
+    @Nullable private static Parked unpark(net.minecraft.world.level.Level level, java.util.Collection<BlockPos> tiles) {
+        synchronized (PARKED) {
+            long now = System.currentTimeMillis();
+            PARKED.removeIf(p -> now - p.atMs() > PARKED_FOR_MS);
+            for (var it = PARKED.iterator(); it.hasNext(); ) {
+                Parked p = it.next();
+                if (p.dimension() != level.dimension()) continue;
+                for (BlockPos tile : tiles) if (p.tiles().contains(tile)) { it.remove(); return p; }
+            }
+        }
+        return null;
     }
 
     /** Like {@link #resetLayout()} for a screen whose video moves to a resized screen: no "stopped" to the viewers. */
