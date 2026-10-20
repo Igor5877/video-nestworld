@@ -38,8 +38,8 @@ import java.util.Map;
 public final class ScreenGlow {
     private static final Logger LOGGER = LogUtils.getLogger();
     /** Quality 1..3: reach in blocks and how many faces at most. */
-    private static final double[] REACH = {4.0, 7.0, 11.0};
-    private static final int[] MAX_FACES = {150, 400, 900};
+    private static final double[] REACH = {6.0, 10.0, 15.0};
+    private static final int[] MAX_FACES = {250, 700, 1500};
     private static final int REBUILD_TICKS = 20;
     /** Columns of the colour grid per quality level (must match the display's sampling). */
     private static final int[] GRID_COLS = {8, 16, 32};
@@ -161,8 +161,9 @@ public final class ScreenGlow {
         double facingScreen = normal.dot(l);                  // the surface faces the screen
         double screenFacing = g.front.dot(l.scale(-1));       // the screen faces the surface
         if (facingScreen <= 0.02 || screenFacing <= 0.0) return 0f;
-        double falloff = 1 - dist / reach;
-        return (float) (falloff * falloff * Math.min(1.0, facingScreen * 1.3) * Math.sqrt(screenFacing));
+        // Falls off gently, like block light (a torch reaches far), not like an inverse-square spotlight.
+        double falloff = Math.pow(1 - dist / reach, 1.3);
+        return (float) (falloff * Math.min(1.0, facingScreen * 1.5) * Math.sqrt(screenFacing));
     }
 
     private static Face faceFor(MinecraftRayWorld world, Geometry g, int x, int y, int z, Direction dir, double reach, int gridCols) {
@@ -217,7 +218,7 @@ public final class ScreenGlow {
                 for (int pass = 0; pass < 2; pass++) for (int k = 0; k < 4; k++) {
                     int i = pass == 0 ? k : 3 - k;
                     sample(state, f.u[i], f.v[i], f.level[i], colour);
-                    float a = Math.min(1f, f.corner[i] * strength * 0.9f);
+                    float a = Math.min(1f, f.corner[i] * strength * 1.2f);
                     consumer.vertex(matrix, (float) (f.cornerPos[i][0] - cam.x), (float) (f.cornerPos[i][1] - cam.y), (float) (f.cornerPos[i][2] - cam.z))
                             .color(colour[0], colour[1], colour[2], a).endVertex();
                 }

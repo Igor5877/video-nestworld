@@ -26,7 +26,7 @@ public final class ContentConfig {
         builder.pop();
         builder.push("screen");
         SCREEN_LIGHT = builder
-                .comment("A playing screen gives light (block light 7) so the room around it is not pitch dark.",
+                .comment("A playing screen gives light (block light 10) so the room around it is not pitch dark.",
                         "A big screen lights an even grid of its blocks, not all of them. Takes effect for screens that start or stop playing afterwards.")
                 .define("light_when_playing", true);
         builder.pop();

@@ -70,7 +70,7 @@ public final class NestworldSettingsScreen extends Screen {
                 "0 — широка панорама, 100 — майже моно.");
         choice("Колірне світло екрана", cellW, () -> switch (NestworldConfig.SCREEN_GLOW.get()) { case 0 -> "Вимкнено"; case 1 -> "Низьке"; case 3 -> "Високе"; default -> "Середнє"; },
                 () -> safely(() -> NestworldConfig.SCREEN_GLOW.set((NestworldConfig.SCREEN_GLOW.get() + 1) % 4)),
-                "Екран підсвічує підлогу й стіни кольорами картинки: темний кадр світить слабко, світлий сильно. Лише з шейдерами (Oculus/Iris).\nНижче значення це менший радіус і менше поверхонь.");
+                "Екран підсвічує підлогу й стіни кольорами картинки: темний кадр світить слабко, світлий сильно. Лише з шейдерами (Oculus/Iris).\nНижче значення це менший радіус (6 / 10 / 15 блоків) і менше поверхонь.");
         slider("Яскравість кольорового світла", cellW, 100, 0, NestworldConfig.SCREEN_GLOW_STRENGTH::get, NestworldConfig.SCREEN_GLOW_STRENGTH::set,
                 "Наскільки яскраво екран підсвічує кімнату (лише з шейдерами).");
         toggle("Акустика приміщення", cellW, NestworldConfig.ACOUSTICS,

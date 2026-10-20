@@ -32,7 +32,7 @@ public class VideoScreenBlock extends BaseEntityBlock {
     /** The screen is playing and gives light (set by the server for some or all tiles of the screen). */
     public static final BooleanProperty LIT = BlockStateProperties.LIT;
     /** Block light of a lit tile; fixed because the client computes lighting from the state with the same number. */
-    public static final int LIGHT_LEVEL = 7;
+    public static final int LIGHT_LEVEL = 10;
     
     public VideoScreenBlock() {
         super(BlockBehaviour.Properties.of()
