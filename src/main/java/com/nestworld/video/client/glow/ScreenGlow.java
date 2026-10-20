@@ -28,18 +28,19 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Colour light from a playing screen onto the surfaces around it that face it (floor, walls, ceiling), following what the
- * picture shows: the frame is reduced to a grid of colours (8x5 to 32x18 by quality) and every corner of every lit face
- * takes the colour of the part of the picture it "sees"; the farther from the screen, the coarser (a blurrier average),
- * like real light spreading. Drawn as soft additive overlays on the exposed block faces; the faces are found once a
- * second, so per frame only their colours change.
+ * Colour light from a playing screen, spread like block light: it floods through the air from the screen with one level
+ * lost per block (round corners, into every corner of the room) and lights every exposed block face it touches, floor,
+ * walls and ceiling alike, with smooth per-corner values. The colour at each spot is the colour of the part of the
+ * picture the light came from (a grid of 8x5 to 32x18 cells), blurrier the farther it travelled. Drawn as soft additive
+ * overlays on the block faces; the lit faces are worked out about once a second, so per frame only their colours change.
  * The block light of a playing screen (a fixed level from the server) stays as it is.
  */
 public final class ScreenGlow {
     private static final Logger LOGGER = LogUtils.getLogger();
-    /** Quality 1..3: reach in blocks and how many faces at most. */
-    private static final double[] REACH = {6.0, 10.0, 15.0};
-    private static final int[] MAX_FACES = {250, 700, 1500};
+    /** Quality 1..3: how many blocks the light travels, how many faces at most, and a limit on the cells searched. */
+    private static final int[] REACH = {6, 10, 15};
+    private static final int[] MAX_FACES = {400, 1200, 3000};
+    private static final int[] MAX_CELLS = {20_000, 45_000, 90_000};
     private static final int REBUILD_TICKS = 20;
     /** Columns of the colour grid per quality level (must match the display's sampling). */
     private static final int[] GRID_COLS = {8, 16, 32};
@@ -90,7 +91,7 @@ public final class ScreenGlow {
         if (gameTime - state.lastBuild >= REBUILD_TICKS) {
             state.lastBuild = gameTime;
             try {
-                state.faces = buildFaces(level, screen(screen), quality);
+                state.faces = buildFaces(level, screen, screen(screen), quality);
                 if (NestworldConfig.DEBUG_STATS.get()) LOGGER.info("Nestworld Video glow: {} surfaces lit around the screen at {} (strongest {}, average {}), colour grid {}x{}", state.faces.size(), pos,
                         state.faces.isEmpty() ? 0 : String.format("%.2f", state.faces.get(0).corner[0]),
                         String.format("%.3f", state.faces.stream().mapToDouble(f -> (f.corner[0] + f.corner[1] + f.corner[2] + f.corner[3]) / 4).average().orElse(0)),
@@ -114,26 +115,78 @@ public final class ScreenGlow {
                 screen.getScreenCols(), screen.getScreenRows(), b);
     }
 
-    private List<Face> buildFaces(Level level, Geometry g, int quality) {
-        double reach = REACH[quality - 1];
+    private List<Face> buildFaces(Level level, VideoScreenBlockEntity screen, Geometry g, int quality) {
+        final int reach = REACH[quality - 1], maxCells = MAX_CELLS[quality - 1];
         Vec3 camera = Minecraft.getInstance().gameRenderer.getMainCamera().getPosition();
-        // Only the part of the room near the viewer: a huge wall would otherwise mean a huge scan.
+        // The region searched: the screen and its surroundings within reach, limited to the part near the viewer.
         int x0 = (int) Math.floor(Math.max(g.bounds.minX - reach, camera.x - 24)), x1 = (int) Math.ceil(Math.min(g.bounds.maxX + reach, camera.x + 24));
         int y0 = (int) Math.floor(Math.max(g.bounds.minY - reach, camera.y - 16)), y1 = (int) Math.ceil(Math.min(g.bounds.maxY + reach, camera.y + 16));
         int z0 = (int) Math.floor(Math.max(g.bounds.minZ - reach, camera.z - 24)), z1 = (int) Math.ceil(Math.min(g.bounds.maxZ + reach, camera.z + 24));
-        MinecraftRayWorld world = new MinecraftRayWorld(level);
-        List<Face> found = new ArrayList<>();
-        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos(), neighbour = new BlockPos.MutableBlockPos();
-        for (int x = x0; x <= x1; x++) for (int y = y0; y <= y1; y++) for (int z = z0; z <= z1; z++) {
+        int sx = x1 - x0 + 1, sy = y1 - y0 + 1, sz = z1 - z0 + 1;
+        if (sx <= 0 || sy <= 0 || sz <= 0 || (long) sx * sy * sz > 400_000L) return List.of();
+        int total = sx * sy * sz;
+        byte[] kind = new byte[total];        // 0 unknown, 1 passable air, 2 solid or blocked
+        byte[] light = new byte[total];       // light level 0..reach
+        short[] srcU = new short[total], srcV = new short[total];   // where in the picture the light came from (0..1000)
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        java.util.function.IntUnaryOperator classify = idx -> {
+            int x = x0 + idx / (sy * sz), y = y0 + (idx / sz) % sy, z = z0 + idx % sz;
             pos.set(x, y, z);
-            if (!level.isLoaded(pos)) continue;
-            BlockState state = level.getBlockState(pos);
-            if (state.isAir() || !state.isSolidRender(level, pos)) continue;
-            for (Direction dir : Direction.values()) {
-                neighbour.set(x + dir.getStepX(), y + dir.getStepY(), z + dir.getStepZ());
-                if (!level.isLoaded(neighbour) || level.getBlockState(neighbour).isSolidRender(level, neighbour)) continue;
-                Face face = faceFor(world, g, x, y, z, dir, reach, GRID_COLS[quality - 1]);
-                if (face != null) found.add(face);
+            if (!level.isLoaded(pos)) return 2;
+            BlockState st = level.getBlockState(pos);
+            if (st.getBlock() instanceof VideoScreenBlock) return 2;
+            return st.isSolidRender(level, pos) ? 2 : 1;
+        };
+        // Start cells: the air right in front of every tile of the screen, each remembering which part of the picture it is.
+        Direction facing = screen.getBlockState().getValue(VideoScreenBlock.FACING), right = facing.getCounterClockWise();
+        int cols = screen.getScreenCols(), rows = screen.getScreenRows();
+        int[] queue = new int[Math.min(total, maxCells)];
+        int head = 0, tail = 0;
+        for (int r = 0; r < rows; r++) for (int c = 0; c < cols; c++) {
+            BlockPos front = screen.getBlockPos().relative(right, c).above(r).relative(facing);
+            int px = front.getX() - x0, py = front.getY() - y0, pz = front.getZ() - z0;
+            if (px < 0 || py < 0 || pz < 0 || px >= sx || py >= sy || pz >= sz) continue;
+            int idx = (px * sy + py) * sz + pz;
+            if (kind[idx] == 0) kind[idx] = (byte) classify.applyAsInt(idx);
+            if (kind[idx] != 1 || light[idx] != 0 || tail >= queue.length) continue;
+            light[idx] = (byte) reach;
+            srcU[idx] = (short) Math.round(1000.0 * (c + 0.5) / cols);
+            srcV[idx] = (short) Math.round(1000.0 * (1.0 - (r + 0.5) / rows));
+            queue[tail++] = idx;
+        }
+        // Flood outwards, one level lost per block, like the game's own block light.
+        final int[] dx = {1, -1, 0, 0, 0, 0}, dy = {0, 0, 1, -1, 0, 0}, dz = {0, 0, 0, 0, 1, -1};
+        int visited = tail;
+        while (head < tail) {
+            int idx = queue[head++];
+            int lv = light[idx];
+            if (lv <= 1) continue;
+            int x = idx / (sy * sz), y = (idx / sz) % sy, z = idx % sz;
+            for (int k = 0; k < 6; k++) {
+                int nx = x + dx[k], ny = y + dy[k], nz = z + dz[k];
+                if (nx < 0 || ny < 0 || nz < 0 || nx >= sx || ny >= sy || nz >= sz) continue;
+                int n = (nx * sy + ny) * sz + nz;
+                if (kind[n] == 0) kind[n] = (byte) classify.applyAsInt(n);
+                if (kind[n] != 1 || light[n] != 0 || visited >= maxCells || tail >= queue.length) continue;
+                light[n] = (byte) (lv - 1); srcU[n] = srcU[idx]; srcV[n] = srcV[idx];
+                queue[tail++] = n; visited++;
+            }
+        }
+        // Every exposed block face that touches lit air gets light, smoothed over the cells around each of its corners.
+        List<Face> found = new ArrayList<>();
+        double gridCellWidth = g.width / (double) GRID_COLS[quality - 1];   // blocks per grid cell on the screen
+        for (int q = 0; q < tail; q++) {
+            int idx = queue[q];
+            int x = idx / (sy * sz), y = (idx / sz) % sy, z = idx % sz;
+            for (int k = 0; k < 6; k++) {
+                int nx = x + dx[k], ny = y + dy[k], nz = z + dz[k];
+                if (nx < 0 || ny < 0 || nz < 0 || nx >= sx || ny >= sy || nz >= sz) continue;
+                int n = (nx * sy + ny) * sz + nz;
+                if (kind[n] == 0) kind[n] = (byte) classify.applyAsInt(n);
+                if (kind[n] != 2) continue;
+                // The face of the solid cell n that looks back into the lit cell idx.
+                Face f = faceInto(g, x0 + x, y0 + y, z0 + z, k, kind, light, srcU, srcV, x, y, z, sx, sy, sz, reach, gridCellWidth);
+                if (f != null) found.add(f);
             }
         }
         found.sort(Comparator.comparingDouble((Face f) -> -(f.corner[0] + f.corner[1] + f.corner[2] + f.corner[3])));
@@ -141,57 +194,47 @@ public final class ScreenGlow {
         return found.size() > max ? new ArrayList<>(found.subList(0, max)) : found;
     }
 
-    /** Nearest point of the screen's surface, offset a little in front of it. */
-    private static V3 nearestOnScreen(Geometry g, V3 p) {
-        V3 d = p.sub(g.centre);
-        double u = Math.max(-g.width / 2, Math.min(g.width / 2, d.dot(g.right)));
-        double v = Math.max(-g.height / 2, Math.min(g.height / 2, d.y()));
-        return g.centre.add(g.right.scale(u)).add(new V3(0, v, 0)).add(g.front.scale(0.5));
-    }
-
-    private static float weightAt(Geometry g, V3 p, V3 normal, double reach) {
-        V3 s = nearestOnScreen(g, p);
-        double dist = s.sub(p).length();
-        if (dist >= reach || dist < 1e-4) return dist < 1e-4 ? 1f : 0f;
-        // The screen is an area light: take the direction to its middle height, or a floor right under the bottom edge
-        // (and a ceiling above the top edge) would only ever see grazing light.
-        V3 toScreen = new V3(s.x(), g.centre.y(), s.z()).sub(p);
-        double directionLength = toScreen.length();
-        V3 l = directionLength < 1e-4 ? g.front : toScreen.scale(1 / directionLength);
-        double facingScreen = normal.dot(l);                  // the surface faces the screen
-        double screenFacing = g.front.dot(l.scale(-1));       // the screen faces the surface
-        if (facingScreen <= 0.02 || screenFacing <= 0.0) return 0f;
-        // Falls off gently, like block light (a torch reaches far), not like an inverse-square spotlight.
-        double falloff = Math.pow(1 - dist / reach, 1.3);
-        return (float) (falloff * Math.min(1.0, facingScreen * 1.5) * Math.sqrt(screenFacing));
-    }
-
-    private static Face faceFor(MinecraftRayWorld world, Geometry g, int x, int y, int z, Direction dir, double reach, int gridCols) {
-        V3 normal = new V3(dir.getStepX(), dir.getStepY(), dir.getStepZ());
-        V3 centre = new V3(x + 0.5 + dir.getStepX() * 0.5, y + 0.5 + dir.getStepY() * 0.5, z + 0.5 + dir.getStepZ() * 0.5);
-        if (g.front.dot(centre.sub(g.centre)) < 0.45) return null;        // behind or beside the screen's surface plane
-        float wc = weightAt(g, centre, normal, reach);
-        if (wc <= 0.01f) return null;
-        // Light must actually reach it: nothing solid between the screen and the face.
-        V3 s = nearestOnScreen(g, centre).add(g.front.scale(0.05));
-        if (world.occlusion(s, centre.add(normal.scale(0.05)), 0.5) > 0.3) return null;
+    /** Builds the face of the block next to the lit cell (x, y, z) in direction {@code dir}: smooth corner values and colours. */
+    private static Face faceInto(Geometry g, int wx, int wy, int wz, int dir, byte[] kind, byte[] light, short[] srcU, short[] srcV,
+                                 int x, int y, int z, int sx, int sy, int sz, int reach, double gridCellWidth) {
+        final int[] dxs = {1, -1, 0, 0, 0, 0}, dys = {0, 0, 1, -1, 0, 0}, dzs = {0, 0, 0, 0, 1, -1};
+        // The cell is lit air; the solid block is at +dir. Face centre on the shared boundary, a hair inside the air cell.
+        double fx = wx + 0.5 + dxs[dir] * 0.5, fy = wy + 0.5 + dys[dir] * 0.5, fz = wz + 0.5 + dzs[dir] * 0.5;
+        int[] t1 = dxs[dir] != 0 ? new int[]{0, 1, 0} : new int[]{1, 0, 0};
+        int[] t2 = dzs[dir] != 0 ? new int[]{0, 1, 0} : new int[]{0, 0, 1};
+        if (dys[dir] != 0) { t1 = new int[]{1, 0, 0}; t2 = new int[]{0, 0, 1}; }
         Face f = new Face();
-        f.x = centre.x(); f.y = centre.y(); f.z = centre.z(); f.nx = dir.getStepX(); f.ny = dir.getStepY(); f.nz = dir.getStepZ();
-        // Corners of the 1x1 face, pushed a hair off the surface; the weight is evaluated at each corner for a smooth gradient.
-        V3 t1 = dir.getAxis() == Direction.Axis.Y ? new V3(1, 0, 0) : new V3(0, 1, 0);
-        V3 t2 = dir.getAxis() == Direction.Axis.X ? new V3(0, 0, 1) : dir.getAxis() == Direction.Axis.Z ? new V3(1, 0, 0) : new V3(0, 0, 1);
+        f.x = fx; f.y = fy; f.z = fz; f.nx = -dxs[dir]; f.ny = -dys[dir]; f.nz = -dzs[dir];
         double[][] signs = {{-1, -1}, {1, -1}, {1, 1}, {-1, 1}};
+        V3 toScreen = g.centre.sub(new V3(fx, fy, fz));
+        V3 l = toScreen.length() < 1e-4 ? g.front : toScreen.normalized();
+        double facingScreen = Math.max(0.0, new V3(f.nx, f.ny, f.nz).dot(l));
+        float shade = (float) (0.55 + 0.45 * facingScreen);         // a face turned towards the screen is a little brighter
         for (int i = 0; i < 4; i++) {
-            V3 c = centre.add(t1.scale(0.5 * signs[i][0])).add(t2.scale(0.5 * signs[i][1])).add(normal.scale(0.02));
-            f.cornerPos[i][0] = c.x(); f.cornerPos[i][1] = c.y(); f.cornerPos[i][2] = c.z();
-            f.corner[i] = Math.max(weightAt(g, c, normal, reach), wc * 0.35f);
-            // Which part of the picture this corner looks at, and how far it is (the farther, the blurrier the colour).
-            V3 d = c.sub(g.centre);
-            f.u[i] = (float) Math.max(0, Math.min(1, d.dot(g.right) / g.width + 0.5));
-            f.v[i] = (float) Math.max(0, Math.min(1, 0.5 - d.y() / g.height));    // row 0 is the top of the picture
-            f.level[i] = (float) Math.max(0.0, Math.log(Math.max(1.0, nearestOnScreen(g, c).sub(c).length() / (g.width / gridCols))) / Math.log(2.0));
+            int s1 = (int) signs[i][0], s2 = (int) signs[i][1];
+            double sum = 0; int count = 0, bestLevel = -1; int bestU = 500, bestV = 500;
+            for (int a = 0; a < 2; a++) for (int b = 0; b < 2; b++) {
+                int cx = x + (a == 1 ? s1 * t1[0] : 0) + (b == 1 ? s2 * t2[0] : 0);
+                int cy = y + (a == 1 ? s1 * t1[1] : 0) + (b == 1 ? s2 * t2[1] : 0);
+                int cz = z + (a == 1 ? s1 * t1[2] : 0) + (b == 1 ? s2 * t2[2] : 0);
+                if (cx < 0 || cy < 0 || cz < 0 || cx >= sx || cy >= sy || cz >= sz) continue;
+                int idx = (cx * sy + cy) * sz + cz;
+                if (kind[idx] != 1) continue;                      // solid cells do not count, like smooth lighting
+                sum += light[idx]; count++;
+                if (light[idx] > bestLevel) { bestLevel = light[idx]; bestU = srcU[idx]; bestV = srcV[idx]; }
+            }
+            double average = count == 0 ? 0 : sum / count;
+            f.corner[i] = (float) (Math.max(0.0, average) / reach * shade);
+            double cxp = fx + t1[0] * 0.5 * s1 + t2[0] * 0.5 * s2 - dxs[dir] * 0.02, cyp = fy + t1[1] * 0.5 * s1 + t2[1] * 0.5 * s2 - dys[dir] * 0.02,
+                    czp = fz + t1[2] * 0.5 * s1 + t2[2] * 0.5 * s2 - dzs[dir] * 0.02;
+            f.cornerPos[i][0] = cxp; f.cornerPos[i][1] = cyp; f.cornerPos[i][2] = czp;
+            f.u[i] = bestU / 1000f; f.v[i] = bestV / 1000f;
+            // The farther the light travelled, the blurrier its colour.
+            double travelled = Math.max(1, reach - Math.max(0, bestLevel));
+            f.level[i] = (float) Math.max(0.0, Math.log(Math.max(1.0, travelled * 0.5 / gridCellWidth)) / Math.log(2.0));
         }
-        return f;
+        float strongest = Math.max(Math.max(f.corner[0], f.corner[1]), Math.max(f.corner[2], f.corner[3]));
+        return strongest <= 0.02f ? null : f;
     }
 
     /** Draws every active glow; called after translucent blocks. {@code cam} = camera position. */
@@ -218,7 +261,7 @@ public final class ScreenGlow {
                 for (int pass = 0; pass < 2; pass++) for (int k = 0; k < 4; k++) {
                     int i = pass == 0 ? k : 3 - k;
                     sample(state, f.u[i], f.v[i], f.level[i], colour);
-                    float a = Math.min(1f, f.corner[i] * strength * 1.2f);
+                    float a = Math.min(1f, f.corner[i] * strength * 0.6f);
                     consumer.vertex(matrix, (float) (f.cornerPos[i][0] - cam.x), (float) (f.cornerPos[i][1] - cam.y), (float) (f.cornerPos[i][2] - cam.z))
                             .color(colour[0], colour[1], colour[2], a).endVertex();
                 }

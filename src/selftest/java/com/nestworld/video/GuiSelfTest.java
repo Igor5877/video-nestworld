@@ -214,7 +214,10 @@ public class GuiSelfTest {
                 if (ticks == 320) { shotPrefix = "glow-mid"; capture = 1; }
                 if (ticks == 330) com.nestworld.video.NestworldConfig.SCREEN_GLOW.set(3);
                 if (ticks == 440) { shotPrefix = "glow-high"; capture = 1; }
-                if (ticks == 450) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
+                if (ticks == 450) mc.getSingleplayerServer().execute(() -> mc.getSingleplayerServer().getCommands().performPrefixedCommand(
+                        mc.getSingleplayerServer().createCommandSourceStack().withSuppressedOutput(), "tp @a 1.5 -60 1 180 15"));   // turn round: the back of the room
+                if (ticks == 520) { shotPrefix = "glow-back"; capture = 1; }
+                if (ticks == 530) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
                 return;
             }
             if (Boolean.getBoolean("nestworldvideo.guilight")) {   // needs -Pguianime: a playing screen gives light, a stopped one does not
