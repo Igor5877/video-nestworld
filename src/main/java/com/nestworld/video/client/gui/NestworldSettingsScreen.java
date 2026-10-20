@@ -55,24 +55,24 @@ public final class NestworldSettingsScreen extends Screen {
                     case "vanilla_pipeline" -> "Конвеєр гри"; case "direct" -> "Напряму"; default -> "Авто"; },
                 () -> cycleString(NestworldConfig.RENDER_MODE, List.of("auto", "vanilla_pipeline", "direct")),
                 "Авто перемикається на конвеєр гри, коли ввімкнено шейдери (Iris/Oculus).");
-        toggle("Згладжування (бікубічне)", cellW, NestworldConfig.SMOOTH_SCALING,
-                "Згладжує сходинки на великих екранах. Вимкніть, якщо відеокарта не тягне.");
+        toggle("Масштабування шейдером", cellW, NestworldConfig.SMOOTH_SCALING,
+                "Шейдер масштабування мода: збільшення картинки (лініями / бікубічне / Anime4K) і різкість. З шейдерами кадр збільшується вдвічі перед тим, як його малює шейдер-пак, — це додаткове навантаження. Вимкніть, якщо відеокарта не тягне.");
         choice("Збільшення картинки", cellW, () -> switch (NestworldConfig.UPSCALER.get()) { case "bicubic" -> "Бікубічне"; case "anime4k" -> "Anime4K (тест)"; default -> "Слідує за лініями"; },
                 () -> cycleString(NestworldConfig.UPSCALER, List.of("edge", "bicubic", "anime4k")),
-                "Як збільшується відео, коли екран більший за нього. З шейдерами кадр збільшується вдвічі перед тим, як його малює шейдер-пак.");
+                "Як збільшується відео, коли екран більший за нього (потрібне «Масштабування шейдером»).");
         slider("Різкість", cellW, 100, 0, NestworldConfig.SHARPNESS::get, NestworldConfig.SHARPNESS::set,
-                "Додаткове підвищення різкості.");
+                "Додаткове підвищення різкості (потрібне «Масштабування шейдером»).");
         toggle("Мипмапи (дальні екрани)", cellW, NestworldConfig.MIPMAPS,
-                "Менше мерехтіння далеких екранів (лише для FFmpeg).");
+                "Менше мерехтіння далеких екранів (FFmpeg; з шейдерами — і для збільшеної картинки).");
         toggle("Просторовий звук", cellW, NestworldConfig.SPATIAL_AUDIO,
                 "Звук іде з екрана в 3D (лише для FFmpeg). Діє для потоків, запущених після зміни.");
         slider("М’якість звуку", cellW, 100, 0, NestworldConfig.SPATIAL_SOFTNESS::get, NestworldConfig.SPATIAL_SOFTNESS::set,
                 "0 — широка панорама, 100 — майже моно.");
-        choice("Колірне світло екрана", cellW, () -> switch (NestworldConfig.SCREEN_GLOW.get()) { case 0 -> "Вимкнено"; case 1 -> "Низьке"; case 3 -> "Високе"; default -> "Середнє"; },
-                () -> safely(() -> NestworldConfig.SCREEN_GLOW.set((NestworldConfig.SCREEN_GLOW.get() + 1) % 4)),
+        choice("Колірне світло екрана", cellW, () -> NestworldConfig.SCREEN_GLOW.get() > 0 ? "Увімкнено" : "Вимкнено",
+                () -> safely(() -> NestworldConfig.SCREEN_GLOW.set(NestworldConfig.SCREEN_GLOW.get() > 0 ? 0 : 2)),
                 "Екран підсвічує підлогу й стіни кольорами картинки: темний кадр світить слабко, світлий сильно. Лише з запатченим BSL (Oculus/Iris); тонке налаштування — у налаштуваннях шейдера, розділ Camera.");
         slider("Яскравість кольорового світла", cellW, 100, 0, NestworldConfig.SCREEN_GLOW_STRENGTH::get, NestworldConfig.SCREEN_GLOW_STRENGTH::set,
-                "Наскільки яскраво екран підсвічує кімнату (лише з шейдерами).");
+                "Наскільки яскраво екран підсвічує кімнату, 80 % типово. Решта налаштувань світла — у шейдері: Camera → Video Screen Light.");
         toggle("Акустика приміщення", cellW, NestworldConfig.ACOUSTICS,
                 "Стіни приглушують звук екрана, двері й отвори пропускають його, у залах з’являється луна (лише FFmpeg і просторовий звук).");
         slider("Луна приміщення", cellW, 100, 0, NestworldConfig.ACOUSTICS_REVERB::get, NestworldConfig.ACOUSTICS_REVERB::set,

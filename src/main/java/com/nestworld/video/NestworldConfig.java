@@ -33,8 +33,8 @@ public final class NestworldConfig {
                 .comment("Maximum distance in blocks for an active video stream on this client.")
                 .defineInRange("max_stream_distance", 128, 16, 512);
         SMOOTH_SCALING = builder
-                .comment("Scale video with a bicubic (Catmull-Rom) shader instead of plain bilinear filtering.",
-                        "Smooths stair-steps on large screens; disable if your GPU struggles.")
+                .comment("Scale video with the mod's scaling shader (see video.upscaler) instead of plain bilinear filtering.",
+                        "Under a shader pack it also enlarges each new frame 2x before the pack draws it. Disable if your GPU struggles.")
                 .define("smooth_scaling", true);
         MAX_VIDEO_HEIGHT = builder
                 .comment("Maximum video height for HLS streams with several qualities (0 = automatic, best available).",
@@ -55,10 +55,10 @@ public final class NestworldConfig {
         SCREEN_GLOW = builder
                 .comment("Colour light from a playing screen, following the picture: every lit tile of the screen carries the colour of its part of the picture",
                         "and the shader pack (patched BSL with Multicolored Blocklight) spreads it through the room. Only under a shader pack (Oculus/Iris).",
-                        "0 off, 1..3 how finely the picture is divided into colours (8x5, 16x9, 32x18 cells).")
+                        "0 off, 1..3 on (the light uses an 8x5 grid of the picture either way).")
                 .defineInRange("screen_glow", 2, 0, 3);
         SCREEN_GLOW_STRENGTH = builder
-                .comment("Brightness of that colour light in percent (how bright a picture has to be to give full light).")
+                .comment("Brightness of that colour light in percent, 80 = as tuned; the shader pack has its own settings on top.")
                 .defineInRange("screen_glow_strength", 80, 0, 100);
         ACOUSTICS = builder
                 .comment("Room acoustics for the screen sound (needs the FFmpeg decoder with spatial audio): walls muffle the sound,",
