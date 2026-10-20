@@ -40,11 +40,51 @@ public class ClientVideoManager {
         return INSTANCE;
     }
 
+    /** Players whose screen was just rebuilt (resized): kept open for a moment for the new screen to take over. */
+    private record Orphan(Display display, long sinceMs) {}
+    private final Map<BlockPos, Orphan> orphans = new ConcurrentHashMap<>();
+
+    /** The screen at {@code pos} is no longer the one playing (it was merged into a bigger one or split off): keep its player briefly. */
+    private void orphan(BlockPos pos) {
+        Display display = activeDisplays.get(pos);
+        if (display == null) return;
+        reportViewer(pos, false);
+        lastEndReports.remove(pos);
+        driftState.remove(pos);
+        acoustics.forget(pos);
+        glow.forget(pos);
+        activeDisplays.remove(pos);
+        Orphan old = orphans.put(pos, new Orphan(display, System.currentTimeMillis()));
+        if (old != null && old.display() != display) old.display().release();
+    }
+
+    /** A player of {@code url} left by a rebuilt screen, if there is one: the new screen continues with it, without reopening. */
+    private Display adopt(BlockPos pos, String url) {
+        for (var entry : orphans.entrySet()) {
+            if (!entry.getValue().display().getUrl().equals(url) || !orphans.remove(entry.getKey(), entry.getValue())) continue;
+            Display display = entry.getValue().display();
+            display.setTimeline(() -> timelineAt(pos));
+            com.mojang.logging.LogUtils.getLogger().info("Nestworld Video: the resized screen at {} continues the video of {} without reopening it", pos, entry.getKey());
+            return display;
+        }
+        return null;
+    }
+
+    private static long timelineAt(BlockPos pos) {
+        var level = Minecraft.getInstance().level;
+        return level != null && level.getBlockEntity(pos) instanceof VideoScreenBlockEntity s ? s.getTimelinePositionMs() : Long.MIN_VALUE;
+    }
+
     public void startPlaying(BlockPos pos, String url) {
         // Stop any existing video at this position first
         stopPlaying(pos);
 
         if (url == null || url.isEmpty()) {
+            return;
+        }
+        Display adopted = adopt(pos, url);
+        if (adopted != null) {
+            activeDisplays.put(pos, adopted);
             return;
         }
 
@@ -61,10 +101,7 @@ public class ClientVideoManager {
             Display display = Display.create(url, source, qualityCaps.getOrDefault(pos, 0));
             display.syncPosition(screenPosition(pos));
             // A start or a jump waits on the first frame for the shared timeline instead of starting early and jumping again.
-            display.setTimeline(() -> {
-                var level = Minecraft.getInstance().level;
-                return level != null && level.getBlockEntity(pos) instanceof VideoScreenBlockEntity s ? s.getTimelinePositionMs() : Long.MIN_VALUE;
-            });
+            display.setTimeline(() -> timelineAt(pos));
             activeDisplays.put(pos, display);
         } catch (RuntimeException exception) {
             com.mojang.logging.LogUtils.getLogger().warn("Unable to start video at {}", pos, exception);
@@ -182,7 +219,9 @@ public class ClientVideoManager {
         Display existing = activeDisplays.get(pos);
         if (!screen.isMaster() || screen.isStopped() || screen.getCurrentVideoUrl().isBlank()) {
             desiredScreens.remove(pos);
-            if (existing != null) stopPlaying(pos);
+            // No longer the controller, or a tile split off a resized screen: its player may be taken over by the new screen.
+            if (existing != null && (!screen.isMaster() || screen.getCurrentVideoUrl().isBlank())) orphan(pos);
+            else if (existing != null) stopPlaying(pos);
             return;
         }
         if (screen.isAdult() && !ClientData.isAdultAllowed()) {
@@ -234,6 +273,14 @@ public class ClientVideoManager {
             }
             reconcile(screen);
         }
+
+        // Players of a rebuilt screen that no new screen took over within 2 s really stop.
+        long nowMs = System.currentTimeMillis();
+        orphans.entrySet().removeIf(e -> {
+            if (nowMs - e.getValue().sinceMs() < 2000) return false;
+            e.getValue().display().release();
+            return true;
+        });
 
         boolean watching = false;
         NextUp announce = null;
@@ -415,6 +462,8 @@ public class ClientVideoManager {
         WatchHistory.saveNow();
         activeDisplays.values().forEach(Display::release);
         activeDisplays.clear();
+        orphans.values().forEach(o -> o.display().release());
+        orphans.clear();
         qualityCaps.clear();
         desiredScreens.clear();
         lastViewerReports.clear();

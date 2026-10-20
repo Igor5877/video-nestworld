@@ -20,6 +20,8 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
     private static final int TEXT=0xE8EDF2, MUTED=0xAAB8C7, GOLD=0xE7BE70;
     private static final AtomicInteger REQUESTS = new AtomicInteger();
     private enum View { SEARCH, LIBRARY, VOICES, EPISODES, SOURCES }
+    /** The video of the row clicked last, and when: a quick second click on it plays it. */
+    private String lastPressUrl=""; private long lastPressMs;
     private record Row(String label, String hint, boolean enabled, Runnable action, String url, String poster, String meta, float ratio) {
         Row(String label, String hint, boolean enabled, Runnable action) { this(label, hint, enabled, action, "", "", "", -1f); }
         Row(String label, String hint, boolean enabled, Runnable action, String url) { this(label, hint, enabled, action, url, "", "", -1f); }
@@ -252,7 +254,14 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
             final int index=i;
             Button.OnPress press=b->{
                 int n=page*visibleRows+index;
-                if(n<rows.size() && rows.get(n).enabled()) rows.get(n).action().run();
+                if(n>=rows.size() || !rows.get(n).enabled()) return;
+                Row row=rows.get(n);
+                // A second click on the same video right away plays it, instead of selecting it and pressing Play.
+                long now=net.minecraft.Util.getMillis();
+                boolean twice=!row.url().isEmpty() && row.url().equals(lastPressUrl) && now-lastPressMs<450;
+                lastPressUrl=twice?"":row.url(); lastPressMs=now;
+                row.action().run();
+                if(twice) send("play");
             };
             int x=left+(i%columns)*(rowWidth+6), y=start+(i/columns)*pitch;
             if(voiceCards) {
@@ -412,7 +421,7 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
                         String label=mark+season+"Серія "+number+(playable.isEmpty()?" — недоступна":
                                 seen!=null && !seen.watched && seen.position>=WatchHistory.MIN_RESUME_MS ? " · "+formatTime(seen.position) : "");
                         rows.add(new Row(label,selected.getDisplayTitle()+"\n"+selected.getSeason()+"\n"+voice+"\n"+
-                            (playable.isEmpty()?"Джерело не надало прямого відеопотоку.": "Серія "+number+". Натисни, щоб вибрати, потім «Відтворити»."),
+                            (playable.isEmpty()?"Джерело не надало прямого відеопотоку.": "Серія "+number+". Натисни, щоб вибрати; натисни двічі, щоб одразу відтворити."),
                             !playable.isEmpty(),()->{
                                 if(playable.size()==1) select(playable.get(0));
                                 else {episode=number;view=View.SOURCES;page=0;rebuildWidgets();}

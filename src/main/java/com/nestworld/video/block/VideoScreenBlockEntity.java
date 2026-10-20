@@ -165,8 +165,16 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
                     .min(java.util.Comparator.comparingLong(m -> m.worldPosition.asLong())).orElse(null);
             if (inherited != null) { url = inherited.currentVideoUrl; title = inherited.currentVideoTitle; }
         }
+        // Resizing while a video plays keeps it playing: the new screen takes over the state of the one that had it.
+        final String keptUrl = url;
+        VideoScreenBlockEntity source = previous != null && previous.currentVideoUrl.equals(url) ? previous
+                : masters.stream().filter(m -> m.currentVideoUrl.equals(keptUrl)).findFirst().orElse(null);
+        Playback kept = source == null || url.isBlank() ? null : source.capture();
         for (var master : masters)
-            if (master.screenCols > 1 || master.screenRows > 1 || !master.currentVideoUrl.isEmpty()) master.resetLayout();
+            if (master.screenCols > 1 || master.screenRows > 1 || !master.currentVideoUrl.isEmpty()) {
+                // Carrying the video over: take the old screen apart without telling the viewers it stopped.
+                if (kept != null) master.quietReset(); else master.resetLayout();
+            }
         Direction right = getBlockState().getValue(VideoScreenBlock.FACING).getCounterClockWise();
         for (BlockPos pos : layout.tiles()) {
             var tile = (VideoScreenBlockEntity) level.getBlockEntity(pos);
@@ -181,8 +189,29 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         }
         var master = (VideoScreenBlockEntity) level.getBlockEntity(layout.origin());
         master.currentVideoUrl = url; master.currentVideoTitle = title;
+        if (kept != null) master.restore(kept);
         master.syncToClient();
         return layout;
+    }
+
+    /** The playback state of a screen, carried over when it is resized. */
+    private record Playback(String title, boolean playing, boolean stopped, long positionMs, long startedMs, boolean autoNext,
+                            boolean repeat, boolean nextCancelled, boolean relayActive, boolean adult,
+                            java.util.UUID owner, String ownerName, boolean protection) {}
+
+    private Playback capture() {
+        refreshPlaybackPosition();
+        return new Playback(currentVideoTitle, isPlaying, stopped, playbackPositionMs, playbackStartedMs, autoNext, repeat, nextCancelled,
+                relayActive, adult, sessionOwner, sessionOwnerName, sessionProtection);
+    }
+
+    private void restore(Playback p) {
+        currentVideoTitle = p.title(); isPlaying = p.playing(); stopped = p.stopped();
+        playbackPositionMs = p.positionMs(); playbackStartedMs = p.playing() ? p.startedMs() : Long.MIN_VALUE;
+        autoNext = p.autoNext(); repeat = p.repeat(); nextCancelled = p.nextCancelled();
+        relayActive = p.relayActive(); adult = p.adult();
+        sessionOwner = p.owner(); sessionOwnerName = p.ownerName() == null ? "" : p.ownerName(); sessionProtection = p.protection();
+        lightApplied = null;
     }
 
     /** Called from any tile, including before it is broken. Never force-load chunks. */
@@ -191,6 +220,18 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         VideoScreenBlockEntity master = controller();
         if (master != null && master != this) { master.resetLayout(); return; }
         if (!currentVideoUrl.isEmpty() || isPlaying) stop();
+        detachTiles();
+    }
+
+    /** Like {@link #resetLayout()} for a screen whose video moves to a resized screen: no "stopped" to the viewers. */
+    private void quietReset() {
+        isPlaying = false; stopped = true; playbackStartedMs = Long.MIN_VALUE;
+        currentVideoUrl = ""; currentVideoTitle = "";
+        updateLight();   // tiles that end up outside the new screen must not stay lit
+        detachTiles();
+    }
+
+    private void detachTiles() {
         long owner = worldPosition.asLong();
         Direction facing = getBlockState().getValue(VideoScreenBlock.FACING);
         // Also recognize layouts saved by old versions that used the opposite width direction.
