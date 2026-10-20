@@ -88,7 +88,10 @@ public final class AcousticSolver {
         double averageReflect = hits == 0 ? 0.5 : reflectSum / hits;
         float send = (float) clamp(amount * e * 1.0, 0, 1);
         float hf = (float) clamp(0.4 + 0.55 * averageReflect, 0.3, 1.0);
-        float decay = (float) clamp((0.25 + 0.1 * averageFree) * (0.4 + 0.6 * enclosure), 0.3, 4.0);
+        // Sabine: decay time ~ 0.161 V / (S a) = 0.04 * mean free path / absorption. A stone hall rings for seconds, a
+        // wooden room for half a second, wool swallows it; rays escaping to the sky shorten it.
+        double absorptionCoefficient = Math.max(0.05, 1.0 - averageReflect);
+        float decay = (float) clamp(0.04 * averageFree / absorptionCoefficient * (0.3 + 0.7 * enclosure), 0.3, 3.5);
         return new Reverb(send, hf, decay);
     }
 

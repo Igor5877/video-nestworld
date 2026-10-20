@@ -83,8 +83,11 @@ final class AlEfx {
             float alpha = 1f - (float) Math.exp(-Math.max(0.001f, dtSeconds) / SMOOTH_SECONDS);
             boolean changed = false;
             for (int i = 0; i < sources.length; i++) {
-                float tg = sources.length == 1 ? (t.directGainL() + t.directGainR()) / 2f : (i == 0 ? t.directGainL() : t.directGainR());
-                float th = sources.length == 1 ? (t.directHfL() + t.directHfR()) / 2f : (i == 0 ? t.directHfL() : t.directHfR());
+                // The left and right speakers of a stereo screen (the first two of three sources) get their own
+                // muffling; a mono screen and the plain head-relative track get the average.
+                boolean own = sources.length == 3 && i < 2;
+                float tg = own ? (i == 0 ? t.directGainL() : t.directGainR()) : (t.directGainL() + t.directGainR()) / 2f;
+                float th = own ? (i == 0 ? t.directHfL() : t.directHfR()) : (t.directHfL() + t.directHfR()) / 2f;
                 float ng = gain[i] + (tg - gain[i]) * alpha, nh = hf[i] + (th - hf[i]) * alpha;
                 if (Math.abs(ng - gain[i]) > 0.003f || Math.abs(nh - hf[i]) > 0.003f) { gain[i] = ng; hf[i] = nh; changed = true; }
             }
@@ -119,17 +122,21 @@ final class AlEfx {
         if (eax) {
             EXTEfx.alEffectf(effect, EXTEfx.AL_EAXREVERB_DENSITY, 1.0f);
             EXTEfx.alEffectf(effect, EXTEfx.AL_EAXREVERB_DIFFUSION, 1.0f);
-            EXTEfx.alEffectf(effect, EXTEfx.AL_EAXREVERB_GAIN, 0.5f);
+            EXTEfx.alEffectf(effect, EXTEfx.AL_EAXREVERB_GAIN, 1.0f);
             EXTEfx.alEffectf(effect, EXTEfx.AL_EAXREVERB_GAINHF, 0.89f);
             EXTEfx.alEffectf(effect, EXTEfx.AL_EAXREVERB_DECAY_TIME, time);
             EXTEfx.alEffectf(effect, EXTEfx.AL_EAXREVERB_DECAY_HFRATIO, 0.8f);
-            EXTEfx.alEffectf(effect, EXTEfx.AL_EAXREVERB_REFLECTIONS_GAIN, 0.35f);
+            EXTEfx.alEffectf(effect, EXTEfx.AL_EAXREVERB_REFLECTIONS_GAIN, 1.0f);
             EXTEfx.alEffectf(effect, EXTEfx.AL_EAXREVERB_REFLECTIONS_DELAY, 0.012f);
-            EXTEfx.alEffectf(effect, EXTEfx.AL_EAXREVERB_LATE_REVERB_GAIN, 1.2f);
+            EXTEfx.alEffectf(effect, EXTEfx.AL_EAXREVERB_LATE_REVERB_GAIN, 3.0f);
             EXTEfx.alEffectf(effect, EXTEfx.AL_EAXREVERB_LATE_REVERB_DELAY, 0.02f);
             EXTEfx.alEffectf(effect, EXTEfx.AL_EAXREVERB_AIR_ABSORPTION_GAINHF, 0.994f);
             EXTEfx.alEffectf(effect, EXTEfx.AL_EAXREVERB_ROOM_ROLLOFF_FACTOR, 0f);
         } else {
+            EXTEfx.alEffectf(effect, EXTEfx.AL_REVERB_GAIN, 1.0f);
+            EXTEfx.alEffectf(effect, EXTEfx.AL_REVERB_REFLECTIONS_GAIN, 1.0f);
+            EXTEfx.alEffectf(effect, EXTEfx.AL_REVERB_LATE_REVERB_GAIN, 3.0f);
+            EXTEfx.alEffectf(effect, EXTEfx.AL_REVERB_ROOM_ROLLOFF_FACTOR, 0f);
             EXTEfx.alEffectf(effect, EXTEfx.AL_REVERB_DECAY_TIME, time);
         }
         EXTEfx.alAuxiliaryEffectSloti(slot, EXTEfx.AL_EFFECTSLOT_EFFECT, effect);

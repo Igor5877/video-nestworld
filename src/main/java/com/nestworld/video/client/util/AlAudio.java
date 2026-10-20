@@ -18,6 +18,11 @@ import java.util.List;
  * <p>In spatial mode the sound comes from the screen itself: stereo is split into a left and a right
  * source at the screen's edges, mono plays from its centre. Distance falloff stays under our control
  * (rolloff 0 plus a gain factor), so only the direction is handled by OpenAL.
+ *
+ * <p>A point source to one side goes entirely into one ear (OpenAL pans hard once a source is past the
+ * speakers' angle), which is not how a wide screen in a room sounds. So part of the sound plays as is,
+ * from inside the listener's head (the plain stereo track), and only the rest comes from the screen:
+ * turned sideways the near ear is clearly louder, the far one still hears it.
  */
 final class AlAudio implements Runnable {
     private static final Logger LOGGER = LogUtils.getLogger();
@@ -33,6 +38,10 @@ final class AlAudio implements Runnable {
     /** Share of the opposite channel mixed into each speaker, 0 (hard left/right) to 0.5 (mono). */
     private final float crossfeed;
     private final int sourceCount;
+    /** Spatial mode: the sources at the screen (1 or 2), then one head-relative source with the plain track. */
+    private final int placedCount;
+    /** Share of the plain (head-relative) track in spatial mode, from the softness setting. */
+    private final float ambientShare;
     private final Object lock = new Object();
     private final ArrayDeque<Chunk> queue = new ArrayDeque<>();
     private long queuedUs;
@@ -59,7 +68,9 @@ final class AlAudio implements Runnable {
         this.sampleRate = sampleRate;
         this.channels = Math.max(1, Math.min(2, channels));
         this.spatial = spatial;
-        this.sourceCount = spatial && this.channels == 2 ? 2 : 1;
+        this.placedCount = spatial && this.channels == 2 ? 2 : 1;
+        this.sourceCount = spatial ? placedCount + 1 : 1;
+        this.ambientShare = 0.15f + 0.8f * this.crossfeed;   // softness 0..100 -> 15..55 %
         // Spatial sources are mono; otherwise the stereo stream plays as is, relative to the listener.
         this.alFormat = this.channels == 1 || spatial ? AL10.AL_FORMAT_MONO16 : AL10.AL_FORMAT_STEREO16;
         this.bytesPerFrame = 2 * this.channels;
@@ -179,7 +190,7 @@ final class AlAudio implements Runnable {
                 sources[s] = AL10.alGenSources();
                 AL10.alSourcef(sources[s], AL10.AL_MAX_GAIN, MAX_GAIN);   // OpenAL caps a source at 1 unless told otherwise
                 for (int i = 0; i < BUFFER_COUNT; i++) buffers[s][i] = AL10.alGenBuffers();
-                if (spatial) {
+                if (spatial && s < placedCount) {
                     AL10.alSourcei(sources[s], AL10.AL_SOURCE_RELATIVE, AL10.AL_FALSE);
                     AL10.alSourcef(sources[s], AL10.AL_ROLLOFF_FACTOR, 0f);   // falloff is applied through the gain
                 } else {
@@ -232,7 +243,7 @@ final class AlAudio implements Runnable {
                     ByteBuffer[] channelData = split(chunk);
                     bufferFrames[slot] = chunk.remaining() / bytesPerFrame;
                     for (int s = 0; s < sourceCount; s++) {
-                        AL10.alBufferData(buffers[s][slot], alFormat, channelData[s], sampleRate);
+                        AL10.alBufferData(buffers[s][slot], formatOf(s), channelData[s], sampleRate);
                         AL10.alSourceQueueBuffers(sources[s], buffers[s][slot]);
                     }
                     queued++;
@@ -247,7 +258,8 @@ final class AlAudio implements Runnable {
                 smoothGain = smoothGain < 0 ? targetGain : smoothGain + (targetGain - smoothGain) * 0.06f;
                 if (Math.abs(smoothGain - sentGain) > 0.002f || (targetGain == 0f && sentGain != 0f)) {
                     sentGain = Math.abs(smoothGain - targetGain) < 0.002f ? targetGain : smoothGain;
-                    for (int source : sources) AL10.alSourcef(source, AL10.AL_GAIN, sentGain);
+                    for (int s = 0; s < sourceCount; s++)
+                        AL10.alSourcef(sources[s], AL10.AL_GAIN, !spatial ? sentGain : s < placedCount ? sentGain * (1f - ambientShare) : sentGain * ambientShare);
                 }
                 if (pitch != sentPitch) {
                     sentPitch = pitch;
@@ -258,7 +270,7 @@ final class AlAudio implements Runnable {
                     if (smoothSpeakers == null) smoothSpeakers = target.clone();
                     else for (int i = 0; i < smoothSpeakers.length; i++) smoothSpeakers[i] += (target[i] - smoothSpeakers[i]) * 0.08f;
                     // Only tell OpenAL when a position really moved: every update makes its mixer recompute the source.
-                    for (int s = 0; s < sourceCount; s++) {
+                    for (int s = 0; s < placedCount; s++) {
                         boolean moved = sentSpeakers == null;
                         for (int k = 0; k < 3 && !moved; k++) moved = Math.abs(smoothSpeakers[3 * s + k] - sentSpeakers[3 * s + k]) > 0.002f;
                         if (moved) AL10.alSource3f(sources[s], AL10.AL_POSITION, smoothSpeakers[3 * s], smoothSpeakers[3 * s + 1], smoothSpeakers[3 * s + 2]);
@@ -317,7 +329,7 @@ final class AlAudio implements Runnable {
     /** Turns interleaved PCM into what the sources expect: one buffer per source (left/right, or the input as is). */
     private ByteBuffer[] split(ByteBuffer interleaved) {
         if (!spatial) return new ByteBuffer[]{interleaved};
-        if (channels == 1) return new ByteBuffer[]{interleaved};
+        if (channels == 1) return new ByteBuffer[]{interleaved, interleaved};
         int frames = interleaved.remaining() / 4;
         ByteBuffer left = ByteBuffer.allocateDirect(frames * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN);
         ByteBuffer right = ByteBuffer.allocateDirect(frames * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN);
@@ -329,7 +341,13 @@ final class AlAudio implements Runnable {
             right.putShort((short) Math.round(r * keep + l * crossfeed));
         }
         left.flip(); right.flip();
-        return new ByteBuffer[]{left, right};
+        return new ByteBuffer[]{left, right, interleaved};
+    }
+
+    /** The screen's sources are mono; the head-relative one plays the track as it is. */
+    private int formatOf(int source) {
+        if (!spatial || source < placedCount) return alFormat;
+        return channels == 2 ? AL10.AL_FORMAT_STEREO16 : AL10.AL_FORMAT_MONO16;
     }
 
     private long chunkStartUs;

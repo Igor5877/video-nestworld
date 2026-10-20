@@ -250,6 +250,39 @@ public class GuiSelfTest {
                 if (ticks == 390) { System.out.println("NESTWORLD GUI TEST PASS: decoders " + com.nestworld.video.client.ClientVideoManager.getInstance().displays().size()); mc.stop(); }
                 return;
             }
+            if (Boolean.getBoolean("nestworldvideo.guispatial")) {   // needs -Pguianime, a stream with sound and OpenAL's wave writer (see tools): where the sound comes from
+                // Phases of 5 s (3 s of sound, then silence that also lets a reverb ring out), so the recording can be cut
+                // apart: facing the screen in the open, screen on the left, on the right, a stone wall between, far away,
+                // inside a closed stone hall (screen and player both in it).
+                if (ticks == 5) com.nestworld.video.NestworldConfig.DEBUG_STATS.set(true);
+                String[] spots = {"tp @a 2 -60 -1 0 0", "tp @a 2 -60 -1 90 0", "tp @a 2 -60 -1 -90 0",
+                        "fill -4 -60 1 8 -55 1 stone|tp @a 2 -60 -1 0 0", "fill -4 -60 1 8 -55 1 air|tp @a 2 -60 -40 0 0",
+                        "fill -7 -61 -7 10 -52 10 stone outline|tp @a 2 -60 -1 0 0", "fill -7 -61 -7 10 -52 10 air outline|tp @a 2 -60 -1 0 0",
+                        "fill -7 -61 -7 10 -52 10 oak_planks outline|tp @a 2 -60 -1 0 0", "fill -7 -61 -7 10 -52 10 white_wool outline|tp @a 2 -60 -1 0 0",
+                        "say end"};
+                var display = com.nestworld.video.client.ClientVideoManager.getInstance().getDisplay(ORIGIN);
+                Object audio = display == null ? null : audioOrNull(display);
+                boolean sounding = audio != null && (boolean) call(audio, "isAvailable") && (boolean) call(audio, "isPlaying");
+                if (soundStep == 0 && sounding) {
+                    soundStep = 1; soundTick = ticks; display.setVolume(0);
+                    for (var source : net.minecraft.sounds.SoundSource.values())   // only the screen in the recording
+                        if (source != net.minecraft.sounds.SoundSource.MASTER && source != net.minecraft.sounds.SoundSource.RECORDS)
+                            mc.options.getSoundSourceOptionInstance(source).set(0.0);
+                }
+                if (soundStep == 1) {
+                    int t = ticks - soundTick, phase = t / 100, within = t % 100;
+                    if (phase >= spots.length) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); return; }
+                    if (within == 0) {
+                        for (String cmd : spots[phase].split("\\|"))
+                            mc.getSingleplayerServer().execute(() -> mc.getSingleplayerServer().getCommands().performPrefixedCommand(
+                                    mc.getSingleplayerServer().createCommandSourceStack().withSuppressedOutput(), cmd));
+                    }
+                    if (within == 20 && phase < spots.length - 1) { display.setVolume(100); System.out.println("NESTWORLD SPATIAL phase " + phase + ": " + spots[phase]); }
+                    if (within == 100 - 20) display.setVolume(0);
+                }
+                if (ticks == 1500 && soundStep == 0) throw new AssertionError("the sound never started");
+                return;
+            }
             if (Boolean.getBoolean("nestworldvideo.guisound")) {   // needs -Pguianime, a stream with sound (-Pguiurl) and ALSOFT_DRIVERS=null: volume above 100%, the sound engine restarted mid-video
                 if (ticks == 5) com.nestworld.video.NestworldConfig.DEBUG_STATS.set(true);
                 var display = com.nestworld.video.client.ClientVideoManager.getInstance().getDisplay(ORIGIN);
