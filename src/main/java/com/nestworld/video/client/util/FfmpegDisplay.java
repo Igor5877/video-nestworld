@@ -473,6 +473,7 @@ public final class FfmpegDisplay extends Display {
         // Playback must not depend on anyone looking at the screen: start the clock (and with it the sound) from the
         // client tick, and keep consuming frames while the renderer is not drawing this screen.
         recoverAudio();
+        applyAudioSettings();
         maybeStart();
         if (started && System.nanoTime() - lastRenderNanos > 150_000_000L) discardDueFrames();
         trackEndStall();
@@ -497,16 +498,46 @@ public final class FfmpegDisplay extends Display {
         if (now - audioRetryNanos < 2_000_000_000L || org.lwjgl.openal.ALC10.alcGetCurrentContext() == 0L) return;
         audioRetryNanos = now;
         audioRetries++;
+        reopenAudio("the sound output was restarted (" + audioRetries + "/5)");
+    }
+
+    /**
+     * Spatial sound, its softness and room acoustics are fixed when the sound output is made: a change in the settings
+     * reopens it, once the setting has stayed the same for a second (a slider being dragged is not reopened every step).
+     */
+    private String audioSettings = "";
+    private long audioSettingsSinceNanos;
+    private void applyAudioSettings() {
+        AlAudio output = audio;
+        if (output == null || !output.isAvailable() || decoder == null) return;
+        boolean spatialWanted = NestworldConfig.SPATIAL_AUDIO.get();
+        float crossfeedWanted = Math.max(0f, Math.min(0.5f, NestworldConfig.SPATIAL_SOFTNESS.get() / 200f));
+        boolean differs = output.isSpatial() != spatialWanted || (spatialWanted && Math.abs(output.crossfeed() - crossfeedWanted) > 0.001f)
+                || (spatialWanted && NestworldConfig.ACOUSTICS.get() && !output.hasEffects() && !AlAudio.effectsUnsupported);
+        String wanted = spatialWanted + "/" + crossfeedWanted + "/" + NestworldConfig.ACOUSTICS.get();
+        long now = System.nanoTime();
+        if (!wanted.equals(audioSettings)) { audioSettings = wanted; audioSettingsSinceNanos = now; return; }
+        if (differs && now - audioSettingsSinceNanos > 1_000_000_000L) {
+            audioSettingsSinceNanos = now + 3_000_000_000L;   // not again right away if EFX cannot be had on this device
+            reopenAudio("the sound settings changed");
+        }
+    }
+
+    private void reopenAudio(String why) {
+        AlAudio output = audio;
+        StreamInfo streamInfo = info;
+        if (output == null || streamInfo == null) return;
         AlAudio fresh = new AlAudio(streamInfo.sampleRate, streamInfo.channels, NestworldConfig.SPATIAL_AUDIO.get(),
                 NestworldConfig.SPATIAL_SOFTNESS.get() / 200f);
         if (!fresh.isAvailable()) return;
         output.close();
         fresh.setPitch((float) rate);
         audio = fresh;
+        audioSettingsSinceNanos = System.nanoTime();   // the new output sets up its effects on its own thread: give it a moment
         applySpatialVolume(spatial);
         long position = mediaTimeUs(), shared = timelineUs();
         long target = shared != Long.MIN_VALUE && playing ? Math.max(0, shared + leadUs) : position;
-        LOGGER.info("Nestworld Video: the sound output was restarted, reopening the sound at {}ms ({}/5)", target / 1000, audioRetries);
+        LOGGER.info("Nestworld Video: {}, reopening the sound at {}ms", why, target / 1000);
         seekTo(target);
     }
 

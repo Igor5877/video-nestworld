@@ -5,7 +5,6 @@ import net.minecraftforge.common.ForgeConfigSpec;
 /** Client-side safeguards for worlds with many visible video screens. */
 public final class NestworldConfig {
     public static final ForgeConfigSpec CLIENT_SPEC;
-    public static final ForgeConfigSpec.IntValue MAX_ACTIVE_STREAMS;
     public static final ForgeConfigSpec.IntValue MAX_STREAM_DISTANCE;
     public static final ForgeConfigSpec.BooleanValue SMOOTH_SCALING;
     public static final ForgeConfigSpec.IntValue MAX_VIDEO_HEIGHT;
@@ -27,10 +26,6 @@ public final class NestworldConfig {
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
         builder.push("video");
-        MAX_ACTIVE_STREAMS = builder
-                .comment("Maximum number of HLS/video decoders opened at once on this client.",
-                        "A large wall uses one stream; distant screens wait until a slot is free.")
-                .defineInRange("max_active_streams", 8, 1, 64);
         DECODE_SCREENS = builder
                 .comment("How many screens play at once on this client: the one you look at and the nearest ones. The others keep",
                         "showing their last picture without decoding or downloading anything until you come back to them.")

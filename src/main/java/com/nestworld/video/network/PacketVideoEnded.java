@@ -1,6 +1,5 @@
 package com.nestworld.video.network;
 
-import com.nestworld.video.NestworldConfig;
 import com.nestworld.video.block.VideoScreenBlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
@@ -10,6 +9,8 @@ import java.util.function.Supplier;
 
 /** Client report that its decoder played the screen's current video to the end. */
 public class PacketVideoEnded {
+    /** The largest max_stream_distance a client can choose. */
+    private static final int MAX_REPORT_DISTANCE = 512;
     private static final org.slf4j.Logger LOGGER = com.mojang.logging.LogUtils.getLogger();
     private final BlockPos pos;
     private final String url;
@@ -37,9 +38,10 @@ public class PacketVideoEnded {
         context.enqueueWork(() -> {
             var player = context.getSender();
             if (player == null || player.isSpectator() || !player.level().hasChunkAt(packet.pos)) return;
-            int max = NestworldConfig.MAX_STREAM_DISTANCE.get();
+            // Only a player near the screen can have watched it to the end. (Not the client's own max_stream_distance:
+            // that is a client setting, a dedicated server has no value for it and reading it there throws.)
             if (player.distanceToSqr(packet.pos.getX() + .5, packet.pos.getY() + .5, packet.pos.getZ() + .5)
-                    > (double) max * max) return;
+                    > (double) MAX_REPORT_DISTANCE * MAX_REPORT_DISTANCE) return;
             if (player.level().getBlockEntity(packet.pos) instanceof VideoScreenBlockEntity screen && screen.isMaster()) {
                 screen.noteDuration(player.getUUID(), packet.url, packet.durationMs);
                 // A decoder that hit the end of a broken-off stream is not the end of the video for everyone.

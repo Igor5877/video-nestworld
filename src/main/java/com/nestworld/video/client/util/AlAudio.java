@@ -108,6 +108,12 @@ final class AlAudio implements Runnable {
     void setAcoustics(com.nestworld.video.client.acoustics.AcousticResult value) { acoustics = value; }
 
     boolean isSpatial() { return spatial; }
+    float crossfeed() { return crossfeed; }
+    /** Room acoustics (EFX) were set up for these sources. */
+    boolean hasEffects() { return efxActive; }
+    private volatile boolean efxActive;
+    /** This sound device cannot do EFX (seen once): reopening the sound for room acoustics would not help. */
+    static volatile boolean effectsUnsupported;
 
     /** Places the sound: the centre of the screen and the vector from the centre to its right-hand speaker. */
     void setPlacement(double cx, double cy, double cz, double rx, double ry, double rz) {
@@ -201,6 +207,8 @@ final class AlAudio implements Runnable {
             for (int i = 0; i < BUFFER_COUNT; i++) free.add(i);
             check("init");
             efx = com.nestworld.video.NestworldConfig.ACOUSTICS.get() ? AlEfx.create(context, sources) : null;
+            efxActive = efx != null;
+            if (efx == null && com.nestworld.video.NestworldConfig.ACOUSTICS.get()) effectsUnsupported = true;
             long lastNanos = System.nanoTime();
             boolean latencyExtension = AL10.alIsExtensionPresent("AL_SOFT_source_latency");
             long lastLatencyNanos = 0;

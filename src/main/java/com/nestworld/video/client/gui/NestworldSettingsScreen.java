@@ -33,7 +33,6 @@ public final class NestworldSettingsScreen extends Screen {
 
     private static final int[] QUALITIES = {0, 1080, 720, 480, 360};
     private static final int[] DISTANCES = {32, 64, 128, 256, 512};
-    private static final int[] STREAMS = {2, 4, 8, 16, 32};
     private static final int[] PLAYING_SCREENS = {1, 2, 3, 4, 6, 8};
 
     @Override protected void init() {
@@ -91,9 +90,6 @@ public final class NestworldSettingsScreen extends Screen {
         choice("Екранів одночасно", cellW, () -> String.valueOf(NestworldConfig.DECODE_SCREENS.get()),
                 () -> cycleInt(NestworldConfig.DECODE_SCREENS, PLAYING_SCREENS),
                 "Скільки екранів відтворюються одночасно: той, на який дивитеся, і найближчі. Інші показують останній кадр і нічого не завантажують, доки ви до них не повернетеся.");
-        choice("Макс. кількість потоків", cellW, () -> String.valueOf(NestworldConfig.MAX_ACTIVE_STREAMS.get()),
-                () -> cycleInt(NestworldConfig.MAX_ACTIVE_STREAMS, STREAMS),
-                "Скільки відео одночасно може декодувати ваш клієнт.");
         toggle("Статистика в журналі", cellW, NestworldConfig.DEBUG_STATS,
                 "Пише в latest.log швидкість годинника, черги, розсинхрон. Для пошуку проблем.");
 

@@ -252,7 +252,7 @@ public class ClientVideoManager {
         if (mc.player.distanceToSqr(screen.getBlockPos().getX() + .5,
                 screen.getBlockPos().getY() + .5, screen.getBlockPos().getZ() + .5)
                 > (double) maxDistance * maxDistance) return false;
-        return activeDisplays.size() < NestworldConfig.MAX_ACTIVE_STREAMS.get() && chosenScreens.contains(screen.getBlockPos());
+        return chosenScreens.contains(screen.getBlockPos());   // at most decode_screens of them
     }
 
     // ---- which screens play: the looked-at and nearest ones; the others keep their last picture ---------------------
@@ -294,7 +294,7 @@ public class ClientVideoManager {
             double score = (distance + 1) * (lookedAt ? 0.33 : 1.0) * (activeDisplays.containsKey(pos) ? 0.67 : 1.0);
             candidates.put(pos, score);
         }
-        int slots = Math.min(NestworldConfig.DECODE_SCREENS.get(), NestworldConfig.MAX_ACTIVE_STREAMS.get());
+        int slots = NestworldConfig.DECODE_SCREENS.get();
         var ranked = new java.util.ArrayList<>(candidates.keySet());
         ranked.sort(java.util.Comparator.comparingDouble(candidates::get));
         java.util.Set<BlockPos> chosen = new java.util.HashSet<>(ranked.subList(0, Math.min(slots, ranked.size())));
