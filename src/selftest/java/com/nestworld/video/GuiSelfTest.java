@@ -392,6 +392,18 @@ public class GuiSelfTest {
                         var stopped = VideoScreenBlockEntity.class.getDeclaredField("stopped"); stopped.setAccessible(true); stopped.set(be, false);
                     } catch (ReflectiveOperationException e) { throw new AssertionError(e); }
                 }
+                if (Boolean.getBoolean("nestworldvideo.guiaccess")) {   // the access tab: the local player owns the screen, two players on its list
+                    try {
+                        boolean foreign = Boolean.getBoolean("nestworldvideo.guilocked");   // somebody else owns it: "only the owner"
+                        if (foreign) { mc.player.setPermissionLevel(0); ClientData.setControlAllowed(false); }   // the integrated server's host is an operator
+                        java.util.UUID ownerId = foreign ? java.util.UUID.nameUUIDFromBytes("friend".getBytes()) : mc.player.getUUID();
+                        set(be, "screenOwner", ownerId); set(be, "screenOwnerName", foreign ? "Друг" : "Dev");
+                        set(be, "access", foreign ? com.nestworld.video.session.ScreenAccess.OWNER : com.nestworld.video.session.ScreenAccess.LIST);
+                        var trusted = VideoScreenBlockEntity.class.getDeclaredField("trusted"); trusted.setAccessible(true);
+                        @SuppressWarnings("unchecked") var list = (java.util.Map<java.util.UUID, String>) trusted.get(be);
+                        list.put(java.util.UUID.nameUUIDFromBytes("a".getBytes()), "Oksana_UA"); list.put(java.util.UUID.nameUUIDFromBytes("b".getBytes()), "Taras2009");
+                    } catch (ReflectiveOperationException e) { throw new AssertionError(e); }
+                }
                 mc.setScreen(new VideoScreenScreen(new VideoScreenMenu(0, mc.player.getInventory(), be), mc.player.getInventory(), Component.literal("Керування екраном")));
             }
             if (PLAY) {
@@ -511,6 +523,16 @@ public class GuiSelfTest {
                 if (ticks == 100) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
                 return;
             }
+            if (Boolean.getBoolean("nestworldvideo.guiaccess")) {
+                if (ticks == 70) click("Доступ");
+                if (ticks == 90) capture = 1;                   // access tab
+                if (ticks == 100) click("Екран");
+                if (ticks == 120) capture = 2;                  // build tab without the session buttons
+                if (ticks == 130) click("Пошук AniUA");
+                if (ticks == 150) capture = 3;                  // browser: controls greyed out when locked
+                if (ticks == 160) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
+                return;
+            }
             if (HISTORY) {
                 if (ticks == 70) capture = 1;                   // episode list with marks
                 if (ticks == 90) click("Бібліотека");
@@ -551,6 +573,10 @@ public class GuiSelfTest {
             if (ticks == 250) capture = 6;
             if (ticks == 270) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
         } catch (Throwable t) { failure = t; }
+    }
+
+    private static void set(Object target, String name, Object value) throws ReflectiveOperationException {
+        var field = target.getClass().getDeclaredField(name); field.setAccessible(true); field.set(target, value);
     }
 
     @SubscribeEvent public static void render(TickEvent.RenderTickEvent event) {

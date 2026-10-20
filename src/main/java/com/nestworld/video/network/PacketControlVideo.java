@@ -34,6 +34,38 @@ public class PacketControlVideo {
     public static PacketControlVideo decode(FriendlyByteBuf buffer) {
         return new PacketControlVideo(buffer.readBlockPos(), buffer.readUtf(32), buffer.readUtf(4096), buffer.readUtf(512), buffer.readLong());
     }
+    private static void manageAccess(PacketControlVideo message, net.minecraft.server.level.ServerPlayer player, VideoScreenBlockEntity screen) {
+        switch (message.action) {
+            case "access_mode" -> {
+                var values = com.nestworld.video.session.ScreenAccess.values();
+                if (message.value < 0 || message.value >= values.length) return;
+                if (screen.getScreenOwner() == null) screen.setOwner(player);   // limiting an ownerless screen makes it yours
+                screen.setAccess(values[(int) message.value]);
+            }
+            case "trust_add" -> {
+                String name = message.videoUrl.trim();
+                if (!name.matches("[A-Za-z0-9_]{1,16}")) {
+                    player.displayClientMessage(Component.literal("Некоректний нік гравця."), true);
+                    return;
+                }
+                var online = player.server.getPlayerList().getPlayerByName(name);
+                var profile = online != null ? java.util.Optional.of(online.getGameProfile())
+                        : player.server.getProfileCache() == null ? java.util.Optional.<com.mojang.authlib.GameProfile>empty() : player.server.getProfileCache().get(name);
+                if (profile.isEmpty()) {
+                    player.displayClientMessage(Component.literal("Гравця " + name + " не знайдено: він має хоч раз зайти на сервер."), true);
+                    return;
+                }
+                if (screen.getScreenOwner() == null) screen.setOwner(player);
+                if (!screen.trust(profile.get().getId(), profile.get().getName()))
+                    player.displayClientMessage(Component.literal("У списку вже " + VideoScreenBlockEntity.MAX_TRUSTED + " гравці: це межа."), true);
+            }
+            case "trust_remove" -> {
+                try { screen.untrust(java.util.UUID.fromString(message.videoUrl)); }
+                catch (IllegalArgumentException ignored) {}
+            }
+        }
+    }
+
     public static void handle(PacketControlVideo message, Supplier<NetworkEvent.Context> supplier) {
         var context = supplier.get();
         context.enqueueWork(() -> {
@@ -55,11 +87,38 @@ public class PacketControlVideo {
                         new PacketScreenViewers(screen.getBlockPos(), snapshot.count(), snapshot.names()));
                 return;
             }
-            // Playback controls are protected by the session owner; building, viewers and the like stay open.
-            if (screen != null && java.util.Set.of("play", "pause", "stop", "auto_next", "repeat", "seek_by", "select", "session_lock", "session_release")
-                    .contains(message.action) && !com.nestworld.video.session.SessionGuard.canControl(player, screen)) {
+            // Playback controls and taking the screen apart need the screen's access and, while a video plays, its session.
+            if (screen != null && java.util.Set.of("play", "pause", "stop", "auto_next", "repeat", "seek_by", "select", "session_lock",
+                    "session_release", "reset_layout").contains(message.action) && !com.nestworld.video.session.SessionGuard.canControl(player, screen)) {
                 com.nestworld.video.session.SessionGuard.deny(player, screen);
                 return;
+            }
+            // Who controls the screen: its owner, operators and players with nestworldvideo.control.
+            if (java.util.Set.of("access_mode", "trust_add", "trust_remove").contains(message.action)) {
+                if (screen == null) return;
+                if (!com.nestworld.video.session.SessionGuard.canManage(player, screen)) {
+                    player.displayClientMessage(Component.literal("Доступ до екрана змінює лише його власник або оператор."), true);
+                    return;
+                }
+                manageAccess(message, player, screen);
+                return;
+            }
+            if (message.action.equals("claim_screen")) {
+                // A screen from before owners existed: whoever may build here and control it takes it.
+                if (screen != null && player.mayBuild() && (screen.getScreenOwner() == null
+                        ? com.nestworld.video.session.SessionGuard.canControl(player, screen) : com.nestworld.video.session.SessionGuard.isAdmin(player)))
+                    screen.setOwner(player);
+                return;
+            }
+            if (message.action.equals("assemble")) {
+                // Building over other people's screens (adding blocks to them) needs control of each of them.
+                var layout = com.nestworld.video.block.ScreenLayout.detect(player.level(), message.blockPos);
+                if (layout.valid()) for (var pos : layout.tiles())
+                    if (player.level().getBlockEntity(pos) instanceof VideoScreenBlockEntity tile && tile.controller() != null
+                            && !com.nestworld.video.session.SessionGuard.canControl(player, tile.controller())) {
+                        com.nestworld.video.session.SessionGuard.deny(player, tile.controller());
+                        return;
+                    }
             }
             switch (message.action) {
                 case "session_lock" -> { if (screen != null) screen.setSessionProtection(message.value != 0); }

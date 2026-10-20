@@ -48,6 +48,16 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
     private java.util.UUID sessionOwner;
     private String sessionOwnerName = "";
     private boolean sessionProtection = true;
+    /**
+     * The owner of the screen (who built it), who besides them may control it, and the list for {@link ScreenAccess#LIST}.
+     * Every tile keeps a copy, so a screen taken apart and built again (to resize it) still knows them. No owner: a screen
+     * from before owners existed, open to everybody.
+     */
+    private java.util.UUID screenOwner;
+    private String screenOwnerName = "";
+    private com.nestworld.video.session.ScreenAccess access = com.nestworld.video.session.ScreenAccess.ALL;
+    private final java.util.LinkedHashMap<java.util.UUID, String> trusted = new java.util.LinkedHashMap<>();
+    public static final int MAX_TRUSTED = 32;
     /** Media position in milliseconds at the last server tick/sync. */
     private long playbackPositionMs;
     /** Server: {@link SyncClock#nowMs()} at which the playing video was at 0 ms (real time, not game ticks). */
@@ -89,6 +99,15 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         tag.putBoolean("auto_next", autoNext); tag.putBoolean("repeat", repeat); tag.putBoolean("next_cancelled", nextCancelled);
         if (sessionOwner != null) { tag.putUUID("session_owner", sessionOwner); tag.putString("session_owner_name", sessionOwnerName); }
         tag.putBoolean("session_protection", sessionProtection);
+        if (screenOwner != null) { tag.putUUID("screen_owner", screenOwner); tag.putString("screen_owner_name", screenOwnerName); }
+        tag.putString("access", access.name());
+        var list = new net.minecraft.nbt.ListTag();
+        for (var entry : trusted.entrySet()) {
+            var item = new CompoundTag();
+            item.putUUID("id", entry.getKey()); item.putString("name", entry.getValue());
+            list.add(item);
+        }
+        tag.put("trusted", list);
         refreshPlaybackPosition();
         tag.putLong("playback_position_ms", playbackPositionMs);
         tag.putInt("screen_cols", screenCols); tag.putInt("screen_rows", screenRows);
@@ -109,6 +128,14 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         sessionOwner = tag.hasUUID("session_owner") ? tag.getUUID("session_owner") : null;
         sessionOwnerName = tag.getString("session_owner_name");
         sessionProtection = !tag.contains("session_protection") || tag.getBoolean("session_protection");
+        screenOwner = tag.hasUUID("screen_owner") ? tag.getUUID("screen_owner") : null;
+        screenOwnerName = tag.getString("screen_owner_name");
+        access = com.nestworld.video.session.ScreenAccess.byName(tag.getString("access"));
+        trusted.clear();
+        for (var item : tag.getList("trusted", net.minecraft.nbt.Tag.TAG_COMPOUND)) {
+            var entry = (CompoundTag) item;
+            if (entry.hasUUID("id") && trusted.size() < MAX_TRUSTED) trusted.put(entry.getUUID("id"), entry.getString("name"));
+        }
         playbackPositionMs = Math.max(0, tag.getLong("playback_position_ms"));
         playbackStartedMs = Long.MIN_VALUE;
         timelineServerMs = Long.MIN_VALUE;
@@ -187,6 +214,13 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
                 title = p.title();
             }
         }
+        // The owner and who may control: from the screen it was built from, else from any of its blocks (each keeps a copy).
+        VideoScreenBlockEntity owning = previous != null && previous.screenOwner != null ? previous : null;
+        if (owning == null) owning = masters.stream().filter(m -> m.screenOwner != null)
+                .min(java.util.Comparator.comparingLong(m -> m.worldPosition.asLong())).orElse(null);
+        if (owning == null) for (BlockPos pos : layout.tiles())
+            if (((VideoScreenBlockEntity) level.getBlockEntity(pos)).screenOwner != null) { owning = (VideoScreenBlockEntity) level.getBlockEntity(pos); break; }
+        AccessState accessState = owning == null ? null : owning.accessState();
         for (var master : masters)
             if (master.screenCols > 1 || master.screenRows > 1 || !master.currentVideoUrl.isEmpty()) {
                 // Carrying the video over: take the old screen apart without telling the viewers it stopped.
@@ -202,6 +236,7 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
             tile.masterPosLong = pos.equals(layout.origin()) ? Long.MIN_VALUE : layout.origin().asLong();
             tile.currentVideoUrl = ""; tile.currentVideoTitle = "";
             tile.isPlaying = false; tile.stopped = true;
+            if (accessState != null) tile.applyAccess(accessState);
             tile.updateBlock();
         }
         var master = (VideoScreenBlockEntity) level.getBlockEntity(layout.origin());
@@ -209,6 +244,60 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
         if (kept != null) master.restore(kept);
         master.syncToClient();
         return layout;
+    }
+
+    /** Who owns a screen and who may control it; copied to every tile. */
+    public record AccessState(java.util.UUID owner, String ownerName, com.nestworld.video.session.ScreenAccess access,
+                              java.util.Map<java.util.UUID, String> trusted) {}
+
+    private AccessState accessState() { return new AccessState(screenOwner, screenOwnerName, access, new java.util.LinkedHashMap<>(trusted)); }
+
+    private void applyAccess(AccessState state) {
+        screenOwner = state.owner(); screenOwnerName = state.ownerName() == null ? "" : state.ownerName();
+        access = state.access(); trusted.clear(); trusted.putAll(state.trusted());
+    }
+
+    /** Server, on the controller: a new owner/access/list, written to every loaded tile and sent to the viewers. */
+    private void changeAccess(AccessState state) {
+        applyAccess(state);
+        Direction right = getBlockState().getValue(VideoScreenBlock.FACING).getCounterClockWise();
+        for (int row = 0; row < screenRows; row++) for (int col = 0; col < screenCols; col++) {
+            BlockPos pos = worldPosition.relative(right, col).above(row);
+            if (!pos.equals(worldPosition) && level.hasChunkAt(pos) && level.getBlockEntity(pos) instanceof VideoScreenBlockEntity tile
+                    && tile.masterPosLong == worldPosition.asLong()) { tile.applyAccess(state); tile.setChanged(); }
+        }
+        syncToClient();
+    }
+
+    @Nullable public java.util.UUID getScreenOwner() { return screenOwner; }
+    public String getScreenOwnerName() { return screenOwnerName; }
+    public com.nestworld.video.session.ScreenAccess getAccess() { return access; }
+    public boolean isTrusted(java.util.UUID player) { return trusted.containsKey(player); }
+    /** The players on the screen's list (id → name at the time they were added). */
+    public java.util.Map<java.util.UUID, String> getTrusted() { return java.util.Collections.unmodifiableMap(trusted); }
+
+    /** A block just placed by {@code player}: it is theirs until it becomes part of somebody else's screen. */
+    public void setPlacedBy(ServerPlayer player) {
+        if (screenOwner == null) { screenOwner = player.getUUID(); screenOwnerName = player.getGameProfile().getName(); setChanged(); }
+    }
+    public void setOwner(ServerPlayer player) {
+        changeAccess(new AccessState(player.getUUID(), player.getGameProfile().getName(), access, trusted));
+    }
+    public void setAccess(com.nestworld.video.session.ScreenAccess value) {
+        if (value != access) changeAccess(new AccessState(screenOwner, screenOwnerName, value, trusted));
+    }
+    /** False when the list is full. */
+    public boolean trust(java.util.UUID player, String name) {
+        if (trusted.containsKey(player)) return true;
+        if (trusted.size() >= MAX_TRUSTED) return false;
+        var list = new java.util.LinkedHashMap<>(trusted); list.put(player, name);
+        changeAccess(new AccessState(screenOwner, screenOwnerName, access, list));
+        return true;
+    }
+    public void untrust(java.util.UUID player) {
+        if (!trusted.containsKey(player)) return;
+        var list = new java.util.LinkedHashMap<>(trusted); list.remove(player);
+        changeAccess(new AccessState(screenOwner, screenOwnerName, access, list));
     }
 
     /** The playback state of a screen, carried over when it is resized. */

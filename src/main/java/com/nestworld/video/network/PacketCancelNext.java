@@ -24,7 +24,10 @@ public class PacketCancelNext {
             if (player == null || player.isSpectator() || !player.level().hasChunkAt(packet.pos)) return;
             if (player.distanceToSqr(packet.pos.getX() + .5, packet.pos.getY() + .5, packet.pos.getZ() + .5) > 64 * 64) return;
             if (player.level().getBlockEntity(packet.pos) instanceof VideoScreenBlockEntity screen && screen.isMaster()
-                    && player.level().mayInteract(player, packet.pos)) screen.cancelNext();
+                    && player.level().mayInteract(player, packet.pos)) {
+                if (com.nestworld.video.session.SessionGuard.canControl(player, screen)) screen.cancelNext();
+                else com.nestworld.video.session.SessionGuard.deny(player, screen);
+            }
         });
         context.setPacketHandled(true);
     }

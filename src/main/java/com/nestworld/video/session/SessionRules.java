@@ -17,6 +17,20 @@ public final class SessionRules {
         return msSinceLeft < 0 || msSinceLeft >= graceMs;
     }
 
+    /**
+     * Whether the screen's access setting lets a player in at all (session protection comes on top of it).
+     * @param admin   an operator, a player with {@code nestworldvideo.control}, or the screen's owner
+     * @param listed  the player is on the screen's list
+     */
+    public static boolean accessAllows(ScreenAccess access, UUID screenOwner, boolean admin, boolean listed) {
+        if (admin || screenOwner == null) return true;   // screens built before owners existed stay open
+        return switch (access) {
+            case ALL -> true;
+            case LIST -> listed;
+            case OWNER -> false;
+        };
+    }
+
     /** Milliseconds until the protection lapses for an offline owner (0 when already free); -1 when the owner is online. */
     public static long graceLeftMs(boolean ownerOnline, long msSinceLeft, long graceMs) {
         if (ownerOnline) return -1;

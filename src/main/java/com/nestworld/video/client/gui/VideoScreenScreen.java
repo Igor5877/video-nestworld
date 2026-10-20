@@ -29,6 +29,10 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
     }
     private View view=View.SEARCH, origin=View.SEARCH;
     private boolean construction, loading;
+    /** The "Доступ" tab: shown with {@code construction} set, so the browser's mouse and key handling stays off. */
+    private boolean accessTab;
+    private EditBox trustBox;
+    private String trustName="", accessSignature="";
     private String query="", libraryQuery="", status="Введи частину назви українською або англійською.";
     private String voice="", episode="";
     private int viewerCount=-1;
@@ -79,19 +83,39 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         }
     }
     private Component tr(String key,Object... args) { return Component.translatable("gui.nestworldvideo."+key,args); }
-    /** Session protection: another online player started this video, so its controls are theirs (operators excepted). */
+    /** The screen's owner, an operator or a player with nestworldvideo.control: always in control, may change the access. */
+    private boolean managesScreen() {
+        var root=screen();
+        if(root==null || minecraft==null || minecraft.player==null) return false;
+        return minecraft.player.getUUID().equals(root.getScreenOwner()) || ClientData.isControlAllowed() || minecraft.player.hasPermissions(2);
+    }
+    /** The screen's access setting keeps this player out (only the owner, or the owner and a list they are not on). */
+    private boolean noAccess() {
+        var root=screen();
+        if(root==null || minecraft==null || minecraft.player==null || root.getScreenOwner()==null || managesScreen()) return false;
+        return root.getAccess()==com.nestworld.video.session.ScreenAccess.OWNER
+                || root.getAccess()==com.nestworld.video.session.ScreenAccess.LIST && !root.isTrusted(minecraft.player.getUUID());
+    }
+    /** No access to the screen, or session protection: another online player started this video, so its controls are theirs. */
     private boolean lockedForMe() {
         var root=screen();
-        if(root==null || minecraft==null || minecraft.player==null || !root.isSessionProtection()) return false;
+        if(noAccess()) return true;
+        if(root==null || minecraft==null || minecraft.player==null || !root.isSessionProtection() || managesScreen()) return false;
         var owner=root.getSessionOwner();
-        if(owner==null || owner.equals(minecraft.player.getUUID()) || root.isStopped() || root.getCurrentVideoUrl().isBlank()
-                || minecraft.player.hasPermissions(2)) return false;
+        if(owner==null || owner.equals(minecraft.player.getUUID()) || root.isStopped() || root.getCurrentVideoUrl().isBlank()) return false;
         var connection=minecraft.getConnection();
         return connection!=null && connection.getPlayerInfo(owner)!=null;
     }
     private boolean guard() {
         if(!lockedForMe()) return false;
         var root=screen();
+        if(noAccess()) {
+            String owner=root.getScreenOwnerName().isBlank()?"власник":root.getScreenOwnerName();
+            status=root.getAccess()==com.nestworld.video.session.ScreenAccess.LIST
+                    ? "Цим екраном керують лише "+owner+" і гравці з його списку." : "Цим екраном керує лише "+owner+".";
+            if(minecraft.player!=null) minecraft.player.displayClientMessage(Component.literal(status),true);
+            return true;
+        }
         String name=root.getSessionOwnerName().isBlank()?"інший гравець":root.getSessionOwnerName();
         status="Сеанс зараз веде "+name+": керувати може лише він.";
         if(minecraft.player!=null) minecraft.player.displayClientMessage(Component.literal(status),true);
@@ -149,20 +173,21 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         super.init();
         if(menu.getBlockEntity()==null) { onClose(); return; }
         resume=detail() ? resumePoint() : null;
-        entries.clear(); search=null; searchButton=null; protectButton=null; releaseButton=null; qualityButton=null; sortButton=null; favButton=null; favToggle=null; volumeSlider=null; skipIntro=null;
-        int tab=(imageWidth-32)/3;
+        entries.clear(); search=null; trustBox=null; searchButton=null; protectButton=null; releaseButton=null; qualityButton=null; sortButton=null; favButton=null; favToggle=null; volumeSlider=null; skipIntro=null;
+        int tab=(imageWidth-36)/4;
         View tabView=detail() ? origin : view;
         ((CinemaButton)button("Пошук AniUA",12,30,tab,b->switchView(View.SEARCH))).selected=!construction && tabView==View.SEARCH;
         ((CinemaButton)button("Бібліотека",16+tab,30,tab,b->switchView(View.LIBRARY))).selected=!construction && tabView==View.LIBRARY;
-        ((CinemaButton)button(tr("screen"),20+tab*2,30,tab,b->{construction=true; rebuildWidgets();})).selected=construction;
+        ((CinemaButton)button(tr("screen"),20+tab*2,30,tab,b->{construction=true; accessTab=false; rebuildWidgets();})).selected=construction && !accessTab;
+        ((CinemaButton)button("Доступ",24+tab*3,30,tab,b->{construction=true; accessTab=true; rebuildWidgets();})).selected=construction && accessTab;
         button("×",imageWidth-30,7,18,b->onClose()).setTooltip(Tooltip.create(tr("close")));
         button("⚙",imageWidth-54,7,20,b->minecraft.setScreen(new NestworldSettingsScreen(this)))
                 .setTooltip(Tooltip.create(Component.literal("Налаштування відео мода: декодер, якість, звук")));
-        if(construction) initConstruction(); else initBrowser();
+        if(construction && accessTab) initAccess(); else if(construction) initConstruction(); else initBrowser();
         updateControls();
     }
     private void switchView(View next) {
-        construction=false; view=next; page=0; status=next==View.SEARCH ?
+        construction=false; accessTab=false; view=next; page=0; status=next==View.SEARCH ?
                 (results.isEmpty() ? "Введи частину назви українською або англійською." : "Вибери аніме та сезон зі списку.") : "Збережені аніме та відео";
         rebuildWidgets();
     }
@@ -705,15 +730,95 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         assemble = button(tr("assemble"), 12, imageHeight - 36, bw, b -> send("assemble"));
         button(tr("separate"), 16 + bw, imageHeight - 36, bw, b -> send("reset_layout"))
                 .setTooltip(Tooltip.create(tr("separate_hint")));
-        int pw = (imageWidth - 36) / 2, rx = 24 + pw;
-        protectButton = button("Захист сеансу", rx, imageHeight - 118, pw, b -> {
-            var root = screen();
-            if (root != null) Networking.INSTANCE.sendToServer(new PacketControlVideo(menu.getBlockEntity().getBlockPos(), "session_lock", root.isSessionProtection() ? 0L : 1L));
+    }
+    /** Who the screen belongs to and who may control it. */
+    private void initAccess() {
+        var root = screen();
+        int half = (imageWidth - 28) / 2, rx = 16 + half;
+        boolean manage = managesScreen();
+        boolean ownerless = root != null && root.getScreenOwner() == null;
+        if (root != null && (ownerless || manage && minecraft != null && minecraft.player != null && !minecraft.player.getUUID().equals(root.getScreenOwner())))
+            button(ownerless ? "Зробити екран своїм" : "Забрати екран собі", rx, 58, half, b -> send("claim_screen"))
+                    .setTooltip(Tooltip.create(Component.literal(ownerless
+                            ? "Екран поставлено до появи власників, тому ним можуть керувати всі. Станеш власником: зможеш обмежити, хто ним керує."
+                            : "Як оператор: зробити власником екрана себе.")));
+        var mode = root == null ? com.nestworld.video.session.ScreenAccess.ALL : root.getAccess();
+        var modeButton = button("Хто керує: " + mode.label, 12, 82, half, b -> {
+            var current = screen();
+            if (current != null) Networking.INSTANCE.sendToServer(new PacketControlVideo(menu.getBlockEntity().getBlockPos(), "access_mode", current.getAccess().next().ordinal()));
+        });
+        modeButton.active = root != null && (manage || ownerless);
+        modeButton.setTooltip(Tooltip.create(Component.literal("""
+                Усі: керувати може будь-хто поруч, а поки йде відео — той, хто його запустив (захист сеансу).
+                Список: лише власник і гравці зі списку нижче.
+                Тільки власник: лише ти.
+                Власник і оператори керують завжди. Інші також не можуть розібрати чи зламати екран.""")));
+        int pw = half;
+        protectButton = button("Захист сеансу", 12, 106, pw, b -> {
+            var current = screen();
+            if (current != null) Networking.INSTANCE.sendToServer(new PacketControlVideo(menu.getBlockEntity().getBlockPos(), "session_lock", current.isSessionProtection() ? 0L : 1L));
         });
         protectButton.setTooltip(Tooltip.create(Component.literal("Увімкнено: поки йде відео, зупиняти й перемикати його може лише той, хто його запустив (і оператор).\nВимкнено: керувати може будь-хто поруч.")));
-        releaseButton = button("Звільнити сеанс", rx, imageHeight - 94, pw, b ->
+        releaseButton = button("Звільнити сеанс", rx, 106, pw, b ->
                 Networking.INSTANCE.sendToServer(new PacketControlVideo(menu.getBlockEntity().getBlockPos(), "session_release")));
         releaseButton.setTooltip(Tooltip.create(Component.literal("Прибрати власника сеансу: після цього відео може взяти під керування будь-хто.")));
+        // The list of players who may control the screen in the "Список" mode.
+        trustBox = new CinemaEditBox(font, leftPos + 12, topPos + 146, imageWidth - 24 - 90, 20, Component.literal("Нік гравця"));
+        trustBox.setMaxLength(16); trustBox.setHint(Component.literal("Нік гравця…"));
+        trustBox.setValue(trustName); trustBox.setResponder(value -> trustName = value);
+        trustBox.active = trustBox.visible = manage;
+        if (manage) addRenderableWidget(trustBox);
+        var add = button("Додати", imageWidth - 98, 146, 86, b -> addTrusted());
+        add.active = add.visible = manage;
+        if (root != null) {
+            int colW = (imageWidth - 28) / 2, i = 0, perColumn = Math.max(1, (imageHeight - 200 - 30) / 22);
+            for (var entry : root.getTrusted().entrySet()) {
+                if (i >= perColumn * 2) break;
+                int x = 12 + (i / perColumn) * (colW + 4), y = 176 + (i % perColumn) * 22;
+                String id = entry.getKey().toString();
+                var remove = button("×", x + colW - 20, y, 20, b -> Networking.INSTANCE.sendToServer(
+                        new PacketControlVideo(menu.getBlockEntity().getBlockPos(), "trust_remove", id, "")));
+                remove.active = manage;
+                remove.setTooltip(Tooltip.create(Component.literal("Прибрати " + entry.getValue() + " зі списку")));
+                i++;
+            }
+        }
+        accessSignature = accessSignature(root);
+    }
+    private void addTrusted() {
+        String name = trustName.trim();
+        if (name.isEmpty()) return;
+        Networking.INSTANCE.sendToServer(new PacketControlVideo(menu.getBlockEntity().getBlockPos(), "trust_add", name, ""));
+        trustName = "";
+        if (trustBox != null) trustBox.setValue("");
+    }
+    /** What the access tab shows, to rebuild it when the server changes any of it. */
+    private static String accessSignature(VideoScreenBlockEntity root) {
+        return root == null ? "" : root.getScreenOwner() + "|" + root.getAccess() + "|" + root.getTrusted().keySet();
+    }
+    private void drawAccess(GuiGraphics g, VideoScreenBlockEntity root) {
+        int half = (imageWidth - 28) / 2;
+        String owner = root == null ? "" : root.getScreenOwner() == null ? "немає (екран поставлено раніше), керують усі"
+                : root.getScreenOwnerName().isBlank() ? "?" : root.getScreenOwnerName();
+        text(g, Component.literal("Власник: " + owner), 12, 64, TEXT, half);
+        if (root != null) {
+            String session = root.getSessionOwner() == null || root.isStopped() ? "Сеанс: вільний"
+                    : "Сеанс веде: " + (root.getSessionOwnerName().isBlank() ? "?" : root.getSessionOwnerName()) + (root.isSessionProtection() ? " (захищено)" : "");
+            text(g, Component.literal(session), 16 + half, 88, MUTED, half);
+            text(g, Component.literal("Список гравців (" + root.getTrusted().size() + "/" + VideoScreenBlockEntity.MAX_TRUSTED + ")"
+                    + (root.getAccess() == com.nestworld.video.session.ScreenAccess.LIST ? "" : " — діє в режимі «Список»")), 12, 134, GOLD, imageWidth - 24);
+            int colW = (imageWidth - 28) / 2, i = 0, perColumn = Math.max(1, (imageHeight - 200 - 30) / 22);
+            for (var name : root.getTrusted().values()) {
+                if (i >= perColumn * 2) break;
+                int x = 12 + (i / perColumn) * (colW + 4), y = 176 + (i % perColumn) * 22;
+                g.fill(leftPos + x, topPos + y, leftPos + x + colW - 22, topPos + y + 20, 0xFF18232E);
+                text(g, Component.literal(name), x + 6, y + 6, TEXT, colW - 34);
+                i++;
+            }
+            if (root.getTrusted().isEmpty()) text(g, Component.literal("Порожньо"), 12, 182, MUTED, imageWidth - 24);
+        }
+        if (!managesScreen()) g.drawWordWrap(font, Component.literal("Змінювати доступ може лише власник екрана або оператор."),
+                leftPos + 12, topPos + imageHeight - 40, imageWidth - 24, MUTED);
     }
 
     private boolean assembled() {
@@ -727,13 +832,14 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         if(wantRecommended && !loading && !construction) { wantRecommended=false; showRecommended(recommendedMode); }
         super.containerTick();
         if(++ticks%20==0) { if(construction) refreshPreview();else refreshEntries(); }
+        if(accessTab && construction && !accessSignature.equals(accessSignature(screen()))) rebuildWidgets();
         if(ticks%40==0) send("viewers");
         updateControls();
     }
     private void updateControls() {
         boolean locked=lockedForMe();
         if(construction) {
-            if(assemble!=null) assemble.active=preview!=null && preview.valid() && !assembled();
+            if(assemble!=null) assemble.active=preview!=null && preview.valid() && !assembled() && !noAccess();
             var owned=screen();
             if(protectButton!=null && owned!=null) {
                 protectButton.setMessage(Component.literal("Захист сеансу: "+(owned.isSessionProtection()?"увімкнено":"вимкнено")));
@@ -764,7 +870,8 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
             boolean mine=minecraft!=null && minecraft.player!=null && screen.getSessionOwner().equals(minecraft.player.getUUID());
             text(g,Component.literal(mine?"Ваш сеанс":"Сеанс веде "+screen.getSessionOwnerName()),12+font.width("Nestworld · Кінотеатр")+14,12,mine?GOLD:0xFF9D92,Math.max(40,imageWidth-170-font.width("Nestworld · Кінотеатр")));
         }
-        if(construction) {
+        if(construction && accessTab) drawAccess(g, screen);
+        else if(construction) {
             int pw = (imageWidth - 36) / 2, ph = imageHeight - 145;
             int cols = preview != null && preview.valid() ? preview.cols() : screen == null ? 1 : screen.getScreenCols();
             int rows = preview != null && preview.valid() ? preview.rows() : screen == null ? 1 : screen.getScreenRows();
@@ -864,6 +971,11 @@ public class VideoScreenScreen extends AbstractContainerScreen<VideoScreenMenu> 
         }
     }
     @Override public boolean keyPressed(int key,int scan,int modifiers) {
+        if(accessTab && construction && trustBox!=null && trustBox.isFocused() && key!=256) {
+            if(key==257 || key==335) { addTrusted(); return true; }
+            if(trustBox.keyPressed(key,scan,modifiers)) return true;
+            if(key!=258) return true;
+        }
         if(!construction && search!=null && search.isFocused() && key!=256) {
             if(key==257 || key==335) {if(view==View.SEARCH)requestSearch();return true;}
             if(search.keyPressed(key,scan,modifiers)) return true;

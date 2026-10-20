@@ -138,7 +138,7 @@ public class CinemaMod {
     }
 
     /** What each client was last told about 18+ access, so permission changes (e.g. in LuckPerms) reach it within seconds. */
-    private static final Map<UUID, Boolean> ADULT_ACCESS_SENT = new ConcurrentHashMap<>();
+    private static final Map<UUID, Integer> ADULT_ACCESS_SENT = new ConcurrentHashMap<>();
 
     /** Re-evaluate 18+ access of everybody now (e.g. after the default was changed by a command). */
     public static void refreshAdultAccess(net.minecraft.server.MinecraftServer server) {
@@ -147,14 +147,28 @@ public class CinemaMod {
 
     private static void sendAdultAccess(ServerPlayer player, boolean force) {
         boolean allowed = com.nestworld.video.content.AdultAccess.canView(player);
-        Boolean previous = ADULT_ACCESS_SENT.put(player.getUUID(), allowed);
-        if (force || previous == null || previous != allowed)
-            Networking.INSTANCE.send(PacketDistributor.PLAYER.with(() -> player), new com.nestworld.video.network.PacketAdultAccess(allowed));
+        boolean control = com.nestworld.video.session.SessionGuard.isAdmin(player);
+        int state = (allowed ? 1 : 0) | (control ? 2 : 0);
+        Integer previous = ADULT_ACCESS_SENT.put(player.getUUID(), state);
+        if (force || previous == null || previous != state)
+            Networking.INSTANCE.send(PacketDistributor.PLAYER.with(() -> player), new com.nestworld.video.network.PacketAdultAccess(allowed, control));
     }
 
     @SubscribeEvent
     public static void onPermissionNodes(net.minecraftforge.server.permission.events.PermissionGatherEvent.Nodes event) {
         com.nestworld.video.content.AdultAccess.registerNodes(event);
+        com.nestworld.video.session.SessionGuard.registerNodes(event);
+    }
+
+    /** Breaking a block of a screen takes it apart (and stops its video): only for those who may control it. */
+    @SubscribeEvent
+    public static void onBreak(net.minecraftforge.event.level.BlockEvent.BreakEvent event) {
+        if (!(event.getPlayer() instanceof ServerPlayer player) || !(event.getLevel().getBlockEntity(event.getPos())
+                instanceof com.nestworld.video.block.VideoScreenBlockEntity tile)) return;
+        var screen = tile.controller() == null ? tile : tile.controller();
+        if (com.nestworld.video.session.SessionGuard.canControl(player, screen)) return;
+        event.setCanceled(true);
+        com.nestworld.video.session.SessionGuard.deny(player, screen);
     }
 
     @SubscribeEvent
