@@ -263,9 +263,10 @@ public class GuiSelfTest {
                 if (ticks == 210) com.nestworld.video.NestworldConfig.SCREEN_GLOW.set(2);
                 if (ticks == 320) { shotPrefix = "glow-mid"; capture = 1; }
                 boolean external = System.getProperty("nestworldvideo.guiurl") != null;   // e.g. a slow connection: no jumps or pause
-                if (!external && (ticks == 250 || ticks == 290)) mc.getSingleplayerServer().execute(() -> {   // jumps of +10 s and -10 s
+                boolean far = Boolean.getBoolean("nestworldvideo.guifarjumps");   // long jumps (+90 s, -60 s), e.g. on a playlist whose durations are off
+                if ((!external || far) && (ticks == 250 || ticks == 290 || (far && ticks == 400))) mc.getSingleplayerServer().execute(() -> {   // jumps of +10 s and -10 s
                     if (mc.getSingleplayerServer().overworld().getBlockEntity(ORIGIN) instanceof com.nestworld.video.block.VideoScreenBlockEntity jump)
-                        jump.seekBy(ticks == 250 ? 10_000 : -10_000, null);
+                        jump.seekBy(far ? (ticks == 250 ? 90_000 : ticks == 290 ? -60_000 : 45_000) : ticks == 250 ? 10_000 : -10_000, null);
                 });
                 if (!external && ticks == 330) mc.getSingleplayerServer().execute(() -> {   // paused on a frame: the light has to stay
                     if (mc.getSingleplayerServer().overworld().getBlockEntity(ORIGIN) instanceof com.nestworld.video.block.VideoScreenBlockEntity paused) paused.pause();

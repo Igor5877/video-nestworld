@@ -24,7 +24,7 @@ public final class FfmpegWorker implements VideoDecoder {
     private static final int AUDIO_RATE = 48_000, AUDIO_CHANNELS = 2;
 
     private volatile boolean closed;
-    private long pendingSeekUs = -1;
+    private long pendingSeekUs = -1, pendingSkipUs = -1;
     private int pendingGeneration, issuedGeneration;
     private Thread thread;
 
@@ -37,8 +37,11 @@ public final class FfmpegWorker implements VideoDecoder {
     }
 
     /** Frames carry the generation that was current when they were decoded, so stale ones can be dropped. */
-    @Override public synchronized int seek(long positionUs) {
+    @Override public synchronized int seek(long positionUs) { return seek(positionUs, -1); }
+
+    @Override public synchronized int seek(long positionUs, long skipToUs) {
         pendingSeekUs = Math.max(0, positionUs);
+        pendingSkipUs = skipToUs;
         pendingGeneration = ++issuedGeneration;
         return pendingGeneration;
     }
@@ -116,12 +119,14 @@ public final class FfmpegWorker implements VideoDecoder {
             ByteBuffer audioBytes = null;
             int gen = 0, matrixWidth = -1, matrixHeight = -1;
             boolean firstImageHandled = false;
+            long skipUntilUs = -1;   // after a seek aimed early: frames before this are decoded but not handed on
             while (!closed) {
                 long seek = -1;
                 synchronized (this) {
                     // Timestamps are relative to the first frame, so a seek can only be applied after it.
                     if (pendingSeekUs >= 0 && baseUs != Long.MIN_VALUE) {
                         seek = pendingSeekUs; pendingSeekUs = -1; gen = pendingGeneration;
+                        skipUntilUs = pendingSkipUs; pendingSkipUs = -1;
                     }
                 }
                 if (seek >= 0) {
@@ -135,6 +140,10 @@ public final class FfmpegWorker implements VideoDecoder {
                 if (frame == null) { listener.onEnded(gen); break; }
                 if (baseUs == Long.MIN_VALUE) baseUs = frame.timestamp;
                 long pts = Math.max(0, frame.timestamp - baseUs);
+                if (skipUntilUs >= 0) {
+                    if (pts < skipUntilUs) continue;
+                    if (frame.image != null && frame.image.length > 0) skipUntilUs = -1;   // arrived: from here on everything goes out
+                }
                 if (frame.image != null && frame.image.length > 0) {
                     if (frame.imageWidth != matrixWidth || frame.imageHeight != matrixHeight) {
                         matrixWidth = frame.imageWidth; matrixHeight = frame.imageHeight;

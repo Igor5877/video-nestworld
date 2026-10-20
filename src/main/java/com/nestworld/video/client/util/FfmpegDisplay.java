@@ -325,20 +325,24 @@ public final class FfmpegDisplay extends Display {
         long shared = timelineUs();
         // A seek that landed far from where it was aimed (playlists whose segment durations are off make the HLS seek
         // miss by tens of seconds on long jumps): aim again, corrected by the miss, a few times.
-        if (seekTargetUs >= 0 && seekRetries < 3 && !eos) {
+        // The frames before the target are dropped by the decoder, so only a landing past the target is a miss: aim the
+        // container's seek earlier (by the miss and a growing margin) and let the decoder skip forward to the target.
+        if (seekTargetUs >= 0 && seekRetries < 4 && !eos) {
             long miss = head.ptsUs - seekTargetUs;
-            if (Math.abs(miss) > 1_500_000L) {
+            if (miss > 1_500_000L) {
                 seekRetries++;
                 long desired = shared != Long.MIN_VALUE && playing ? shared + leadUs : seekTargetUs;
-                LOGGER.info("Nestworld Video: seek to {}ms landed at {}ms; aiming again ({}/3)", seekTargetUs / 1000, head.ptsUs / 1000, seekRetries);
-                seekTo(Math.max(0, desired - miss));
+                long aim = Math.max(0, seekAimUs - miss - 2_000_000L * seekRetries);
+                LOGGER.info("Nestworld Video: seek to {}ms landed at {}ms; aiming the container at {}ms and skipping to {}ms ({}/4)",
+                        seekTargetUs / 1000, head.ptsUs / 1000, aim / 1000, desired / 1000, seekRetries);
+                seekTo(desired, aim);
                 return;
             }
         }
         if (shared != Long.MIN_VALUE && !eos) {
             // Hold the first frame until the shared timeline reaches it, so everyone starts together (but never for long
             // when the seek could not be made to land close: playing a little off beats a frozen screen).
-            boolean giveUp = seekRetries >= 3 && head.ptsUs - shared > 3_000_000L;
+            boolean giveUp = seekRetries >= 4 && head.ptsUs - shared > 3_000_000L;
             if (shared < head.ptsUs - 40_000L && !giveUp) return;
             if (shared > head.ptsUs + 250_000L) {
                 // Behind it: far behind means aim further ahead; a little behind means skip what has already passed.
@@ -583,12 +587,18 @@ public final class FfmpegDisplay extends Display {
     private boolean slowStart;
     /** Re-aims of the current seek after it landed far off (see maybeStart). */
     private int seekRetries;
+    /** Where the container was asked to seek for the current seek (may be earlier than {@link #seekTargetUs}). */
+    private long seekAimUs;
 
-    private void seekTo(long target) {
+    private void seekTo(long target) { seekTo(target, target); }
+
+    /** Lands at {@code target}; the container is asked for {@code aim} (earlier when its index is known to be off). */
+    private void seekTo(long target, long aim) {
         waitingSinceNanos = System.nanoTime();
         seekTargetUs = target;
+        seekAimUs = aim;
         seekStartedNanos = System.nanoTime();
-        int generation = decoder.seek(target);
+        int generation = decoder.seek(aim, target);
         expectedGeneration = generation;
         synchronized (lock) {
             pool.addAll(frames);
