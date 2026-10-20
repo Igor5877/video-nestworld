@@ -103,6 +103,7 @@ public class ClientVideoManager {
             // A start or a jump waits on the first frame for the shared timeline instead of starting early and jumping again.
             display.setTimeline(() -> timelineAt(pos));
             activeDisplays.put(pos, display);
+            openedAtMs.put(pos, System.currentTimeMillis());
         } catch (RuntimeException exception) {
             com.mojang.logging.LogUtils.getLogger().warn("Unable to start video at {}", pos, exception);
         }
@@ -249,7 +250,86 @@ public class ClientVideoManager {
         if (mc.player.distanceToSqr(screen.getBlockPos().getX() + .5,
                 screen.getBlockPos().getY() + .5, screen.getBlockPos().getZ() + .5)
                 > (double) maxDistance * maxDistance) return false;
-        return activeDisplays.size() < NestworldConfig.MAX_ACTIVE_STREAMS.get();
+        return activeDisplays.size() < NestworldConfig.MAX_ACTIVE_STREAMS.get() && chosenScreens.contains(screen.getBlockPos());
+    }
+
+    // ---- which screens play: the looked-at and nearest ones; the others keep their last picture ---------------------
+
+    /** Screens allowed to have a decoder now (see {@link #choosePlayingScreens}). */
+    private final java.util.Set<BlockPos> chosenScreens = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    /** Last pictures of screens whose decoder was closed for the others. */
+    private final Map<BlockPos, com.nestworld.video.client.util.StillDisplay> stills = new ConcurrentHashMap<>();
+    /** When each decoder was opened: one keeps playing at least a few seconds before it may give way. */
+    private final Map<BlockPos, Long> openedAtMs = new ConcurrentHashMap<>();
+
+    /** A playing screen that waits for its turn (others are closer or looked at): not loading, just not decoded here. */
+    public boolean waitingForTurn(BlockPos pos) { return desiredScreens.containsKey(pos) && !chosenScreens.contains(pos) && !activeDisplays.containsKey(pos); }
+
+    /** The last picture of the screen at {@code pos} (also while its decoder opens again), or null. */
+    public Display still(BlockPos pos) { return stills.get(pos); }
+
+    /**
+     * Picks the screens that may decode: the {@code decode_screens} best by distance, where looking at one counts as if it
+     * were three times closer and a screen already playing as if a third closer (no flapping between two similar ones).
+     */
+    private void choosePlayingScreens(Minecraft mc) {
+        var candidates = new java.util.HashMap<BlockPos, Double>();
+        var look = mc.player.getViewVector(1.0F);
+        double ex = mc.player.getX(), ey = mc.player.getEyeY(), ez = mc.player.getZ();
+        int maxDistance = NestworldConfig.MAX_STREAM_DISTANCE.get();
+        java.util.Set<BlockPos> positions = new java.util.HashSet<>(desiredScreens.keySet());
+        positions.addAll(activeDisplays.keySet());
+        for (BlockPos pos : positions) {
+            if (!(mc.level.getBlockEntity(pos) instanceof VideoScreenBlockEntity screen) || !screen.isMaster() || screen.isStopped()) continue;
+            if (!screen.isPlaying() && !activeDisplays.containsKey(pos)) continue;   // paused without a decoder: nothing to play
+            var b = screen.getRenderBoundingBox();
+            double dx = Math.max(b.minX - ex, Math.max(0, ex - b.maxX)), dy = Math.max(b.minY - ey, Math.max(0, ey - b.maxY)), dz = Math.max(b.minZ - ez, Math.max(0, ez - b.maxZ));
+            double distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if (distance > maxDistance) continue;
+            double cx = (b.minX + b.maxX) / 2 - ex, cy = (b.minY + b.maxY) / 2 - ey, cz = (b.minZ + b.maxZ) / 2 - ez;
+            double length = Math.sqrt(cx * cx + cy * cy + cz * cz);
+            boolean lookedAt = length < 1e-3 || (look.x * cx + look.y * cy + look.z * cz) / length > 0.8;
+            double score = (distance + 1) * (lookedAt ? 0.33 : 1.0) * (activeDisplays.containsKey(pos) ? 0.67 : 1.0);
+            candidates.put(pos, score);
+        }
+        int slots = Math.min(NestworldConfig.DECODE_SCREENS.get(), NestworldConfig.MAX_ACTIVE_STREAMS.get());
+        var ranked = new java.util.ArrayList<>(candidates.keySet());
+        ranked.sort(java.util.Comparator.comparingDouble(candidates::get));
+        java.util.Set<BlockPos> chosen = new java.util.HashSet<>(ranked.subList(0, Math.min(slots, ranked.size())));
+        long now = System.currentTimeMillis();
+        // A decoder opened moments ago keeps its place for 3 s.
+        for (BlockPos pos : activeDisplays.keySet())
+            if (!chosen.contains(pos) && now - openedAtMs.getOrDefault(pos, 0L) < 3000 && candidates.containsKey(pos)) chosen.add(pos);
+        chosenScreens.retainAll(chosen);
+        chosenScreens.addAll(chosen);
+        for (BlockPos pos : new java.util.ArrayList<>(activeDisplays.keySet()))
+            if (!chosen.contains(pos) && candidates.containsKey(pos)) freeze(pos);
+        // Last pictures of screens that stopped, changed video or are gone are no longer needed.
+        stills.entrySet().removeIf(e -> {
+            Display live = activeDisplays.get(e.getKey());
+            boolean keep = mc.level.getBlockEntity(e.getKey()) instanceof VideoScreenBlockEntity s && s.isMaster() && !s.isStopped()
+                    && s.getCurrentVideoUrl().equals(e.getValue().getUrl()) && candidates.containsKey(e.getKey())
+                    && (live == null || live.getTextureId() <= 0);   // gone once the decoder shows a picture again
+            if (!keep) e.getValue().release();
+            return !keep;
+        });
+    }
+
+    /** Closes the decoder of a screen that gives way to others, keeping its last picture on the screen. */
+    private void freeze(BlockPos pos) {
+        Display display = activeDisplays.get(pos);
+        if (display == null) return;
+        int texture = display.detachPicture();
+        var size = display.getDimensions();
+        float[] uv = display.uvScale();
+        boolean mipmapped = display.hasMipmaps();
+        String url = display.getUrl();
+        com.mojang.logging.LogUtils.getLogger().info("Nestworld Video: the screen at {} gives way to closer or looked-at ones and keeps its last picture{}", pos, texture > 0 ? "" : " (none yet)");
+        stopPlaying(pos);
+        var old = texture > 0 && size != null ? stills.put(pos, new com.nestworld.video.client.util.StillDisplay(url, texture, size, uv, mipmapped)) : stills.remove(pos);
+        if (old != null) old.release();
+        if (texture > 0 && size == null) com.mojang.blaze3d.platform.TextureUtil.releaseTextureId(texture);
+        desiredScreens.put(pos, url);   // it comes back when it is among the chosen again
     }
 
     public void tick() {
@@ -259,6 +339,7 @@ public class ClientVideoManager {
         double py = mc.player.getEyeY();
         double pz = mc.player.getZ();
 
+        choosePlayingScreens(mc);
         // Retry screens that were outside the distance/stream budget. This runs on
         // the client tick instead of the block-entity render callback, so opening a
         // WaterMedia decoder cannot stall the render thread.
@@ -464,6 +545,9 @@ public class ClientVideoManager {
         activeDisplays.clear();
         orphans.values().forEach(o -> o.display().release());
         orphans.clear();
+        stills.values().forEach(Display::release);
+        stills.clear();
+        chosenScreens.clear();
         qualityCaps.clear();
         desiredScreens.clear();
         lastViewerReports.clear();

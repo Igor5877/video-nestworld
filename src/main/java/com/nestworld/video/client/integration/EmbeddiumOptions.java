@@ -119,6 +119,7 @@ public final class EmbeddiumOptions {
         var vsync = tick(storage, "Авто-VSync біля екрана", "Вмикає вертикальну синхронізацію, лише коли ви дивитеся на екран, щоб не було смуг. Ваше налаштування VSync не змінюється.", NestworldConfig.AUTO_VSYNC);
 
         var distance = slider(storage, "Макс. відстань потоку", "Далі за цю відстань відео не завантажується.", NestworldConfig.MAX_STREAM_DISTANCE, 16, 512, 16, ControlValueFormatter.number());
+        var playingScreens = slider(storage, "Екранів одночасно", "Скільки екранів відтворюються одночасно: той, на який дивитеся, і найближчі. Інші показують останній кадр і нічого не завантажують.", NestworldConfig.DECODE_SCREENS, 1, 16, 1, ControlValueFormatter.number());
         var streams = slider(storage, "Макс. кількість потоків", "Скільки відео одночасно може декодувати ваш клієнт.", NestworldConfig.MAX_ACTIVE_STREAMS, 1, 32, 1, ControlValueFormatter.number());
         var debug = tick(storage, "Статистика в журналі", "Пише в latest.log швидкість годинника, черги й розсинхрон. Для пошуку проблем.", NestworldConfig.DEBUG_STATS);
 
@@ -127,7 +128,7 @@ public final class EmbeddiumOptions {
                 OptionGroup.createBuilder().add(smooth).add(upscaler).add(sharp).add(mips).build(),
                 OptionGroup.createBuilder().add(spatial).add(soft).add(acoustics).add(reverb).add(muffle).add(acousticQuality).build(),
                 OptionGroup.createBuilder().add(glow).add(glowStrength).add(vsync).build(),
-                OptionGroup.createBuilder().add(distance).add(streams).add(debug).build()));
+                OptionGroup.createBuilder().add(distance).add(playingScreens).add(streams).add(debug).build()));
     }
 
     private static <E> Component[] names(E[] values, Function<E, String> label) {

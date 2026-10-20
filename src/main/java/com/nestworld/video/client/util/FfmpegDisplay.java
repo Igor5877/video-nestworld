@@ -78,7 +78,7 @@ public final class FfmpegDisplay extends Display {
     private final java.util.ArrayDeque<Long> stallStarts = new java.util.ArrayDeque<>();
     private long stallSinceNanos;
     /** When the decoder began opening the stream or the last seek, until playback starts (0 once started). */
-    private volatile long waitingSinceNanos = System.nanoTime();
+    private volatile long waitingSinceNanos;
     private boolean lowerSuggested;
     private long startedWallNanos, mediaBaseUs, frozenUs, lastMediaUs, lastShownPtsUs;
     private long firstFrameWaitNanos, lastDiagnosticNanos, lastRenderNanos;
@@ -159,6 +159,7 @@ public final class FfmpegDisplay extends Display {
                 audio = new AlAudio(streamInfo.sampleRate, streamInfo.channels, NestworldConfig.SPATIAL_AUDIO.get(),
                         NestworldConfig.SPATIAL_SOFTNESS.get() / 200f);
             if (audio != null) audio.setPitch((float) rate);
+            waitingSinceNanos = System.nanoTime();   // the stream is open: from now on a slow start is the connection's fault
             info = streamInfo;
         }
 
@@ -204,8 +205,10 @@ public final class FfmpegDisplay extends Display {
                 src.position(0).limit(size);
                 dst.put(src);
             } else {
+                // Rows padded to a wider stride (e.g. 854-pixel 480p in 864-pixel rows): copy each row's pixels only.
+                // The limit goes first: moving the position past the previous row's limit would throw.
                 for (int row = 0; row < height; row++) {
-                    src.position(row * stride).limit(row * stride + width * 4);
+                    src.limit(row * stride + width * 4).position(row * stride);
                     dst.put(src);
                 }
             }
@@ -522,7 +525,7 @@ public final class FfmpegDisplay extends Display {
         long now = System.nanoTime();
         if (started) waitingSinceNanos = 0;
         // Not even started 8 s after opening or seeking, with almost nothing decoded: that is the longest stall of all.
-        else if (playing && waitingSinceNanos != 0 && queued < 3 && now - waitingSinceNanos > 8_000_000_000L) slowStart = true;
+        else if (playing && error == null && waitingSinceNanos != 0 && queued < 3 && now - waitingSinceNanos > 8_000_000_000L) slowStart = true;
         if (!dry) { stallSinceNanos = 0; return; }
         if (stallSinceNanos == 0) { stallSinceNanos = now; stallStarts.addLast(now); }
         while (!stallStarts.isEmpty() && now - stallStarts.peekFirst() > 45_000_000_000L) stallStarts.pollFirst();
@@ -533,7 +536,7 @@ public final class FfmpegDisplay extends Display {
      * longer than 2.5 s) and the stream offers one; 0 otherwise.
      */
     @Override public int lowerQualitySuggestion() {
-        if (lowerSuggested || lowerHeight <= 0) return 0;
+        if (lowerSuggested || lowerHeight <= 0 || error != null) return 0;   // a failing decoder is not a slow connection
         boolean longStall = slowStart || (stallSinceNanos != 0 && System.nanoTime() - stallSinceNanos > 2_500_000_000L);
         if (!longStall && stallStarts.size() < 3) return 0;
         lowerSuggested = true;
@@ -697,6 +700,13 @@ public final class FfmpegDisplay extends Display {
     @Override public void setAcoustics(com.nestworld.video.client.acoustics.AcousticResult result) {
         AlAudio output = audio;
         if (output != null) output.setAcoustics(result);
+    }
+
+    @Override public int detachPicture() {
+        if (!frameShown || textureId <= 0) return -1;
+        int id = textureId;
+        textureId = 0;   // release() leaves it alone now
+        return id;
     }
 
     @Override public void release() {

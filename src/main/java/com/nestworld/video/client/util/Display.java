@@ -72,6 +72,11 @@ public abstract class Display {
     public void setTimeline(java.util.function.LongSupplier timelineMs) {}
     /** A lower video height to reopen at because playback keeps running dry, or 0 (asked once per display). */
     public int lowerQualitySuggestion() { return 0; }
+    /**
+     * Hands over the texture with the last picture (the caller deletes it then), so the screen can keep showing it after
+     * this display is released; -1 when there is none or the decoder cannot give it away.
+     */
+    public int detachPicture() { return -1; }
     public void setSoundPlacement(double cx, double cy, double cz, double rx, double ry, double rz) {}
     /** Room acoustics for this screen's sound (null = none); only the FFmpeg audio path uses it. */
     public void setAcoustics(com.nestworld.video.client.acoustics.AcousticResult result) {}

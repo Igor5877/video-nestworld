@@ -13,6 +13,7 @@ public final class NestworldConfig {
     public static final ForgeConfigSpec.BooleanValue SPATIAL_AUDIO;
     public static final ForgeConfigSpec.BooleanValue MIPMAPS;
     public static final ForgeConfigSpec.BooleanValue STREAM_CACHE;
+    public static final ForgeConfigSpec.IntValue DECODE_SCREENS;
     public static final ForgeConfigSpec.BooleanValue AUTO_VSYNC, DEBUG_STATS;
     public static final ForgeConfigSpec.IntValue SPATIAL_SOFTNESS;
     public static final ForgeConfigSpec.BooleanValue ACOUSTICS;
@@ -30,6 +31,10 @@ public final class NestworldConfig {
                 .comment("Maximum number of HLS/video decoders opened at once on this client.",
                         "A large wall uses one stream; distant screens wait until a slot is free.")
                 .defineInRange("max_active_streams", 8, 1, 64);
+        DECODE_SCREENS = builder
+                .comment("How many screens play at once on this client: the one you look at and the nearest ones. The others keep",
+                        "showing their last picture without decoding or downloading anything until you come back to them.")
+                .defineInRange("decode_screens", 2, 1, 16);
         MAX_STREAM_DISTANCE = builder
                 .comment("Maximum distance in blocks for an active video stream on this client.")
                 .defineInRange("max_stream_distance", 128, 16, 512);

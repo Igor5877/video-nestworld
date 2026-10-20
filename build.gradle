@@ -65,6 +65,7 @@ minecraft {
             if (project.hasProperty('guitest')) property 'nestworldvideo.guitest', 'true'
             if (project.hasProperty('guiscale')) property 'nestworldvideo.guiscale', project.property('guiscale')
             if (project.hasProperty('guiurl')) property 'nestworldvideo.guiurl', project.property('guiurl')
+            if (project.hasProperty('guimulti')) property 'nestworldvideo.guimulti', 'true'
             if (project.hasProperty('guileak')) property 'nestworldvideo.guileak', 'true'
             if (project.hasProperty('guisharp')) property 'nestworldvideo.guisharp', 'true'
             if (project.hasProperty('guifar')) property 'nestworldvideo.guifar', 'true'

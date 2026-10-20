@@ -30,6 +30,9 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
         if (!blockEntity.isMaster()) return;
         ClientVideoManager.getInstance().observe(blockEntity);
         Display display = ClientVideoManager.getInstance().getDisplay(blockEntity.getBlockPos());
+        // A screen that gave way to closer ones keeps its last picture, also while its decoder opens again.
+        Display still = ClientVideoManager.getInstance().still(blockEntity.getBlockPos());
+        if (still != null && blockEntity.getCurrentVideoUrl().equals(still.getUrl()) && (display == null || display.getTextureId() <= 0)) display = still;
         poseStack.pushPose();
         setupTransformation(poseStack, blockEntity.getBlockState().getValue(VideoScreenBlock.FACING));
 
@@ -43,7 +46,8 @@ public class VideoScreenBlockRenderer implements BlockEntityRenderer<VideoScreen
         if (display == null) {
             if (blockEntity.isAdult() && !ClientData.isAdultAllowed() && !blockEntity.isStopped() && !blockEntity.getCurrentVideoUrl().isBlank())
                 drawAdultStub(poseStack, buffer, blockEntity.getScreenCols(), blockEntity.getScreenRows());
-            else if (blockEntity.isPlaying() && !blockEntity.getCurrentVideoUrl().isBlank())
+            else if (blockEntity.isPlaying() && !blockEntity.getCurrentVideoUrl().isBlank()
+                    && !ClientVideoManager.getInstance().waitingForTurn(blockEntity.getBlockPos()))
                 drawLoading(poseStack, blockEntity.getScreenCols(), blockEntity.getScreenRows(), false);
             else
                 drawBackground(poseStack, blockEntity.getScreenCols(), blockEntity.getScreenRows());

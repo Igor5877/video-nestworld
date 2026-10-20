@@ -188,6 +188,20 @@ public class GuiSelfTest {
                         be.setVideo(new Video("toon", "", System.getProperty("nestworldvideo.guiurl") != null ? System.getProperty("nestworldvideo.guiurl") : longVideo ? (Boolean.getBoolean("nestworldvideo.guidisplay") || Boolean.getBoolean("nestworldvideo.guiglow") ? "file:///tmp/claude-0/chart/chart.m3u8" : "file:///tmp/claude-0/spike/media/long.m3u8") : "file:///tmp/claude-0/toon/toon.m3u8", "", ""));
                         if (longVideo) be.setRepeat(true);
                         be.play();
+                        if (Boolean.getBoolean("nestworldvideo.guimulti")) {   // two more 2x2 screens beside the wall: only two of the three may decode
+                            for (int x : new int[]{-3, 7}) {
+                                BlockPos origin = new BlockPos(x, ORIGIN.getY(), ORIGIN.getZ());
+                                for (int r = 0; r < 2; r++) for (int c = 0; c < 2; c++)
+                                    level.setBlock(origin.relative(Direction.NORTH.getCounterClockWise(), c).above(r),
+                                            ModBlocks.VIDEO_SCREEN_BLOCK.get().defaultBlockState().setValue(VideoScreenBlock.FACING, Direction.NORTH), 2);
+                                if (level.getBlockEntity(origin) instanceof VideoScreenBlockEntity extra) {
+                                    extra.assemble();
+                                    extra.setVideo(new Video("chart", "", "file:///tmp/claude-0/chart/chart.m3u8", "", ""));
+                                    extra.setRepeat(true);
+                                    extra.play();
+                                }
+                            }
+                        }
                         var source = mc.getSingleplayerServer().createCommandSourceStack().withSuppressedOutput();
                         for (String cmd : new String[]{"time set day", "weather clear", ANIME ? (Boolean.getBoolean("nestworldvideo.guifar") ? "tp @a 1.5 -60 -3 0 -3" : "tp @a 1.5 -60 3.2 0 -4") : "tp @a 1.5 -60 -2 0 -3"})
                             mc.getSingleplayerServer().getCommands().performPrefixedCommand(source, cmd);
@@ -223,6 +237,17 @@ public class GuiSelfTest {
                 if (ticks == 400) run.accept(new String[]{"tp @a 1.5 -60 0.5 0 0", "time set noon"});
                 if (ticks == 530) { shotPrefix = "disp-day-occluded"; capture = 1; }
                 if (ticks == 540) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
+                return;
+            }
+            if (Boolean.getBoolean("nestworldvideo.guimulti")) {   // needs -Pguianime: three playing screens, decode_screens = 2
+                java.util.function.Consumer<String> run = cmd -> mc.getSingleplayerServer().execute(() -> mc.getSingleplayerServer().getCommands()
+                        .performPrefixedCommand(mc.getSingleplayerServer().createCommandSourceStack().withSuppressedOutput(), cmd));
+                if (ticks == 5) { com.nestworld.video.NestworldConfig.DECODE_SCREENS.set(2); com.nestworld.video.NestworldConfig.DEBUG_STATS.set(true); }
+                if (ticks == 20) { mc.options.hideGui = true; run.accept("tp @a 1.5 -60 -2 0 0"); }   // the wall in the middle; the left screen is a little nearer than the right
+                if (ticks == 220) { shotPrefix = "multi-a"; capture = 1; }
+                if (ticks == 230) run.accept("tp @a 1.5 -60 -2 -36 0");   // turn to the right screen: it plays, the left one gives way
+                if (ticks == 380) { shotPrefix = "multi-b"; capture = 1; }
+                if (ticks == 390) { System.out.println("NESTWORLD GUI TEST PASS: decoders " + com.nestworld.video.client.ClientVideoManager.getInstance().displays().size()); mc.stop(); }
                 return;
             }
             if (Boolean.getBoolean("nestworldvideo.guiglow")) {   // needs -Pguianime: night, a stone hall, the playing screen; screenshots with the glow off and on

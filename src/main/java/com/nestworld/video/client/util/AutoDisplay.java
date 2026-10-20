@@ -83,6 +83,7 @@ final class AutoDisplay extends Display {
     @Override public long frameSerial() { return delegate.frameSerial(); }
     @Override public void setPlaybackRate(double rate) { delegate.setPlaybackRate(rate); }
     @Override public int lowerQualitySuggestion() { return delegate.lowerQualitySuggestion(); }
+    @Override public int detachPicture() { return delegate.detachPicture(); }
     @Override public void setTimeline(java.util.function.LongSupplier timelineMs) { this.timeline = timelineMs; delegate.setTimeline(timelineMs); }
     @Override public void release() { delegate.release(); }
 }
