@@ -58,6 +58,8 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
      * starts together from the beginning instead of jumping in late.
      */
     private static final long START_DELAY_MS = 2500;
+    /** A jump (±10 s) lands this much later on the shared timeline: every viewer has time to seek, then all go on together. */
+    private static final long SEEK_DELAY_MS = 500;
     /** Client: the shared timeline was at {@code timelinePositionMs} when the server's clock read {@code timelineServerMs}. */
     private long timelinePositionMs, timelineServerMs = Long.MIN_VALUE;
     /** Client monotonic clock anchor; unlike game time it advances while video frames render. */
@@ -304,7 +306,7 @@ public class VideoScreenBlockEntity extends BlockEntity implements MenuProvider 
     public void seekBy(long deltaMs, @Nullable ServerPlayer requester) {
         refreshPlaybackPosition();
         playbackPositionMs = Math.max(0, playbackPositionMs + deltaMs);
-        if (isPlaying) playbackStartedMs = SyncClock.nowMs() - playbackPositionMs;
+        if (isPlaying) playbackStartedMs = SyncClock.nowMs() - playbackPositionMs + SEEK_DELAY_MS;
         syncToClient(requester);
     }
     private void refreshPlaybackPosition() {

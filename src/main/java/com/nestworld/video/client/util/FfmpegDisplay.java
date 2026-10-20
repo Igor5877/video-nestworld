@@ -292,7 +292,7 @@ public final class FfmpegDisplay extends Display {
         if (!enoughVideo || !enoughAudio) return;
         if (seekStartedNanos != 0) {   // learn how far ahead to aim the next time
             long took = (now - seekStartedNanos) / 1000L;
-            leadUs = Math.max(1_000_000L, Math.min(8_000_000L, (leadUs * 7 + (took + 500_000L) * 3) / 10));
+            leadUs = Math.max(300_000L, Math.min(8_000_000L, (leadUs * 6 + (took + 150_000L) * 4) / 10));
             seekStartedNanos = 0;
         }
         long shared = timelineUs();
@@ -486,8 +486,8 @@ public final class FfmpegDisplay extends Display {
         long ms = t == null ? Long.MIN_VALUE : t.getAsLong();
         return ms == Long.MIN_VALUE ? Long.MIN_VALUE : ms * 1000L;
     }
-    /** How long a seek takes until there is enough to start (learned), and when the current one began. */
-    private long leadUs = 2_500_000L, seekStartedNanos;
+    /** How long a seek takes until there is enough to start (learned from the seeks of this stream), and when the current one began. */
+    private long leadUs = 1_000_000L, seekStartedNanos;
 
     private long watchMediaUs = -1, watchSinceNanos;
     /**
