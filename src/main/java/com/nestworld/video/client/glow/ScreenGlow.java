@@ -27,13 +27,13 @@ import java.util.Map;
  * distance). Walls are respected through the screen's own block light ({@code LIT}).
  *
  * <p>Layout, one row per screen (RGBA8, read with texelFetch): texel 0 = (normal x + 1, normal z + 1, brightness setting
- * 0..255, 255 if the row is used); texel 1 = centre x (RG) and y (BA), texel 2 = centre z (RG), width and height in blocks (B, A); texels
- * 3.. = the picture as {@value #COLS} x {@value #ROWS} sRGB cells, row 0 at the top. Positions are relative to the camera
+ * 0..255, 255 if the row is used); texel 1 = centre x (RG) and y (BA), texel 2 = centre z (RG), width and height in blocks (B, A); texel 3 =
+ * (every how many tiles one gives block light, its light level, 0, 255); texels 4.. = the picture as {@value #COLS} x {@value #ROWS} sRGB cells, row 0 at the top. Positions are relative to the camera
  * of the frame, 16 bits each: {@code (value + 256) * 128}.
  */
 public final class ScreenGlow {
     public static final ResourceLocation TEXTURE = new ResourceLocation("nestworldvideo", "dynamic/screen_light");
-    static final int COLS = 8, ROWS = 5, MAX_SCREENS = 4, HEADER = 3;
+    static final int COLS = 8, ROWS = 5, MAX_SCREENS = 4, HEADER = 4;
     private static final int WIDTH = HEADER + COLS * ROWS;
 
     private static final class State {
@@ -41,7 +41,7 @@ public final class ScreenGlow {
         boolean init;
         Vec3 centre = Vec3.ZERO;
         Direction facing = Direction.NORTH;
-        int width, height;
+        int width, height, lightStep;
         long lastSeen;   // System.nanoTime(): the game clock is corrected by the server and can jump back
     }
 
@@ -70,6 +70,7 @@ public final class ScreenGlow {
         state.centre = new Vec3(cx, cy, cz);
         state.facing = facing;
         state.width = screen.getScreenCols();
+        state.lightStep = VideoScreenBlockEntity.lightStep(screen.getScreenCols() * screen.getScreenRows());
         state.height = screen.getScreenRows();
         state.lastSeen = System.nanoTime();
         float k = state.init ? 0.3f : 1f;   // about 150 ms to follow the picture: smooth, never a jump
@@ -113,6 +114,7 @@ public final class ScreenGlow {
             put(pixels, 0, row, s.facing.getStepX() + 1, s.facing.getStepZ() + 1, strength, 255);
             put(pixels, 1, row, x >> 8, x & 255, y >> 8, y & 255);
             put(pixels, 2, row, z >> 8, z & 255, Math.min(255, s.width), Math.min(255, s.height));
+            put(pixels, 3, row, Math.min(255, s.lightStep), VideoScreenBlock.LIGHT_LEVEL, 0, 255);
             for (int i = 0; i < COLS * ROWS; i++)
                 put(pixels, HEADER + i, row, byteOf(s.rgb[i * 3]), byteOf(s.rgb[i * 3 + 1]), byteOf(s.rgb[i * 3 + 2]), 255);
         }

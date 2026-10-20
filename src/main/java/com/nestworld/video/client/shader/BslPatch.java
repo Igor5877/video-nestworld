@@ -261,16 +261,19 @@ public final class BslPatch {
                     vec3 n = vec3(float(head.r - 1), 0.0, float(head.g - 1));
                     vec3 right = vec3(n.z, 0.0, -n.x);
                     float w = float(b.b), h = float(b.a);
+                    // A big screen gives block light only from an even grid of its tiles (every step-th one).
+                    ivec4 lit = ivec4(texelFetch(nwScreenLight, ivec2(3, s), 0) * 255.0 + 0.5);
+                    float slack = 2.0 * floor(float(lit.r) * 0.5);
                     vec3 rel = worldPos - centre;
                     float front = dot(rel, n);
                     float range = 8.0 + 1.5 * max(w, h);
                     float dist = length(rel);
-                    // How strong the screen's own block light (level 10) would be here in the open, and how it compares.
+                    // How strong the screen's own block light would be here in the open, and how it compares.
                     float steps = abs(front) + max(abs(dot(rel, right)) - 0.5 * w, 0.0) + max(abs(rel.y) - 0.5 * h, 0.0);
-                    float excess = blockLight * 15.0 - (10.0 - steps);
+                    float excess = blockLight * 15.0 - (float(lit.g) - steps - slack);
                     #ifdef DISPLAY_REPLACE_BLOCKLIGHT
                     // Where the block light is the screen's own, its plain white light gives way to the coloured light below.
-                    if (steps < 10.0) vanilla = min(vanilla, 1.0 - smoothstep(-3.0, -2.0, excess) * (1.0 - smoothstep(0.5, 1.5, excess)));
+                    if (steps < float(lit.g)) vanilla = min(vanilla, 1.0 - smoothstep(-3.0, -2.0, excess) * (1.0 - smoothstep(0.5, 1.5, excess)));
                     #endif
                     if (front < 0.02 || dist > range) continue;
                     // Walls: that block light must reach this point about as strongly as it would in the open.
@@ -285,7 +288,7 @@ public final class BslPatch {
                             l *= inversesqrt(d2);
                             float cosScreen = max(-dot(l, n), 0.0);
                             float cosSurface = clamp(dot(l, worldNormal) * 0.8 + 0.2, 0.0, 1.0);
-                            vec3 c = texelFetch(nwScreenLight, ivec2(3 + j * 8 + i, s), 0).rgb;
+                            vec3 c = texelFetch(nwScreenLight, ivec2(4 + j * 8 + i, s), 0).rgb;
                             c *= c;   // to linear light
                             float luma = dot(c, vec3(0.2126, 0.7152, 0.0722));
                             c = max(mix(vec3(luma), c, DISPLAY_LIGHT_SATURATION * 0.01), 0.0);
