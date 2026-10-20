@@ -26,6 +26,14 @@ public class ClientEvents {
 
     @Mod.EventBusSubscriber(modid = CinemaMod.MOD_ID, value = Dist.CLIENT)
     public static class ForgeEvents {
+        /** The screens' light data for the shader pack is written once per frame, before the world is drawn. */
+        @SubscribeEvent
+        public static void onRenderLevel(net.minecraftforge.client.event.RenderLevelStageEvent event) {
+            if (event.getStage() != net.minecraftforge.client.event.RenderLevelStageEvent.Stage.AFTER_SKY) return;
+            try { ClientVideoManager.getInstance().getGlow().upload(event.getCamera().getPosition()); }
+            catch (RuntimeException e) { LOGGER.warn("Nestworld Video: screen light data could not be written: {}", e.toString()); }
+        }
+
         @SubscribeEvent
         public static void onKeyInput(InputEvent.Key event) {
             while (Keybindings.CANCEL_NEXT_KEY.consumeClick()) NextUpToast.cancel();

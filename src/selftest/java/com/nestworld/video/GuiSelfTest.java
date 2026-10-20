@@ -237,7 +237,9 @@ public class GuiSelfTest {
                 if (ticks == 200) { shotPrefix = "glow-off"; capture = 1; }
                 if (ticks == 210) com.nestworld.video.NestworldConfig.SCREEN_GLOW.set(2);
                 if (ticks == 320) { shotPrefix = "glow-mid"; capture = 1; }
-                if (ticks == 330) com.nestworld.video.NestworldConfig.SCREEN_GLOW.set(3);
+                if (ticks == 330) mc.getSingleplayerServer().execute(() -> {   // paused on a frame: the light has to stay
+                    if (mc.getSingleplayerServer().overworld().getBlockEntity(ORIGIN) instanceof com.nestworld.video.block.VideoScreenBlockEntity paused) paused.pause();
+                });
                 if (ticks == 440) { shotPrefix = "glow-high"; capture = 1; }
                 if (ticks == 450) mc.getSingleplayerServer().execute(() -> mc.getSingleplayerServer().getCommands().performPrefixedCommand(
                         mc.getSingleplayerServer().createCommandSourceStack().withSuppressedOutput(), "tp @a 1.5 -60 1 180 15"));   // turn round: the back of the room

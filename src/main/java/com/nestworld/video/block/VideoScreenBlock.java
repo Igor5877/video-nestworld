@@ -21,7 +21,6 @@ import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
-import net.minecraft.world.level.block.state.properties.IntegerProperty;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraftforge.network.NetworkHooks;
 
@@ -34,12 +33,6 @@ public class VideoScreenBlock extends BaseEntityBlock {
     public static final BooleanProperty LIT = BlockStateProperties.LIT;
     /** Block light of a lit tile; fixed because the client computes lighting from the state with the same number. */
     public static final int LIGHT_LEVEL = 10;
-    /**
-     * Colour of the light this tile gives under a shader pack, 0 = none: a 5x5x5 cube of red/green/blue levels
-     * ({@code r * 25 + g * 5 + b}). Only the client sets it (the shader pack reads it from the block state), so it is
-     * never saved and does nothing to the game's own light.
-     */
-    public static final IntegerProperty GLOW = IntegerProperty.create("glow", 0, 124);
     
     public VideoScreenBlock() {
         super(BlockBehaviour.Properties.of()
@@ -48,12 +41,12 @@ public class VideoScreenBlock extends BaseEntityBlock {
                 .noOcclusion()
                 .lightLevel(state -> state.getValue(LIT) ? LIGHT_LEVEL : 0)
         );
-        this.registerDefaultState(this.stateDefinition.any().setValue(FACING, Direction.NORTH).setValue(LIT, false).setValue(GLOW, 0));
+        this.registerDefaultState(this.stateDefinition.any().setValue(FACING, Direction.NORTH).setValue(LIT, false));
     }
     
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-        builder.add(FACING, LIT, GLOW);
+        builder.add(FACING, LIT);
     }
     
     @Nullable
