@@ -111,8 +111,9 @@ public final class BslPatch {
                 + "block." + BLOCK_ID + "00=nestworldvideo:video_screen" + nl);
 
         edit(out, originals, "shaders/shaders.properties", (t, nl) -> {
-            t = replaceOnce(t, "BLOOM_RADIUS BLOOM_STRENGTH BLOOM_CONTRAST DIRTY_LENS", "BLOOM_RADIUS BLOOM_STRENGTH BLOOM_CONTRAST DISPLAY_BRIGHTNESS DISPLAY_BLOOM DISPLAY_LIGHT DIRTY_LENS");
-            t = replaceOnce(t, "BLOOM_RADIUS BLOOM_STRENGTH BLOOM_CONTRAST LENS_FLARE_STRENGTH", "BLOOM_RADIUS BLOOM_STRENGTH BLOOM_CONTRAST DISPLAY_BRIGHTNESS DISPLAY_BLOOM DISPLAY_LIGHT LENS_FLARE_STRENGTH");
+            t = replaceOnce(t, "BLOOM_RADIUS BLOOM_STRENGTH BLOOM_CONTRAST DIRTY_LENS", "BLOOM_RADIUS BLOOM_STRENGTH BLOOM_CONTRAST DISPLAY_BRIGHTNESS DISPLAY_BLOOM DISPLAY_LIGHT DISPLAY_LIGHT_CONTRAST DISPLAY_LIGHT_SATURATION DISPLAY_REPLACE_BLOCKLIGHT DIRTY_LENS");
+            t = replaceOnce(t, "BLOOM_RADIUS BLOOM_STRENGTH BLOOM_CONTRAST LENS_FLARE_STRENGTH", "BLOOM_RADIUS BLOOM_STRENGTH BLOOM_CONTRAST DISPLAY_BRIGHTNESS DISPLAY_BLOOM DISPLAY_LIGHT DISPLAY_LIGHT_CONTRAST DISPLAY_LIGHT_SATURATION DISPLAY_REPLACE_BLOCKLIGHT LENS_FLARE_STRENGTH");
+            t = replaceOnce(t, "sliders=", "sliders=DISPLAY_BRIGHTNESS DISPLAY_BLOOM DISPLAY_LIGHT DISPLAY_LIGHT_CONTRAST DISPLAY_LIGHT_SATURATION ");
             // The mod writes the screens (where they are, what they show) into this texture every frame.
             return t + nl + "# Nestworld Video: light from the video screens" + nl + "customTexture.nwScreenLight=nestworldvideo:dynamic/screen_light" + nl;
         });
@@ -123,6 +124,9 @@ public final class BslPatch {
                 + "  #define DISPLAY_BRIGHTNESS 100 //[25 50 60 70 80 90 100 110 120 130 140 150 200]" + nl
                 + "  #define DISPLAY_BLOOM 20 //[0 10 20 30 40 50 60 70 80 90 100 120 150]" + nl
                 + "  #define DISPLAY_LIGHT 100 //[0 25 50 75 100 125 150 200 300 400]" + nl
+                + "  #define DISPLAY_LIGHT_CONTRAST 100 //[50 75 100 125 150 175 200]" + nl
+                + "  #define DISPLAY_LIGHT_SATURATION 100 //[0 25 50 75 100 125 150 200]" + nl
+                + "  #define DISPLAY_REPLACE_BLOCKLIGHT" + nl
                 + "//Nestworld Video: the screen writes a mask into colortex8 (free unless screen-space coloured light is on) so its bloom can be scaled//" + nl
                 + "  #if DISPLAY_BLOOM != 100 && !defined MCBL_SS" + nl
                 + "  #define NW_DISPLAY_MASK" + nl
@@ -134,13 +138,21 @@ public final class BslPatch {
                 + "option.DISPLAY_BLOOM=Video Screen Bloom (%)" + nl
                 + "option.DISPLAY_BLOOM.comment=How much the video screens feed bloom. 20 = subtle, 100 = full, 0 = none. Requires MCBL_SS off." + nl
                 + "option.DISPLAY_LIGHT=Video Screen Light (%)" + nl
-                + "option.DISPLAY_LIGHT.comment=Brightness of the coloured light the video screens give the room (follows the picture). 0 = none." + nl);
+                + "option.DISPLAY_LIGHT.comment=Brightness of the coloured light the video screens give the room (follows the picture). 0 = none." + nl
+                + "option.DISPLAY_LIGHT_CONTRAST=Video Screen Light Contrast (%)" + nl
+                + "option.DISPLAY_LIGHT_CONTRAST.comment=Above 100: bright parts of the picture light much more than dark ones. Below 100: softer, more even light." + nl
+                + "option.DISPLAY_LIGHT_SATURATION=Video Screen Light Saturation (%)" + nl
+                + "option.DISPLAY_LIGHT_SATURATION.comment=How colourful the screen light is. 0 = white light, 100 = the picture's colours, 200 = stronger colours." + nl
+                + "option.DISPLAY_REPLACE_BLOCKLIGHT=Video Screen: Coloured Light Only" + nl
+                + "option.DISPLAY_REPLACE_BLOCKLIGHT.comment=On: the plain white block light of a playing screen is replaced by its coloured light. Torches and other lights stay as they are." + nl);
 
         edit(out, originals, "shaders/lib/lighting/forwardLighting.glsl", (t, nl) -> {
             t = SCREEN_LIGHT_FUNCTIONS.replace("\n", nl) + nl + t;
             return replaceOnce(t, "    vec3 blockLighting = blocklightCol * newLightmap * newLightmap;" + nl,
                     "    vec3 blockLighting = blocklightCol * newLightmap * newLightmap;" + nl
-                    + "    blockLighting += NwScreenLight(worldPos, mat3(gbufferModelViewInverse) * normal, lightmap.x);" + nl);
+                    + "    float nwVanilla = 1.0;" + nl
+                    + "    vec3 nwLight = NwScreenLight(worldPos, mat3(gbufferModelViewInverse) * normal, lightmap.x, nwVanilla);" + nl
+                    + "    blockLighting = blockLighting * nwVanilla + nwLight;" + nl);
         });
 
         edit(out, originals, "shaders/program/composite4.glsl", (t, nl) -> {
@@ -237,7 +249,7 @@ public final class BslPatch {
             //Nestworld Video: light from the video screens/////////////////////////////////////////////////////////////
             uniform sampler2D nwScreenLight;
 
-            vec3 NwScreenLight(vec3 worldPos, vec3 worldNormal, float blockLight) {
+            vec3 NwScreenLight(vec3 worldPos, vec3 worldNormal, float blockLight, inout float vanilla) {
                 vec3 light = vec3(0.0);
                 #if DISPLAY_LIGHT > 0
                 for (int s = 0; s < 4; s++) {
@@ -253,10 +265,16 @@ public final class BslPatch {
                     float front = dot(rel, n);
                     float range = 8.0 + 1.5 * max(w, h);
                     float dist = length(rel);
+                    // How strong the screen's own block light (level 10) would be here in the open, and how it compares.
+                    float steps = abs(front) + max(abs(dot(rel, right)) - 0.5 * w, 0.0) + max(abs(rel.y) - 0.5 * h, 0.0);
+                    float excess = blockLight * 15.0 - (10.0 - steps);
+                    #ifdef DISPLAY_REPLACE_BLOCKLIGHT
+                    // Where the block light is the screen's own, its plain white light gives way to the coloured light below.
+                    if (steps < 10.0) vanilla = min(vanilla, 1.0 - smoothstep(-3.0, -2.0, excess) * (1.0 - smoothstep(0.5, 1.5, excess)));
+                    #endif
                     if (front < 0.02 || dist > range) continue;
-                    // Walls: the screen's block light (level 10) must reach this point about as strongly as it would in the open.
-                    float steps = front + max(abs(dot(rel, right)) - 0.5 * w, 0.0) + max(abs(rel.y) - 0.5 * h, 0.0);
-                    float visible = smoothstep(-3.0, -0.5, blockLight * 15.0 - (10.0 - steps));
+                    // Walls: that block light must reach this point about as strongly as it would in the open.
+                    float visible = smoothstep(-3.0, -0.5, excess);
                     if (visible <= 0.0) continue;
                     vec3 sum = vec3(0.0);
                     for (int j = 0; j < 5; j++) {
@@ -268,7 +286,13 @@ public final class BslPatch {
                             float cosScreen = max(-dot(l, n), 0.0);
                             float cosSurface = clamp(dot(l, worldNormal) * 0.8 + 0.2, 0.0, 1.0);
                             vec3 c = texelFetch(nwScreenLight, ivec2(3 + j * 8 + i, s), 0).rgb;
-                            sum += c * c * (cosScreen * cosSurface / d2);
+                            c *= c;   // to linear light
+                            float luma = dot(c, vec3(0.2126, 0.7152, 0.0722));
+                            c = max(mix(vec3(luma), c, DISPLAY_LIGHT_SATURATION * 0.01), 0.0);
+                            #if DISPLAY_LIGHT_CONTRAST != 100
+                            c *= pow(max(luma, 1e-4), DISPLAY_LIGHT_CONTRAST * 0.01 - 1.0);   // the brightness curve, keeping the colour
+                            #endif
+                            sum += c * (cosScreen * cosSurface / d2);
                         }
                     }
                     light += sum * (w * h / 40.0 / 3.14159) * visible * (1.0 - smoothstep(0.6 * range, range, dist));
