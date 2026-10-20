@@ -77,8 +77,7 @@ minecraft {
             if (project.hasProperty('guisettings')) property 'nestworldvideo.guisettings', 'true'
             if (project.hasProperty('guisession')) property 'nestworldvideo.guisession', 'true'
             if (project.hasProperty('guiglow')) property 'nestworldvideo.guiglow', 'true'
-            if (project.hasProperty('guiaudit')) property 'nestworldvideo.guiaudit', 'true'
-            if (project.hasProperty('screenmode')) property 'nestworldvideo.screenmode', project.property('screenmode')
+            if (project.hasProperty('guidisplay')) property 'nestworldvideo.guidisplay', 'true'
             if (project.hasProperty('glowforce')) property 'nestworldvideo.glowforce', 'true'
             if (project.hasProperty('guilight')) property 'nestworldvideo.guilight', 'true'
             if (project.hasProperty('guiacoustics')) property 'nestworldvideo.guiacoustics', 'true'

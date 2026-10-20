@@ -184,8 +184,8 @@ public class GuiSelfTest {
                             level.setBlock(ORIGIN.relative(Direction.NORTH.getCounterClockWise(), c).above(r),
                                     ModBlocks.VIDEO_SCREEN_BLOCK.get().defaultBlockState().setValue(VideoScreenBlock.FACING, Direction.NORTH), 2);
                         be.assemble();
-                        boolean longVideo = Boolean.getBoolean("nestworldvideo.guiacoustics") || Boolean.getBoolean("nestworldvideo.guiglow") || Boolean.getBoolean("nestworldvideo.guiaudit");   // the acoustics test must keep playing for a while
-                        be.setVideo(new Video("toon", "", longVideo ? "file:///tmp/claude-0/spike/media/long.m3u8" : "file:///tmp/claude-0/toon/toon.m3u8", "", ""));
+                        boolean longVideo = Boolean.getBoolean("nestworldvideo.guiacoustics") || Boolean.getBoolean("nestworldvideo.guiglow") || Boolean.getBoolean("nestworldvideo.guidisplay");   // the acoustics test must keep playing for a while
+                        be.setVideo(new Video("toon", "", longVideo ? (Boolean.getBoolean("nestworldvideo.guidisplay") ? "file:///tmp/claude-0/chart/chart.m3u8" : "file:///tmp/claude-0/spike/media/long.m3u8") : "file:///tmp/claude-0/toon/toon.m3u8", "", ""));
                         if (longVideo) be.setRepeat(true);
                         be.play();
                         var source = mc.getSingleplayerServer().createCommandSourceStack().withSuppressedOutput();
@@ -200,21 +200,29 @@ public class GuiSelfTest {
         try {
             ticks++;
             if (ticks == 30) mc.resizeDisplay();
-            if (Boolean.getBoolean("nestworldvideo.guiaudit")) {   // needs -Pguianime: the colour-bar chart in noon sun, at night in the open and in a closed room
+            if (Boolean.getBoolean("nestworldvideo.guidisplay")) {   // needs -Pguianime: grey ramp + colour chart at fixed exposure, day and night, camera motion, things in front of the screen
                 java.util.function.Consumer<String[]> run = cmds -> mc.getSingleplayerServer().execute(() -> {
                     var server = mc.getSingleplayerServer();
                     var src = server.createCommandSourceStack().withSuppressedOutput();
                     for (String cmd : cmds) server.getCommands().performPrefixedCommand(src, cmd);
                 });
-                if (ticks == 5) com.nestworld.video.NestworldConfig.SCREEN_GLOW.set(0);   // look at the picture alone
-                com.nestworld.video.NestworldConfig.SHADER_SCREEN_MODE.set(System.getProperty("nestworldvideo.screenmode", "unlit"));
-                if (ticks == 20) { mc.options.hideGui = true; run.accept(new String[]{"time set midnight", "weather clear", "tp @a 1.5 -60 0.5 0 0"}); }
-                if (ticks == 150) { shotPrefix = "audit-night-open"; capture = 1; }
-                if (ticks == 160) run.accept(new String[]{"time set noon"});
-                if (ticks == 260) { shotPrefix = "audit-day"; capture = 1; }
-                if (ticks == 270) run.accept(concat(new String[]{"time set midnight"}, hall("minecraft:stone_bricks")));
-                if (ticks == 380) { shotPrefix = "audit-night-room"; capture = 1; }
-                if (ticks == 390) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
+                if (ticks == 5) {   // the screen's own picture only: no colour glow, no block light
+                    com.nestworld.video.NestworldConfig.SCREEN_GLOW.set(0);
+                    com.nestworld.video.content.ContentConfig.SCREEN_LIGHT.set(false);
+                }
+                if (ticks == 20) { mc.options.hideGui = true; run.accept(new String[]{"time set noon", "weather clear", "tp @a 1.5 -60 0.5 0 0"}); }
+                if (ticks == 150) { shotPrefix = "disp-day"; capture = 1; }
+                if (ticks == 160) run.accept(new String[]{"time set midnight"});
+                if (ticks == 290) { shotPrefix = "disp-night"; capture = 1; }
+                if (ticks == 300) run.accept(new String[]{"fill 1 -60 3 1 -59 3 minecraft:stone", "fill 3 -59 4 3 -58 4 minecraft:glass_pane", "summon minecraft:armor_stand 3.8 -60 3.5 {NoGravity:1b}"});
+                if (ticks == 330) { shotPrefix = "disp-night-occluded"; capture = 1; }
+                if (ticks == 340) run.accept(new String[]{"tp @a 1.5 -60 0.5 -30 0"});
+                if (ticks >= 350 && ticks <= 390) run.accept(new String[]{"tp @a 1.5 -60 0.5 " + (-30 + (ticks - 350) * 1.5) + " 0"});   // sweep the view across the screen
+                if (ticks == 391) { shotPrefix = "disp-night-move"; capture = 1; }
+                if (ticks == 392) { shotPrefix = "disp-night-move2"; capture = 1; }
+                if (ticks == 400) run.accept(new String[]{"tp @a 1.5 -60 0.5 0 0", "time set noon"});
+                if (ticks == 530) { shotPrefix = "disp-day-occluded"; capture = 1; }
+                if (ticks == 540) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
                 return;
             }
             if (Boolean.getBoolean("nestworldvideo.guiglow")) {   // needs -Pguianime: night, a stone hall, the playing screen; screenshots with the glow off and on
