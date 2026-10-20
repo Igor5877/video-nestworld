@@ -184,7 +184,7 @@ public class GuiSelfTest {
                             level.setBlock(ORIGIN.relative(Direction.NORTH.getCounterClockWise(), c).above(r),
                                     ModBlocks.VIDEO_SCREEN_BLOCK.get().defaultBlockState().setValue(VideoScreenBlock.FACING, Direction.NORTH), 2);
                         be.assemble();
-                        boolean longVideo = Boolean.getBoolean("nestworldvideo.guiacoustics");   // the acoustics test must keep playing for a while
+                        boolean longVideo = Boolean.getBoolean("nestworldvideo.guiacoustics") || Boolean.getBoolean("nestworldvideo.guiglow");   // the acoustics test must keep playing for a while
                         be.setVideo(new Video("toon", "", longVideo ? "file:///tmp/claude-0/spike/media/long.m3u8" : "file:///tmp/claude-0/toon/toon.m3u8", "", ""));
                         if (longVideo) be.setRepeat(true);
                         be.play();
@@ -200,6 +200,23 @@ public class GuiSelfTest {
         try {
             ticks++;
             if (ticks == 30) mc.resizeDisplay();
+            if (Boolean.getBoolean("nestworldvideo.guiglow")) {   // needs -Pguianime: night, a stone hall, the playing screen; screenshots with the glow off and on
+                if (ticks == 5) com.nestworld.video.NestworldConfig.DEBUG_STATS.set(true);
+                if (ticks == 20) { mc.options.hideGui = true; mc.getSingleplayerServer().execute(() -> {
+                    var server = mc.getSingleplayerServer();
+                    var src = server.createCommandSourceStack().withSuppressedOutput();
+                    for (String cmd : concat(new String[]{"time set midnight", "weather clear", "tp @a 1.5 -60 -1 0 28"}, hall("minecraft:stone_bricks")))
+                        server.getCommands().performPrefixedCommand(src, cmd);
+                }); }
+                if (ticks == 60) com.nestworld.video.NestworldConfig.SCREEN_GLOW.set(0);
+                if (ticks == 200) { shotPrefix = "glow-off"; capture = 1; }
+                if (ticks == 210) com.nestworld.video.NestworldConfig.SCREEN_GLOW.set(2);
+                if (ticks == 320) { shotPrefix = "glow-mid"; capture = 1; }
+                if (ticks == 330) com.nestworld.video.NestworldConfig.SCREEN_GLOW.set(3);
+                if (ticks == 440) { shotPrefix = "glow-high"; capture = 1; }
+                if (ticks == 450) { System.out.println("NESTWORLD GUI TEST PASS"); mc.stop(); }
+                return;
+            }
             if (Boolean.getBoolean("nestworldvideo.guilight")) {   // needs -Pguianime: a playing screen gives light, a stopped one does not
                 var server = mc.getSingleplayerServer();
                 java.util.function.Supplier<String> report = () -> {

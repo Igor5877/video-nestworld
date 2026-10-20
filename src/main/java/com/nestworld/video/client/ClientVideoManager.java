@@ -67,6 +67,8 @@ public class ClientVideoManager {
     }
 
     private final com.nestworld.video.client.acoustics.ScreenAcoustics acoustics = new com.nestworld.video.client.acoustics.ScreenAcoustics();
+    private final com.nestworld.video.client.glow.ScreenGlow glow = new com.nestworld.video.client.glow.ScreenGlow();
+    public com.nestworld.video.client.glow.ScreenGlow getGlow() { return glow; }
 
     public com.nestworld.video.client.acoustics.ScreenAcoustics getAcoustics() { return acoustics; }
 
@@ -75,6 +77,7 @@ public class ClientVideoManager {
         lastEndReports.remove(pos);
         driftState.remove(pos);
         acoustics.forget(pos);
+        glow.forget(pos);
         Display display = activeDisplays.remove(pos);
         if (display != null) {
             display.release();
@@ -297,6 +300,8 @@ public class ClientVideoManager {
             if (current != null) {
                 if (current.isPlaying() && dist < 48) acoustics.update(mc.level, pos, screen, current, mc.level.getGameTime());
                 else { current.setAcoustics(null); acoustics.forget(pos); }
+                if (current.isPlaying() && dist < 40) glow.update(mc.level, pos, screen, current, mc.level.getGameTime());
+                else glow.forget(pos);
             }
             if (current != null) {
                 double diagonal = Math.hypot(screen.getScreenCols(), screen.getScreenRows());

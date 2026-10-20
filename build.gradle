@@ -76,6 +76,8 @@ minecraft {
             if (project.hasProperty('guisodium')) property 'nestworldvideo.guisodium', 'true'
             if (project.hasProperty('guisettings')) property 'nestworldvideo.guisettings', 'true'
             if (project.hasProperty('guisession')) property 'nestworldvideo.guisession', 'true'
+            if (project.hasProperty('guiglow')) property 'nestworldvideo.guiglow', 'true'
+            if (project.hasProperty('glowforce')) property 'nestworldvideo.glowforce', 'true'
             if (project.hasProperty('guilight')) property 'nestworldvideo.guilight', 'true'
             if (project.hasProperty('guiacoustics')) property 'nestworldvideo.guiacoustics', 'true'
             if (project.hasProperty('guilocked')) property 'nestworldvideo.guilocked', 'true'

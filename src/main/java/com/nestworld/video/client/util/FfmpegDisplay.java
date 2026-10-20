@@ -317,6 +317,38 @@ public final class FfmpegDisplay extends Display {
         return lastMediaUs;
     }
 
+    private volatile float[] glow;
+    private long lastGlowSampleNanos;
+
+    @Override public float[] glowColours() { return glow; }
+
+    /** Average colour of the left, middle and right third of the frame from a sparse grid of pixels (about 10 times a second). */
+    private void sampleColours(VFrame frame) {
+        if (!com.nestworld.video.client.glow.ScreenGlow.enabled()) { glow = null; return; }
+        long now = System.nanoTime();
+        if (now - lastGlowSampleNanos < 80_000_000L) return;
+        lastGlowSampleNanos = now;
+        int w = frame.width, h = frame.height;
+        if (w < 3 || h < 2 || frame.data == null) return;
+        float[] out = new float[9];
+        int perThirdX = 10, rows = 10;
+        for (int third = 0; third < 3; third++) {
+            double r = 0, g = 0, b = 0; int n = 0;
+            for (int sy = 0; sy < rows; sy++) {
+                int y = Math.min(h - 1, (int) ((sy + 0.5) * h / rows));
+                for (int sx = 0; sx < perThirdX; sx++) {
+                    int x = Math.min(w - 1, (int) ((third + (sx + 0.5) / perThirdX) * w / 3.0));
+                    int i = (y * w + x) * 4;
+                    if (i + 2 >= frame.data.capacity()) continue;
+                    r += frame.data.get(i) & 0xFF; g += frame.data.get(i + 1) & 0xFF; b += frame.data.get(i + 2) & 0xFF; n++;
+                }
+            }
+            if (n == 0) return;
+            out[3 * third] = (float) (r / n / 255.0); out[3 * third + 1] = (float) (g / n / 255.0); out[3 * third + 2] = (float) (b / n / 255.0);
+        }
+        glow = out;
+    }
+
     private void upload(VFrame frame) {
         int previous = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
         if (textureId == 0) {
@@ -352,6 +384,7 @@ public final class FfmpegDisplay extends Display {
                 GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, frame.data);
         if (mipmapped) GL30.glGenerateMipmap(GL11.GL_TEXTURE_2D);
         GlStateManager._bindTexture(previous);
+        sampleColours(frame);
         frameShown = true;
         if (!firstFrameLogged) {
             firstFrameLogged = true;

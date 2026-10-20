@@ -26,6 +26,14 @@ public class ClientEvents {
 
     @Mod.EventBusSubscriber(modid = CinemaMod.MOD_ID, value = Dist.CLIENT)
     public static class ForgeEvents {
+        /** The colour light of playing screens is drawn over the world's surfaces once the translucent blocks are done. */
+        @SubscribeEvent
+        public static void onRenderLevel(net.minecraftforge.client.event.RenderLevelStageEvent event) {
+            if (event.getStage() != net.minecraftforge.client.event.RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS) return;
+            try { ClientVideoManager.getInstance().getGlow().render(event.getPoseStack(), event.getCamera().getPosition()); }
+            catch (RuntimeException e) { LOGGER.warn("Nestworld Video: screen glow render failed: {}", e.toString()); }
+        }
+
         @SubscribeEvent
         public static void onKeyInput(InputEvent.Key event) {
             while (Keybindings.CANCEL_NEXT_KEY.consumeClick()) NextUpToast.cancel();

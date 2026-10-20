@@ -105,6 +105,8 @@ public final class EmbeddiumOptions {
 
         var spatial = tick(storage, "Просторовий звук", "Звук іде з екрана в 3D (лише для FFmpeg). Діє для потоків, запущених після зміни.", NestworldConfig.SPATIAL_AUDIO);
         var soft = slider(storage, "М’якість звуку", "0 — широка панорама, 100 — майже моно.", NestworldConfig.SPATIAL_SOFTNESS, 0, 100, 5, ControlValueFormatter.percentage());
+        var glow = slider(storage, "Колірне світло екрана", "0 вимкнено, 1 низьке, 2 середнє, 3 високе. Екран підсвічує кімнату кольорами картинки (лише з шейдерами Oculus/Iris).", NestworldConfig.SCREEN_GLOW, 0, 3, 1, ControlValueFormatter.number());
+        var glowStrength = slider(storage, "Яскравість кольорового світла", "Наскільки яскраво екран підсвічує кімнату (лише з шейдерами).", NestworldConfig.SCREEN_GLOW_STRENGTH, 0, 100, 5, ControlValueFormatter.percentage());
         var acoustics = tick(storage, "Акустика приміщення", "Стіни приглушують звук екрана, двері й отвори пропускають його, у залах з’являється луна (лише FFmpeg і просторовий звук).", NestworldConfig.ACOUSTICS);
         var reverb = slider(storage, "Луна приміщення", "0 — лише приглушення стінами. Звукова доріжка вже може містити власну луну.", NestworldConfig.ACOUSTICS_REVERB, 0, 100, 5, ControlValueFormatter.percentage());
         var muffle = slider(storage, "Приглушення стінами", "Наскільки сильно стіни приглушують звук (100 % типово). Більше значення робить різницю між матеріалами виразнішою.", NestworldConfig.ACOUSTICS_MUFFLE, 0, 200, 10, ControlValueFormatter.percentage());
@@ -119,7 +121,7 @@ public final class EmbeddiumOptions {
                 playbackGroup(decoder, quality, mode),
                 OptionGroup.createBuilder().add(smooth).add(upscaler).add(sharp).add(mips).build(),
                 OptionGroup.createBuilder().add(spatial).add(soft).add(acoustics).add(reverb).add(muffle).add(acousticQuality).build(),
-                OptionGroup.createBuilder().add(vsync).build(),
+                OptionGroup.createBuilder().add(glow).add(glowStrength).add(vsync).build(),
                 OptionGroup.createBuilder().add(distance).add(streams).add(debug).build()));
     }
 

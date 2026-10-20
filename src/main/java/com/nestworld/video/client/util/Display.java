@@ -64,5 +64,7 @@ public abstract class Display {
     public void setSoundPlacement(double cx, double cy, double cz, double rx, double ry, double rz) {}
     /** Room acoustics for this screen's sound (null = none); only the FFmpeg audio path uses it. */
     public void setAcoustics(com.nestworld.video.client.acoustics.AcousticResult result) {}
+    /** Average colour of the left, middle and right third of the current picture, (r,g,b) 0..1 each, or null when unknown. */
+    public float[] glowColours() { return null; }
     public abstract void release();
 }

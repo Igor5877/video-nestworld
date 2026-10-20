@@ -15,6 +15,7 @@ public final class NestworldConfig {
     public static final ForgeConfigSpec.BooleanValue AUTO_VSYNC, DEBUG_STATS;
     public static final ForgeConfigSpec.IntValue SPATIAL_SOFTNESS;
     public static final ForgeConfigSpec.BooleanValue ACOUSTICS;
+    public static final ForgeConfigSpec.IntValue SCREEN_GLOW, SCREEN_GLOW_STRENGTH;
     public static final ForgeConfigSpec.IntValue ACOUSTICS_REVERB, ACOUSTICS_QUALITY, ACOUSTICS_MUFFLE;
     public static final ForgeConfigSpec.IntValue SHARPNESS;
     public static final ForgeConfigSpec.IntValue SHADER_TINT_RED, SHADER_TINT_GREEN, SHADER_TINT_BLUE;
@@ -51,6 +52,14 @@ public final class NestworldConfig {
                 .comment("How gentle the stereo image of the screen is, 0 (wide, strongly panned) to 100 (almost mono).",
                         "Softer values blend the left and right speaker and keep the panning angle small when you stand close.")
                 .defineInRange("spatial_softness", 60, 0, 100);
+        SCREEN_GLOW = builder
+                .comment("Colour light from a playing screen onto the surfaces around it, following the picture (lighter or darker, and its colours).",
+                        "Only drawn while a shader pack is on (Oculus/Iris): vanilla lighting has no coloured light.",
+                        "0 off, 1 low (reach 4 blocks), 2 medium (7), 3 high (11). More reach means more surfaces to draw.")
+                .defineInRange("screen_glow", 2, 0, 3);
+        SCREEN_GLOW_STRENGTH = builder
+                .comment("Brightness of that colour light in percent.")
+                .defineInRange("screen_glow_strength", 60, 0, 100);
         ACOUSTICS = builder
                 .comment("Room acoustics for the screen sound (needs the FFmpeg decoder with spatial audio): walls muffle the sound,",
                         "doors and openings let it through, and halls add reverb. Uses OpenAL EFX; switches itself off if unavailable.")
