@@ -18,9 +18,8 @@ import java.util.zip.ZipOutputStream;
  * Writes a patched copy of the BSL shader pack (the exact version listed in {@link #FILES}) in which the video
  * screens are a separate self-emissive material:
  * <ul>
- *   <li>the picture is the final colour: it goes through the inverse of BSL's own tonemap, so after the shared
- *       post-processing (tonemap, bloom, vignette, grading) it comes out with the colours and the exposure of the
- *       video, in sun and in the dark; sun, shadows and block light are not applied to it;</li>
+ *   <li>the picture emits bounded linear light, independent of sun, shadows and block light.
+ *       BSL's exposure, tonemap and grading are applied once, like the rest of the scene;</li>
  *   <li>the casing of the block keeps the pack's normal lighting (it is an ordinary terrain block);</li>
  *   <li>the screen's contribution to bloom is a separate shader option (the picture itself is untouched).</li>
  * </ul>
@@ -31,7 +30,7 @@ public final class BslPatch {
     public static final int BLOCK_ID = 260;
     public static final String SUFFIX = "_NestworldVideo";
     public static final String MARKER = "shaders/nestworld_display.txt";
-    private static final String PATCH_VERSION = "1";
+    private static final String PATCH_VERSION = "2";
 
     /** SHA-256 of each file the patch edits, in BSL v10.1.1. */
     private static final Map<String, String> FILES = new LinkedHashMap<>();
@@ -118,8 +117,8 @@ public final class BslPatch {
         edit(out, originals, "shaders/lib/settings.glsl", (t, nl) -> replaceOnce(t,
                 "  #define BLOOM_CONTRAST 0 //[-4 -3 -2 -1 0 1 2 3 4]" + nl,
                 "  #define BLOOM_CONTRAST 0 //[-4 -3 -2 -1 0 1 2 3 4]" + nl
-                + "  #define DISPLAY_BRIGHTNESS 100 //[50 60 70 80 90 100 110 120 130 140 150]" + nl
-                + "  #define DISPLAY_BLOOM 100 //[0 10 20 30 40 50 60 70 80 90 100 120 150]" + nl
+                + "  #define DISPLAY_BRIGHTNESS 100 //[25 50 60 70 80 90 100 110 120 130 140 150 200]" + nl
+                + "  #define DISPLAY_BLOOM 20 //[0 10 20 30 40 50 60 70 80 90 100 120 150]" + nl
                 + "//Nestworld Video: the screen writes a mask into colortex8 (free unless coloured blocklight is on) so its bloom can be scaled//" + nl
                 + "  #if DISPLAY_BLOOM != 100 && !defined MULTICOLORED_BLOCKLIGHT && !defined MCBL_SS" + nl
                 + "  #define NW_DISPLAY_MASK" + nl
@@ -127,9 +126,9 @@ public final class BslPatch {
 
         edit(out, originals, "shaders/lang/en_US.lang", (t, nl) -> t + nl
                 + "option.DISPLAY_BRIGHTNESS=Video Screen Brightness (%)" + nl
-                + "option.DISPLAY_BRIGHTNESS.comment=Brightness of the picture on Nestworld Video screens, in percent of the video's own (100 = exactly as encoded). Needs the _NestworldVideo patch." + nl
+                + "option.DISPLAY_BRIGHTNESS.comment=Emitted light of Nestworld Video screens (100 = normal display brightness). BSL exposure and grading still apply." + nl
                 + "option.DISPLAY_BLOOM=Video Screen Bloom (%)" + nl
-                + "option.DISPLAY_BLOOM.comment=How much the video screens feed the bloom (glow around bright areas). 100 = like any other bright surface, 0 = no halo from the screens." + nl);
+                + "option.DISPLAY_BLOOM.comment=How much the video screens feed bloom. 20 = subtle, 100 = full, 0 = none. Requires MULTICOLORED_BLOCKLIGHT and MCBL_SS off." + nl);
 
         edit(out, originals, "shaders/program/composite4.glsl", (t, nl) -> {
             t = replaceOnce(t, "const bool colortex0MipmapEnabled = true;" + nl,
@@ -155,10 +154,13 @@ public final class BslPatch {
         edit(out, originals, "shaders/program/gbuffers_block.glsl", (t, nl) -> {
             String fragmentMain = "//Program//" + nl + "void main() {" + nl + "    vec4 albedo = texture2D(texture, texCoord) * color;";   // the vertex shader has a main() too
             t = replaceOnce(t, fragmentMain, DISPLAY_FUNCTIONS.replace("\n", nl) + nl + fragmentMain);
+            // Dynamic video is not in the block atlas and has no parallax/normal maps.
+            t = replaceOnce(t, "float skipParallax = float(blockID == 251);",
+                    "float skipParallax = float(blockID == 251 || blockID == " + BLOCK_ID + ");");
             t = replaceOnce(t, "\tif (endPortal < 0.5) {" + nl,
                     "\tfloat displayMask = 0.0;" + nl
                     + "\tif (blockID == " + BLOCK_ID + ") {" + nl
-                    + "\t\t// Nestworld Video screen: self-emissive, no lighting, the colour already accounts for the shared tonemap." + nl
+                    + "\t\t// Nestworld Video screen: self-emissive linear radiance; shared exposure and tonemap apply once." + nl
                     + "\t\tdisplayMask = 1.0;" + nl
                     + "\t\talbedo = vec4(NwDisplayColor(texture2D(texture, texCoord).rgb), 1.0);" + nl
                     + "\t\t#if ALPHA_BLEND == 0" + nl
@@ -198,47 +200,16 @@ public final class BslPatch {
     }
 
     /**
-     * The picture is the final colour, so it is mapped through the inverse of BSLTonemap (composite5.glsl): scene
-     * exposure, desaturating matrix, white curve, lower/upper curve, saturating matrix. The video's code values are
-     * decoded with gamma 2.2 because the pack encodes with 1/2.2 after the tonemap. Colours that would need negative
-     * light (very saturated primaries) are clipped: the tonemap itself cannot reach them.
+     * Decode the same gamma convention BSL uses for texture colour, then set a finite
+     * display white level. Never invert the tonemap: that turns near-white SDR pixels
+     * into extreme HDR sources before bloom, and clips negative values for primaries.
+     * 0.35 scene-linear white gives a readable display at BSL's default exposure (+2 stops).
      */
     private static final String DISPLAY_FUNCTIONS = """
             //Nestworld Video: self-emissive display///////////////////////////////////////////////////////////////////
-            mat3 NwInverseMatrix(mat3 m) {
-            \tfloat a00 = m[0][0], a01 = m[0][1], a02 = m[0][2];
-            \tfloat a10 = m[1][0], a11 = m[1][1], a12 = m[1][2];
-            \tfloat a20 = m[2][0], a21 = m[2][1], a22 = m[2][2];
-            \tfloat b01 = a22 * a11 - a12 * a21;
-            \tfloat b11 = -a22 * a10 + a12 * a20;
-            \tfloat b21 = a21 * a10 - a11 * a20;
-            \tfloat det = a00 * b01 + a01 * b11 + a02 * b21;
-            \treturn mat3(
-            \t\tb01, (-a22 * a01 + a02 * a21), (a12 * a01 - a02 * a11),
-            \t\tb11, (a22 * a00 - a02 * a20), (-a12 * a00 + a02 * a10),
-            \t\tb21, (-a21 * a00 + a01 * a20), (a11 * a00 - a01 * a10)
-            \t) / det;
-            }
-
             vec3 NwDisplayColor(vec3 video) {
-            \tvec3 target = pow(clamp(video, vec3(0.0), vec3(0.996)), vec3(2.2)) * (DISPLAY_BRIGHTNESS * 0.01);
-            \tfloat s = TONEMAP_WHITE_PATH;
-            \tfloat a = 0.03 * s;
-            \tfloat b = 0.01 * s;
-            \tfloat c = 1.0 - (a + b);
-            \tfloat d = 1.0 - (a + a);
-            \tmat3 desatMatrix = mat3(vec3(c, a, b), vec3(a, d, a), vec3(b, a, c));
-            \tmat3 satMatrix = NwInverseMatrix(desatMatrix);
-            \tvec3 u = clamp(target * desatMatrix, vec3(0.0), vec3(0.9995));
-            \tvec3 w = u;
-            \tfor (int i = 0; i < 4; i++) w = pow(u, 1.0 / mix(vec3(TONEMAP_LOWER_CURVE), vec3(TONEMAP_UPPER_CURVE), sqrt(w)));
-            \tvec3 y = w / pow(1.0 - pow(w, vec3(TONEMAP_WHITE_CURVE)), vec3(1.0 / TONEMAP_WHITE_CURVE));
-            \tfloat selfBloom = 0.0;
-            #if defined NW_DISPLAY_MASK && BLOOM_CONTRAST == 0 && !defined DISABLE_BLOOM
-            \t// Bloom mixes the screen's own pixels with a blur that now holds only DISPLAY_BLOOM of the screen: undo that for the big, uniform parts.
-            \tselfBloom = clamp(0.2 * BLOOM_STRENGTH * (1.0 - DISPLAY_BLOOM * 0.01), -0.33, 0.33);
-            #endif
-            \treturn max(y * satMatrix, vec3(0.0)) / exp2(2.0 + EXPOSURE) / (1.0 - selfBloom);
+                vec3 linearVideo = pow(clamp(video, vec3(0.0), vec3(1.0)), vec3(2.2));
+                return linearVideo * (0.35 * DISPLAY_BRIGHTNESS * 0.01);
             }
             """;
 

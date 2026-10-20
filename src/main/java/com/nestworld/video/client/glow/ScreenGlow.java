@@ -11,7 +11,6 @@ import com.nestworld.video.client.acoustics.V3;
 import com.nestworld.video.client.util.Display;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.RenderType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
@@ -198,7 +197,7 @@ public final class ScreenGlow {
     private static Face faceInto(Geometry g, int wx, int wy, int wz, int dir, byte[] kind, byte[] light, short[] srcU, short[] srcV,
                                  int x, int y, int z, int sx, int sy, int sz, int reach, double gridCellWidth) {
         final int[] dxs = {1, -1, 0, 0, 0, 0}, dys = {0, 0, 1, -1, 0, 0}, dzs = {0, 0, 0, 0, 1, -1};
-        // The cell is lit air; the solid block is at +dir. Face centre on the shared boundary, a hair inside the air cell.
+        // The cell is lit air; the solid block is at +dir. Keep the decal on the shared boundary.
         double fx = wx + 0.5 + dxs[dir] * 0.5, fy = wy + 0.5 + dys[dir] * 0.5, fz = wz + 0.5 + dzs[dir] * 0.5;
         int[] t1 = dxs[dir] != 0 ? new int[]{0, 1, 0} : new int[]{1, 0, 0};
         int[] t2 = dzs[dir] != 0 ? new int[]{0, 1, 0} : new int[]{0, 0, 1};
@@ -225,13 +224,13 @@ public final class ScreenGlow {
             }
             double average = count == 0 ? 0 : sum / count;
             f.corner[i] = (float) (Math.max(0.0, average) / reach * shade);
-            double cxp = fx + t1[0] * 0.5 * s1 + t2[0] * 0.5 * s2 - dxs[dir] * 0.02, cyp = fy + t1[1] * 0.5 * s1 + t2[1] * 0.5 * s2 - dys[dir] * 0.02,
-                    czp = fz + t1[2] * 0.5 * s1 + t2[2] * 0.5 * s2 - dzs[dir] * 0.02;
-            f.cornerPos[i][0] = cxp; f.cornerPos[i][1] = cyp; f.cornerPos[i][2] = czp;
+            f.cornerPos[i] = GlowFaceGeometry.corner(wx, wy, wz, dir, i);
             f.u[i] = bestU / 1000f; f.v[i] = bestV / 1000f;
             // The farther the light travelled, the blurrier its colour.
             double travelled = Math.max(1, reach - Math.max(0, bestLevel));
-            f.level[i] = (float) Math.max(0.0, Math.log(Math.max(1.0, travelled * 0.5 / gridCellWidth)) / Math.log(2.0));
+            // A display is an area emitter, not a projector. Sample at least a
+            // block-wide footprint, widening as the light travels through the room.
+            f.level[i] = (float) Math.max(0.0, Math.log(Math.max(1.0, travelled / gridCellWidth)) / Math.log(2.0));
         }
         float strongest = Math.max(Math.max(f.corner[0], f.corner[1]), Math.max(f.corner[2], f.corner[3]));
         return strongest <= 0.02f ? null : f;
@@ -245,7 +244,7 @@ public final class ScreenGlow {
             lastRenderLog = System.nanoTime();
             LOGGER.info("Nestworld Video glow render: {} screens, strength {}", states.size(), NestworldConfig.SCREEN_GLOW_STRENGTH.get());
         }
-        if (states.isEmpty()) return;
+        if (!enabled() || states.isEmpty()) return;
         float strength = NestworldConfig.SCREEN_GLOW_STRENGTH.get() / 100f;
         if (strength <= 0f) return;
         MultiBufferSource.BufferSource buffers = Minecraft.getInstance().renderBuffers().bufferSource();
@@ -254,12 +253,13 @@ public final class ScreenGlow {
         for (State state : states.values()) {
             if (!state.active || state.faces.isEmpty()) continue;
             if (state.mips.length == 0) continue;
-            if (consumer == null) consumer = buffers.getBuffer(RenderType.lightning());
+            if (consumer == null) consumer = buffers.getBuffer(GlowRenderType.SURFACE);
             float[] colour = new float[3];
             for (Face f : state.faces) {
-                // The render type culls back faces and the winding depends on the face's side, so every quad is drawn both ways round.
-                for (int pass = 0; pass < 2; pass++) for (int k = 0; k < 4; k++) {
-                    int i = pass == 0 ? k : 3 - k;
+                // Only the visible side receives a decal. NO_CULL handles the different
+                // face windings, so each surface is submitted once, never additively twice.
+                if ((cam.x - f.x) * f.nx + (cam.y - f.y) * f.ny + (cam.z - f.z) * f.nz <= 0) continue;
+                for (int i = 0; i < 4; i++) {
                     sample(state, f.u[i], f.v[i], f.level[i], colour);
                     float a = Math.min(1f, f.corner[i] * strength * 0.6f);
                     consumer.vertex(matrix, (float) (f.cornerPos[i][0] - cam.x), (float) (f.cornerPos[i][1] - cam.y), (float) (f.cornerPos[i][2] - cam.z))
@@ -267,7 +267,7 @@ public final class ScreenGlow {
                 }
             }
         }
-        if (consumer != null) buffers.endBatch(RenderType.lightning());
+        if (consumer != null) buffers.endBatch(GlowRenderType.SURFACE);
     }
 
     /** Mip chain of the smoothed grid: each level averages 2x2 cells of the one before. */
@@ -275,7 +275,13 @@ public final class ScreenGlow {
         int levels = 1, c = state.cols, r = state.rows;
         while ((c > 1 || r > 1) && levels < 6) { c = (c + 1) / 2; r = (r + 1) / 2; levels++; }
         if (state.mips.length != levels) { state.mips = new float[levels][]; state.mipCols = new int[levels]; state.mipRows = new int[levels]; }
-        state.mips[0] = state.current; state.mipCols[0] = state.cols; state.mipRows[0] = state.rows;
+        if (state.mips[0] == null || state.mips[0].length != state.current.length)
+            state.mips[0] = new float[state.current.length];
+        // Average light, not gamma-encoded video values. Convert back only when
+        // submitting the vertex colour to Minecraft's shader pipeline.
+        for (int i = 0; i < state.current.length; i++)
+            state.mips[0][i] = (float) Math.pow(Math.max(0f, Math.min(1f, state.current[i])), 2.2);
+        state.mipCols[0] = state.cols; state.mipRows[0] = state.rows;
         for (int l = 1; l < levels; l++) {
             int pc = state.mipCols[l - 1], pr = state.mipRows[l - 1], nc = (pc + 1) / 2, nr = (pr + 1) / 2;
             float[] prev = state.mips[l - 1], next = state.mips[l] != null && state.mips[l].length == nc * nr * 3 ? state.mips[l] : new float[nc * nr * 3];
@@ -305,15 +311,16 @@ public final class ScreenGlow {
         }
     }
 
-    /** Colour at a spot of the picture seen from a given distance (level = blur), a little more saturated than the average. */
+    /** Broad colour spill, with a diffuse contribution from the rest of the display. */
     private static void sample(State state, float u, float v, float level, float[] out) {
         out[0] = out[1] = out[2] = 0f;
         float l = Math.max(0f, Math.min(state.mips.length - 1f, level));
         int l0 = (int) l, l1 = Math.min(state.mips.length - 1, l0 + 1);
         float k = l - l0;
-        sampleLevel(state, l0, u, v, out, 1 - k);
-        if (k > 0f) sampleLevel(state, l1, u, v, out, k);
-        float lum = 0.2126f * out[0] + 0.7152f * out[1] + 0.0722f * out[2];
-        for (int ch = 0; ch < 3; ch++) out[ch] = Math.max(0f, Math.min(1f, lum + (out[ch] - lum) * 1.5f));
+        sampleLevel(state, l0, u, v, out, 0.65f * (1 - k));
+        if (k > 0f) sampleLevel(state, l1, u, v, out, 0.65f * k);
+        sampleLevel(state, state.mips.length - 1, 0.5f, 0.5f, out, 0.35f);
+        for (int ch = 0; ch < 3; ch++)
+            out[ch] = (float) Math.pow(Math.max(0f, Math.min(1f, out[ch])), 1.0 / 2.2);
     }
 }
