@@ -41,6 +41,9 @@ public class ClientModEvents {
 
             // Stop all videos when the player leaves a world/server.
             MinecraftForge.EVENT_BUS.addListener(ClientModEvents::onPlayerLogout);
+            // Download and unpack FFmpeg while the player is still looking around, not when the first video starts.
+            MinecraftForge.EVENT_BUS.addListener((ClientPlayerNetworkEvent.LoggingIn e) ->
+                    com.nestworld.video.ffmpeg.FfmpegLibs.prepareAsync(net.minecraftforge.fml.loading.FMLPaths.GAMEDIR.get()));
         });
     }
 

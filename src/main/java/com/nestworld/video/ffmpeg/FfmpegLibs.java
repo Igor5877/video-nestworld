@@ -98,11 +98,38 @@ public final class FfmpegLibs {
             // JavaCPP unpacks its JNI libraries here; keep it inside the (usually ASCII-only) game directory.
             System.setProperty("org.bytedeco.javacpp.cachedir", baseDir.resolve("javacpp-cache").toString());
             ChildFirstLoader created = new ChildFirstLoader(urls.toArray(new URL[0]), FfmpegLibs.class.getClassLoader());
+            unpackNatives(created);
             synchronized (LOCK) { loader = created; state = State.READY; message = "Ready"; }
             LOGGER.info("Nestworld Video: FFmpeg decoder ready ({})", platform);
         } catch (Throwable t) {
             LOGGER.warn("Nestworld Video: FFmpeg decoder is unavailable: {}", t.toString());
             synchronized (LOCK) { state = State.FAILED; message = t.getMessage() == null ? t.toString() : t.getMessage(); }
+        }
+    }
+
+    /**
+     * Loads the native FFmpeg classes here, on the setup thread that nobody interrupts. Their static initialisers unpack
+     * the DLLs into javacpp-cache, which on the first start (and with an antivirus scanning every file) takes tens of
+     * seconds. When that happened in a decoder thread instead and the player stopped or switched episodes meanwhile, the
+     * interrupt broke the unpacking, the JVM marked org.bytedeco.ffmpeg.global.avutil as failed for good, and every
+     * video afterwards failed with "Could not initialize class ... avutil" until the game was restarted.
+     */
+    private static void unpackNatives(ClassLoader created) throws ClassNotFoundException {
+        setMessage("Unpacking FFmpeg");
+        Thread self = Thread.currentThread();
+        ClassLoader previous = self.getContextClassLoader();
+        self.setContextClassLoader(created);
+        try {
+            for (String name : new String[]{"avutil", "swresample", "avcodec", "avformat", "swscale"}) {
+                try {
+                    Class.forName("org.bytedeco.ffmpeg.global." + name, true, created);
+                } catch (ExceptionInInitializerError e) {
+                    Throwable cause = e.getCause() == null ? e : e.getCause();
+                    throw new IllegalStateException("Cannot load FFmpeg native library " + name + ": " + cause, cause);
+                }
+            }
+        } finally {
+            self.setContextClassLoader(previous);
         }
     }
 
